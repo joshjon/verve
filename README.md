@@ -6,6 +6,8 @@ A platform that allows us to dispatch AI coding agents to work on tasks within a
 
 The key design goal is that the customer's source code and secrets never leave their network. We send task descriptions *in*; we get logs and PR notifications *out*. The actual code manipulation happens entirely on their side.
 
+The project will be implemented as a single mono repo.
+
 ---
 
 ## Architecture

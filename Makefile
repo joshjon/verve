@@ -1,0 +1,47 @@
+.PHONY: all build build-server build-worker build-agent run-server run-worker test-task clean tidy
+
+# Build all components
+all: build-agent build
+
+# Build Go binaries
+build: build-server build-worker
+
+build-server:
+	go build -o bin/server ./cmd/server
+
+build-worker:
+	go build -o bin/worker ./cmd/worker
+
+# Build agent Docker image
+build-agent:
+	docker build -t verve-agent:latest ./agent
+
+# Run components
+run-server: build-server
+	./bin/server
+
+run-worker: build-worker
+	./bin/worker
+
+# Create a test task
+test-task:
+	curl -X POST http://localhost:8080/api/v1/tasks \
+		-H "Content-Type: application/json" \
+		-d '{"description":"Test task - add input validation to signup form"}'
+
+# List all tasks
+list-tasks:
+	curl -s http://localhost:8080/api/v1/tasks | jq .
+
+# Get task by ID (usage: make get-task ID=tsk_xxx)
+get-task:
+	curl -s http://localhost:8080/api/v1/tasks/$(ID) | jq .
+
+# Tidy dependencies
+tidy:
+	go mod tidy
+
+# Clean build artifacts
+clean:
+	rm -rf bin/
+	docker rmi verve-agent:latest 2>/dev/null || true
