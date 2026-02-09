@@ -12,6 +12,15 @@ import (
 	"time"
 )
 
+// Config holds the worker configuration
+type Config struct {
+	APIURL          string
+	GitHubToken     string
+	GitHubRepo      string
+	AnthropicAPIKey string
+	ClaudeModel     string // Model to use (haiku, sonnet, opus) - defaults to haiku
+}
+
 type Task struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
@@ -19,20 +28,20 @@ type Task struct {
 }
 
 type Worker struct {
-	apiURL       string
+	config       Config
 	docker       *DockerRunner
 	client       *http.Client
 	pollInterval time.Duration
 }
 
-func New(apiURL string) (*Worker, error) {
+func New(cfg Config) (*Worker, error) {
 	docker, err := NewDockerRunner()
 	if err != nil {
 		return nil, err
 	}
 
 	return &Worker{
-		apiURL:       apiURL,
+		config:       cfg,
 		docker:       docker,
 		client:       &http.Client{Timeout: 60 * time.Second},
 		pollInterval: 5 * time.Second,
@@ -78,7 +87,7 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) pollForTask(ctx context.Context) (*Task, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", w.apiURL+"/api/v1/tasks/poll", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", w.config.APIURL+"/api/v1/tasks/poll", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -198,8 +207,18 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 		streamer.AddLine(line)
 	}
 
+	// Create agent config from worker config
+	agentCfg := AgentConfig{
+		TaskID:          task.ID,
+		TaskDescription: task.Description,
+		GitHubToken:     w.config.GitHubToken,
+		GitHubRepo:      w.config.GitHubRepo,
+		AnthropicAPIKey: w.config.AnthropicAPIKey,
+		ClaudeModel:     w.config.ClaudeModel,
+	}
+
 	// Run the agent with streaming logs
-	result := w.docker.RunAgent(ctx, task.ID, task.Description, onLog)
+	result := w.docker.RunAgent(ctx, agentCfg, onLog)
 
 	// Stop the streamer and flush remaining logs
 	streamer.Stop()
@@ -219,7 +238,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 
 func (w *Worker) sendLogs(ctx context.Context, taskID string, logs []string) error {
 	body, _ := json.Marshal(map[string][]string{"logs": logs})
-	req, err := http.NewRequestWithContext(ctx, "POST", w.apiURL+"/api/v1/tasks/"+taskID+"/logs", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", w.config.APIURL+"/api/v1/tasks/"+taskID+"/logs", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -245,7 +264,7 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", w.apiURL+"/api/v1/tasks/"+taskID+"/complete", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", w.config.APIURL+"/api/v1/tasks/"+taskID+"/complete", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

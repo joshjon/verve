@@ -55,26 +55,40 @@ type RunResult struct {
 	Error    error
 }
 
+// AgentConfig holds the configuration for running an agent
+type AgentConfig struct {
+	TaskID          string
+	TaskDescription string
+	GitHubToken     string
+	GitHubRepo      string
+	AnthropicAPIKey string
+	ClaudeModel     string
+}
+
 // LogCallback is called for each log line from the container
 type LogCallback func(line string)
 
 // RunAgent runs the agent container and streams logs via the callback in real-time.
 // The callback is called from a separate goroutine as logs arrive.
-func (d *DockerRunner) RunAgent(ctx context.Context, taskID, description string, onLog LogCallback) RunResult {
-	// Create container
+func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogCallback) RunResult {
+	// Create container with all required environment variables
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
 			Image: AgentImage,
 			Env: []string{
-				"TASK_ID=" + taskID,
-				"TASK_DESCRIPTION=" + description,
+				"TASK_ID=" + cfg.TaskID,
+				"TASK_DESCRIPTION=" + cfg.TaskDescription,
+				"GITHUB_TOKEN=" + cfg.GitHubToken,
+				"GITHUB_REPO=" + cfg.GitHubRepo,
+				"ANTHROPIC_API_KEY=" + cfg.AnthropicAPIKey,
+				"CLAUDE_MODEL=" + cfg.ClaudeModel,
 			},
 		},
 		&container.HostConfig{
 			AutoRemove: false, // We'll remove it manually after getting logs
 		},
 		nil, nil,
-		"verve-agent-"+taskID,
+		"verve-agent-"+cfg.TaskID,
 	)
 	if err != nil {
 		return RunResult{Error: fmt.Errorf("failed to create container: %w", err)}

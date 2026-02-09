@@ -27,7 +27,7 @@ run-worker: build-worker
 test-task:
 	curl -X POST http://localhost:8080/api/v1/tasks \
 		-H "Content-Type: application/json" \
-		-d '{"description":"Test task - add input validation to signup form"}'
+		-d '{"description":"Init project with hello world main function using a plain bash script"}'
 
 # List all tasks
 list-tasks:
