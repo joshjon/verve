@@ -1,12 +1,11 @@
 package worker
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
+	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -54,11 +53,14 @@ type RunResult struct {
 	Success  bool
 	ExitCode int
 	Error    error
-	Logs     []string
 }
 
-// RunAgent runs the agent container and returns the result with logs
-func (d *DockerRunner) RunAgent(ctx context.Context, taskID, description string) RunResult {
+// LogCallback is called for each log line from the container
+type LogCallback func(line string)
+
+// RunAgent runs the agent container and streams logs via the callback in real-time.
+// The callback is called from a separate goroutine as logs arrive.
+func (d *DockerRunner) RunAgent(ctx context.Context, taskID, description string, onLog LogCallback) RunResult {
 	// Create container
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
@@ -82,7 +84,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, taskID, description string)
 	// Ensure cleanup
 	defer func() {
 		// Remove container
-		if err := d.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+		if err := d.client.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true}); err != nil {
 			log.Printf("Warning: failed to remove container %s: %v", containerID, err)
 		}
 	}()
@@ -91,6 +93,26 @@ func (d *DockerRunner) RunAgent(ctx context.Context, taskID, description string)
 	if err := d.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
 		return RunResult{Error: fmt.Errorf("failed to start container: %w", err)}
 	}
+
+	// Attach to logs with Follow=true for real-time streaming
+	logReader, err := d.client.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true, // Stream logs in real-time
+		Timestamps: false,
+	})
+	if err != nil {
+		return RunResult{Error: fmt.Errorf("failed to attach logs: %w", err)}
+	}
+
+	// Stream logs in a goroutine
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer logReader.Close()
+		d.streamLogs(logReader, onLog)
+	}()
 
 	// Wait for container to finish
 	statusCh, errCh := d.client.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
@@ -104,53 +126,81 @@ func (d *DockerRunner) RunAgent(ctx context.Context, taskID, description string)
 		return RunResult{Error: ctx.Err()}
 	}
 
-	// Get logs after container finishes
-	logReader, err := d.client.ContainerLogs(ctx, containerID, container.LogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Follow:     false,
-		Timestamps: false,
-	})
-	if err != nil {
-		return RunResult{Error: fmt.Errorf("failed to get logs: %w", err)}
-	}
-	defer logReader.Close()
-
-	logs := d.collectLogs(logReader)
+	// Wait for log streaming to complete
+	wg.Wait()
 
 	return RunResult{
 		Success:  exitCode == 0,
 		ExitCode: int(exitCode),
-		Logs:     logs,
 	}
 }
 
-func (d *DockerRunner) collectLogs(reader io.Reader) []string {
-	// Docker uses a multiplexed stream format with 8-byte headers
-	// Use stdcopy to demultiplex stdout and stderr
-	var stdout, stderr bytes.Buffer
-	_, err := stdcopy.StdCopy(&stdout, &stderr, reader)
-	if err != nil {
-		log.Printf("Warning: error reading container logs: %v", err)
-	}
+// streamLogs reads from the Docker multiplexed log stream and calls the callback for each line
+func (d *DockerRunner) streamLogs(reader io.Reader, onLog LogCallback) {
+	// Create a pipe to demultiplex Docker's stream format
+	stdoutPipeR, stdoutPipeW := io.Pipe()
+	stderrPipeR, stderrPipeW := io.Pipe()
 
-	var logs []string
+	// Demultiplex in a goroutine
+	go func() {
+		defer stdoutPipeW.Close()
+		defer stderrPipeW.Close()
+		_, err := stdcopy.StdCopy(stdoutPipeW, stderrPipeW, reader)
+		if err != nil && err != io.EOF {
+			log.Printf("Warning: error demultiplexing logs: %v", err)
+		}
+	}()
 
-	// Process stdout
-	scanner := bufio.NewScanner(&stdout)
-	for scanner.Scan() {
-		if line := scanner.Text(); line != "" {
-			logs = append(logs, line)
+	// Read stdout and stderr concurrently
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Read stdout
+	go func() {
+		defer wg.Done()
+		readLines(stdoutPipeR, func(line string) {
+			onLog(line)
+		})
+	}()
+
+	// Read stderr
+	go func() {
+		defer wg.Done()
+		readLines(stderrPipeR, func(line string) {
+			onLog("[stderr] " + line)
+		})
+	}()
+
+	wg.Wait()
+}
+
+// readLines reads lines from a reader and calls the callback for each line
+func readLines(reader io.Reader, onLine func(string)) {
+	buf := make([]byte, 4096)
+	var lineBuf []byte
+
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			// Process the data
+			data := buf[:n]
+			for _, b := range data {
+				if b == '\n' {
+					if len(lineBuf) > 0 {
+						onLine(string(lineBuf))
+						lineBuf = lineBuf[:0]
+					}
+				} else {
+					lineBuf = append(lineBuf, b)
+				}
+			}
+		}
+		if err != nil {
+			// Flush any remaining data
+			if len(lineBuf) > 0 {
+				onLine(string(lineBuf))
+			}
+			break
 		}
 	}
-
-	// Process stderr
-	scanner = bufio.NewScanner(&stderr)
-	for scanner.Scan() {
-		if line := scanner.Text(); line != "" {
-			logs = append(logs, "[stderr] "+line)
-		}
-	}
-
-	return logs
 }

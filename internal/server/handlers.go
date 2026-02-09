@@ -74,7 +74,7 @@ func (h *Handlers) PollTask(c echo.Context) error {
 		// Check if we've exceeded the timeout
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return c.JSON(http.StatusNoContent, nil)
+			return c.NoContent(http.StatusNoContent)
 		}
 
 		// Wait for a new task or timeout
@@ -82,9 +82,9 @@ func (h *Handlers) PollTask(c echo.Context) error {
 		case <-h.store.WaitForPending():
 			// A new task might be available, loop and try again
 		case <-time.After(remaining):
-			return c.JSON(http.StatusNoContent, nil)
+			return c.NoContent(http.StatusNoContent)
 		case <-c.Request().Context().Done():
-			return c.JSON(http.StatusNoContent, nil)
+			return c.NoContent(http.StatusNoContent)
 		}
 	}
 }

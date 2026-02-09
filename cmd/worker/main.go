@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/verve-ai/verve/internal/worker"
+	"verve/internal/worker"
 )
 
 func main() {

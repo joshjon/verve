@@ -140,7 +140,11 @@ Use semantic error types for consistent HTTP status mapping:
 - Implement `Validation()` method on config structs
 
 ### Log Streaming
-Worker collects logs from Docker container stdout/stderr using the Docker SDK's stdcopy package. Logs are sent to the API server after agent completion.
+Worker streams logs from Docker container in real-time:
+1. Attaches to container stdout/stderr with `Follow=true`
+2. Demultiplexes the Docker stream using `stdcopy`
+3. Buffers lines and sends batches to API server every 2 seconds (or when buffer reaches 50 lines)
+4. UI can poll `/tasks/{id}` to see logs incrementally as the agent runs
 
 ### Agent Isolation
 Uses Docker-in-Docker approach:

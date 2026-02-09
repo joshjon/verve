@@ -1,6 +1,6 @@
-module github.com/verve-ai/verve
+module verve
 
-go 1.22
+go 1.25
 
 require (
 	github.com/docker/docker v27.0.3+incompatible

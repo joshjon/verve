@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/verve-ai/verve/internal/server"
+	"verve/internal/server"
 )
 
 func main() {

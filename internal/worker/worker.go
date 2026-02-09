@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -105,21 +106,103 @@ func (w *Worker) pollForTask(ctx context.Context) (*Task, error) {
 	return &task, nil
 }
 
-func (w *Worker) executeTask(ctx context.Context, task *Task) {
-	// Run the agent
-	result := w.docker.RunAgent(ctx, task.ID, task.Description)
+// logStreamer buffers log lines and periodically sends them to the API server
+type logStreamer struct {
+	worker    *Worker
+	taskID    string
+	ctx       context.Context
+	buffer    []string
+	mu        sync.Mutex
+	done      chan struct{}
+	flushed   chan struct{}
+	interval  time.Duration
+	batchSize int
+}
 
-	// Print logs locally
-	for _, line := range result.Logs {
-		log.Printf("[agent] %s", line)
+func newLogStreamer(ctx context.Context, w *Worker, taskID string) *logStreamer {
+	ls := &logStreamer{
+		worker:    w,
+		taskID:    taskID,
+		ctx:       ctx,
+		buffer:    make([]string, 0, 100),
+		done:      make(chan struct{}),
+		flushed:   make(chan struct{}),
+		interval:  2 * time.Second,
+		batchSize: 50,
 	}
+	go ls.flushLoop()
+	return ls
+}
 
-	// Send logs to API server
-	if len(result.Logs) > 0 {
-		if err := w.sendLogs(ctx, task.ID, result.Logs); err != nil {
-			log.Printf("Failed to send logs: %v", err)
+// AddLine adds a log line to the buffer (thread-safe)
+func (ls *logStreamer) AddLine(line string) {
+	ls.mu.Lock()
+	ls.buffer = append(ls.buffer, line)
+	shouldFlush := len(ls.buffer) >= ls.batchSize
+	ls.mu.Unlock()
+
+	// Flush immediately if buffer is large
+	if shouldFlush {
+		ls.flush()
+	}
+}
+
+// Stop signals the streamer to stop and waits for final flush
+func (ls *logStreamer) Stop() {
+	close(ls.done)
+	<-ls.flushed
+}
+
+func (ls *logStreamer) flushLoop() {
+	defer close(ls.flushed)
+
+	ticker := time.NewTicker(ls.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			ls.flush()
+		case <-ls.done:
+			// Final flush
+			ls.flush()
+			return
 		}
 	}
+}
+
+func (ls *logStreamer) flush() {
+	ls.mu.Lock()
+	if len(ls.buffer) == 0 {
+		ls.mu.Unlock()
+		return
+	}
+	// Take ownership of the buffer
+	toSend := ls.buffer
+	ls.buffer = make([]string, 0, 100)
+	ls.mu.Unlock()
+
+	// Send to API server
+	if err := ls.worker.sendLogs(ls.ctx, ls.taskID, toSend); err != nil {
+		log.Printf("Failed to send logs: %v", err)
+	}
+}
+
+func (w *Worker) executeTask(ctx context.Context, task *Task) {
+	// Create log streamer for real-time log streaming
+	streamer := newLogStreamer(ctx, w, task.ID)
+
+	// Log callback - called from Docker log streaming goroutine
+	onLog := func(line string) {
+		log.Printf("[agent] %s", line)
+		streamer.AddLine(line)
+	}
+
+	// Run the agent with streaming logs
+	result := w.docker.RunAgent(ctx, task.ID, task.Description, onLog)
+
+	// Stop the streamer and flush remaining logs
+	streamer.Stop()
 
 	// Report completion
 	if result.Error != nil {
