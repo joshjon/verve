@@ -13,17 +13,33 @@ import (
 type Config struct {
 	GitHubToken string
 	GitHubRepo  string
+	DatabaseURL string // PostgreSQL connection URL (optional, uses in-memory if empty)
 }
 
 type Server struct {
 	echo         *echo.Echo
-	store        *Store
+	store        TaskStore
 	handlers     *Handlers
 	githubClient *GitHubClient
 }
 
-func New(cfg Config) *Server {
-	store := NewStore()
+// New creates a new server with the given configuration.
+// If DatabaseURL is provided, it uses PostgreSQL; otherwise, it uses in-memory storage.
+func New(ctx context.Context, cfg Config) (*Server, error) {
+	var store TaskStore
+	var err error
+
+	if cfg.DatabaseURL != "" {
+		log.Println("Using PostgreSQL storage")
+		store, err = NewPostgresStore(ctx, cfg.DatabaseURL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		log.Println("Using in-memory storage (data will not persist)")
+		store = NewStore()
+	}
+
 	githubClient := NewGitHubClient(cfg.GitHubToken, cfg.GitHubRepo)
 	handlers := NewHandlers(store, githubClient)
 
@@ -57,7 +73,7 @@ func New(cfg Config) *Server {
 		store:        store,
 		handlers:     handlers,
 		githubClient: githubClient,
-	}
+	}, nil
 }
 
 // StartBackgroundSync starts a background goroutine that periodically syncs PR status
@@ -108,4 +124,11 @@ func (s *Server) Start(addr string) error {
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.echo.Shutdown(ctx)
+}
+
+// Close closes any resources held by the server (like database connections).
+func (s *Server) Close() {
+	if ps, ok := s.store.(*PostgresStore); ok {
+		ps.Close()
+	}
 }

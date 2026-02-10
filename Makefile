@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-worker build-agent build-agent-no-cache run-server run-worker test-task clean tidy ui-install ui-dev ui-build
+.PHONY: all build build-server build-worker build-agent build-agent-no-cache run-server run-server-pg run-worker test-task clean tidy ui-install ui-dev ui-build db-up db-down db-logs
 
 # Build all components
 all: build-agent build
@@ -59,3 +59,17 @@ ui-dev:
 
 ui-build:
 	cd ui && pnpm build
+
+# Database commands
+db-up:
+	docker compose up -d postgres
+
+db-down:
+	docker compose down
+
+db-logs:
+	docker compose logs -f postgres
+
+# Run server with PostgreSQL
+run-server-pg: build-server db-up
+	DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable" ./bin/server

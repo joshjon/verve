@@ -8,11 +8,11 @@ import (
 )
 
 type Handlers struct {
-	store        *Store
+	store        TaskStore
 	githubClient *GitHubClient
 }
 
-func NewHandlers(store *Store, githubClient *GitHubClient) *Handlers {
+func NewHandlers(store TaskStore, githubClient *GitHubClient) *Handlers {
 	return &Handlers{store: store, githubClient: githubClient}
 }
 

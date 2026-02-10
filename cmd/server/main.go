@@ -17,6 +17,7 @@ func main() {
 	cfg := server.Config{
 		GitHubToken: os.Getenv("GITHUB_TOKEN"),
 		GitHubRepo:  os.Getenv("GITHUB_REPO"),
+		DatabaseURL: os.Getenv("DATABASE_URL"),
 	}
 
 	if cfg.GitHubToken == "" {
@@ -25,13 +26,20 @@ func main() {
 	if cfg.GitHubRepo == "" {
 		log.Println("Warning: GITHUB_REPO not set - PR status sync disabled")
 	}
+	if cfg.DatabaseURL == "" {
+		log.Println("Warning: DATABASE_URL not set - using in-memory storage")
+	}
 
-	srv := server.New(cfg)
-
-	// Start background PR status sync
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	srv, err := server.New(ctx, cfg)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
+	defer srv.Close()
+
+	// Start background PR status sync
 	srv.StartBackgroundSync(ctx, 30*time.Second)
 
 	// Start server in goroutine
