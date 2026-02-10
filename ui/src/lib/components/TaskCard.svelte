@@ -3,6 +3,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
 	import { GitPullRequest, Link2, ChevronRight } from 'lucide-svelte';
+	import { stripMarkdown } from '$lib/utils';
 
 	let { task }: { task: Task } = $props();
 
@@ -15,6 +16,7 @@
 	}
 
 	const hasDependencies = $derived(task.depends_on && task.depends_on.length > 0);
+	const previewText = $derived(stripMarkdown(task.description));
 </script>
 
 <Card.Root
@@ -24,7 +26,7 @@
 	tabindex="0"
 >
 	<div class="flex items-start justify-between gap-2">
-		<p class="font-medium text-sm line-clamp-2 flex-1">{task.description}</p>
+		<p class="font-medium text-sm line-clamp-2 flex-1">{previewText}</p>
 		<ChevronRight
 			class="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5"
 		/>

@@ -8,6 +8,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { goto } from '$app/navigation';
+	import { marked } from 'marked';
 	import {
 		ArrowLeft,
 		Clock,
@@ -27,6 +28,12 @@
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
+
+	// Configure marked for safe rendering
+	marked.setOptions({
+		breaks: true,
+		gfm: true
+	});
 
 	let task = $state<Task | null>(null);
 	let loading = $state(true);
@@ -84,6 +91,9 @@
 
 	const currentStatusConfig = $derived(task ? statusConfig[task.status] : null);
 	const StatusIcon = $derived(currentStatusConfig?.icon ?? Clock);
+
+	// Render description as markdown
+	const renderedDescription = $derived(task ? marked(task.description) : '');
 
 	onMount(() => {
 		loadTask();
@@ -254,7 +264,9 @@
 					</Card.Title>
 				</Card.Header>
 				<Card.Content class="max-h-64 overflow-y-auto">
-					<p class="whitespace-pre-wrap leading-relaxed">{task.description}</p>
+					<div class="prose prose-sm dark:prose-invert max-w-none">
+						{@html renderedDescription}
+					</div>
 				</Card.Content>
 			</Card.Root>
 
