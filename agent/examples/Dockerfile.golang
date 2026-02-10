@@ -6,9 +6,13 @@ FROM verve-agent:latest
 
 USER root
 
-# Install Go
-ENV GO_VERSION=1.22.0
-RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+# Install Go - use apk on Wolfi, binary download on Debian
+RUN if command -v apk > /dev/null; then \
+        apk add --no-cache go; \
+    else \
+        curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -C /usr/local -xzf -; \
+    fi
+
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 USER agent

@@ -8,21 +8,20 @@ FROM verve-agent:latest
 
 USER root
 
-# Install Python
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    build-essential \
-    && ln -sf /usr/bin/python3 /usr/bin/python \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python and Go - works with both Debian (apt-get) and Wolfi (apk)
+RUN if command -v apk > /dev/null; then \
+        apk add --no-cache python3 py3-pip go build-base; \
+    else \
+        apt-get update && apt-get install -y \
+            python3 python3-pip python3-venv build-essential \
+        && ln -sf /usr/bin/python3 /usr/bin/python \
+        && rm -rf /var/lib/apt/lists/* \
+        && curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -C /usr/local -xzf -; \
+    fi
 
-# Install Go
-ENV GO_VERSION=1.22.0
-RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xzf -
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-# Install Rust
+# Install Rust (works on both)
 USER agent
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/agent/.cargo/bin:${PATH}"

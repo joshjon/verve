@@ -1,0 +1,58 @@
+# Wolfi-based Verve Agent with Node 22
+# Build: docker build -f agent/Dockerfile.wolfi -t verve-agent:latest ./agent
+
+FROM cgr.dev/chainguard/node:latest-dev
+
+LABEL org.opencontainers.image.title="Verve Agent"
+LABEL org.opencontainers.image.description="Base agent image for Verve AI task orchestrator"
+LABEL org.opencontainers.image.vendor="Verve"
+LABEL verve.extensible="true"
+
+# Switch to root for installation
+USER root
+
+# Install system dependencies
+RUN apk update && apk add --no-cache \
+    git \
+    curl \
+    ca-certificates \
+    jq \
+    bash \
+    libstdc++
+
+# Install GitHub CLI (not available in Chainguard repo, download binary)
+RUN GH_VERSION="2.67.0" && \
+    ARCH="$(uname -m)" && \
+    if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi && \
+    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${ARCH}.tar.gz" -o /tmp/gh.tar.gz && \
+    cd /tmp && gunzip -c gh.tar.gz | tar xf - && \
+    mv "gh_${GH_VERSION}_linux_${ARCH}/bin/gh" /usr/local/bin/gh && \
+    chmod +x /usr/local/bin/gh && \
+    rm -rf /tmp/gh*
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
+
+# Create non-root user (Claude Code refuses --dangerously-skip-permissions as root)
+RUN adduser -D -s /bin/bash -h /home/agent agent
+
+# Create workspace directory with proper ownership
+RUN mkdir -p /workspace && chown agent:agent /workspace
+WORKDIR /workspace
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Switch to non-root user
+USER agent
+
+# Environment variables (set at runtime by worker)
+ENV TASK_ID=""
+ENV TASK_DESCRIPTION=""
+ENV GITHUB_TOKEN=""
+ENV GITHUB_REPO=""
+ENV ANTHROPIC_API_KEY=""
+ENV CLAUDE_MODEL="haiku"
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -16,6 +16,9 @@ build-worker:
 build-agent:
 	docker build -t verve-agent:latest ./agent
 
+build-agent-wolfi:
+	docker build -f agent/Dockerfile.wolfi -t verve-agent:latest ./agent
+
 build-agent-no-cache:
 	docker build --no-cache -t verve-agent:latest ./agent
 
