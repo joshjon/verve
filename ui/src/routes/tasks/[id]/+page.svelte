@@ -253,7 +253,7 @@
 						Description
 					</Card.Title>
 				</Card.Header>
-				<Card.Content>
+				<Card.Content class="max-h-64 overflow-y-auto">
 					<p class="whitespace-pre-wrap leading-relaxed">{task.description}</p>
 				</Card.Content>
 			</Card.Root>

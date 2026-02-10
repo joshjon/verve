@@ -105,13 +105,13 @@
 					</label>
 
 					{#if selectedDeps.length > 0}
-						<div class="flex flex-wrap gap-1.5 mb-3">
+						<div class="flex flex-wrap gap-1.5 mb-3 max-h-20 overflow-y-auto">
 							{#each selectedDeps as depId}
-								<Badge variant="secondary" class="gap-1 pl-2 pr-1 py-1">
-									<span class="font-mono text-xs">{depId}</span>
+								<Badge variant="secondary" class="gap-1 pl-2 pr-1 py-1 max-w-48">
+									<span class="font-mono text-xs truncate">{depId}</span>
 									<button
 										type="button"
-										class="ml-1 hover:bg-destructive/20 hover:text-destructive rounded p-0.5 transition-colors"
+										class="ml-1 hover:bg-destructive/20 hover:text-destructive rounded p-0.5 transition-colors shrink-0"
 										onclick={() => removeDependency(depId)}
 									>
 										<X class="w-3 h-3" />
@@ -139,15 +139,15 @@
 							{#each availableTasks as task (task.id)}
 								<button
 									type="button"
-									class="w-full text-left px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0 transition-colors"
+									class="w-full text-left px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0 transition-colors overflow-hidden"
 									onclick={() => addDependency(task.id)}
 								>
 									<div class="flex items-center gap-2">
-										<span class="font-mono text-xs text-muted-foreground bg-background px-1.5 py-0.5 rounded">
+										<span class="font-mono text-xs text-muted-foreground bg-background px-1.5 py-0.5 rounded shrink-0">
 											{task.id}
 										</span>
 									</div>
-									<div class="text-sm truncate mt-1">{task.description}</div>
+									<div class="text-sm line-clamp-2 mt-1">{task.description}</div>
 								</button>
 							{/each}
 						{:else if searchQuery}
