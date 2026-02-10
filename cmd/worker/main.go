@@ -18,6 +18,7 @@ func main() {
 		GitHubRepo:      os.Getenv("GITHUB_REPO"),
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
 		ClaudeModel:     getEnvOrDefault("CLAUDE_MODEL", "haiku"),
+		AgentImage:      getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
 	}
 
 	// Validate required configuration
@@ -34,6 +35,7 @@ func main() {
 	log.Printf("Connecting to API server at %s", cfg.APIURL)
 	log.Printf("Configured for repository: %s", cfg.GitHubRepo)
 	log.Printf("Using Claude model: %s", cfg.ClaudeModel)
+	log.Printf("Using agent image: %s", cfg.AgentImage)
 
 	w, err := worker.New(cfg)
 	if err != nil {

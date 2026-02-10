@@ -1,5 +1,10 @@
 FROM node:20-slim
 
+LABEL org.opencontainers.image.title="Verve Agent"
+LABEL org.opencontainers.image.description="Base agent image for Verve AI task orchestrator"
+LABEL org.opencontainers.image.vendor="Verve"
+LABEL verve.extensible="true"
+
 # Install system dependencies and GitHub CLI
 RUN apt-get update && apt-get install -y \
     git \

@@ -20,6 +20,7 @@ type Config struct {
 	GitHubRepo      string
 	AnthropicAPIKey string
 	ClaudeModel     string // Model to use (haiku, sonnet, opus) - defaults to haiku
+	AgentImage      string // Docker image for agent - defaults to verve-agent:latest
 }
 
 type Task struct {
@@ -36,7 +37,7 @@ type Worker struct {
 }
 
 func New(cfg Config) (*Worker, error) {
-	docker, err := NewDockerRunner()
+	docker, err := NewDockerRunner(cfg.AgentImage)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	if err := w.docker.EnsureImage(ctx); err != nil {
 		return err
 	}
-	log.Println("Agent image verified")
+	log.Printf("Agent image verified: %s", w.docker.AgentImage())
 
 	for {
 		select {

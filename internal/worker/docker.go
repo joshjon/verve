@@ -13,18 +13,22 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-const AgentImage = "verve-agent:latest"
+const DefaultAgentImage = "verve-agent:latest"
 
 type DockerRunner struct {
-	client *client.Client
+	client     *client.Client
+	agentImage string
 }
 
-func NewDockerRunner() (*DockerRunner, error) {
+func NewDockerRunner(agentImage string) (*DockerRunner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
-	return &DockerRunner{client: cli}, nil
+	if agentImage == "" {
+		agentImage = DefaultAgentImage
+	}
+	return &DockerRunner{client: cli, agentImage: agentImage}, nil
 }
 
 func (d *DockerRunner) Close() error {
@@ -40,13 +44,18 @@ func (d *DockerRunner) EnsureImage(ctx context.Context) error {
 
 	for _, img := range images {
 		for _, tag := range img.RepoTags {
-			if tag == AgentImage {
+			if tag == d.agentImage {
 				return nil
 			}
 		}
 	}
 
-	return fmt.Errorf("agent image %s not found - run 'make build-agent' first", AgentImage)
+	return fmt.Errorf("agent image %s not found - run 'make build-agent' or 'docker pull %s'", d.agentImage, d.agentImage)
+}
+
+// AgentImage returns the configured agent image name
+func (d *DockerRunner) AgentImage() string {
+	return d.agentImage
 }
 
 type RunResult struct {
@@ -74,7 +83,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	// Create container with all required environment variables
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
-			Image: AgentImage,
+			Image: d.agentImage,
 			Env: []string{
 				"TASK_ID=" + cfg.TaskID,
 				"TASK_DESCRIPTION=" + cfg.TaskDescription,
