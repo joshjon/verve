@@ -123,18 +123,27 @@ func (w *Worker) Run(ctx context.Context) error {
 
 		log.Printf("Claimed task %s (%d/%d active): %s", task.ID, activeCount, w.maxConcurrent, task.Description)
 
-		// Execute task in goroutine
-		w.wg.Add(1)
-		go func(t *Task) {
-			defer w.wg.Done()
-			defer func() {
-				<-w.semaphore // Release semaphore slot
-				w.activeMu.Lock()
-				w.activeTasks--
-				w.activeMu.Unlock()
-			}()
-			w.executeTask(ctx, t)
-		}(task)
+		// Execute task - use goroutine only if concurrent execution is enabled
+		if w.maxConcurrent > 1 {
+			w.wg.Add(1)
+			go func(t *Task) {
+				defer w.wg.Done()
+				defer func() {
+					<-w.semaphore // Release semaphore slot
+					w.activeMu.Lock()
+					w.activeTasks--
+					w.activeMu.Unlock()
+				}()
+				w.executeTask(ctx, t)
+			}(task)
+		} else {
+			// Sequential execution - simpler, more compatible with restricted networks
+			w.executeTask(ctx, task)
+			<-w.semaphore
+			w.activeMu.Lock()
+			w.activeTasks--
+			w.activeMu.Unlock()
+		}
 	}
 }
 
