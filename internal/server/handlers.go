@@ -172,3 +172,37 @@ func (h *Handlers) SyncTaskStatus(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, task)
 }
+
+// SyncAllTasks handles POST /api/v1/tasks/sync
+// Syncs all tasks in review status with GitHub
+func (h *Handlers) SyncAllTasks(c echo.Context) error {
+	if h.githubClient == nil {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"synced": 0,
+			"merged": 0,
+		})
+	}
+
+	tasks := h.store.GetTasksInReview()
+	synced := 0
+	merged := 0
+
+	for _, task := range tasks {
+		if task.PRNumber > 0 {
+			synced++
+			isMerged, err := h.githubClient.IsPRMerged(c.Request().Context(), task.PRNumber)
+			if err != nil {
+				continue
+			}
+			if isMerged {
+				h.store.UpdateStatus(task.ID, TaskStatusMerged)
+				merged++
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"synced": synced,
+		"merged": merged,
+	})
+}

@@ -33,6 +33,10 @@ func New(cfg Config) *Server {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173"},
+		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
+	}))
 
 	// Routes
 	api := e.Group("/api/v1")
@@ -40,6 +44,7 @@ func New(cfg Config) *Server {
 	// Task endpoints
 	api.POST("/tasks", handlers.CreateTask)
 	api.GET("/tasks", handlers.ListTasks)
+	api.POST("/tasks/sync", handlers.SyncAllTasks)
 	api.GET("/tasks/poll", handlers.PollTask)
 	api.GET("/tasks/:id", handlers.GetTask)
 	api.POST("/tasks/:id/logs", handlers.AppendLogs)

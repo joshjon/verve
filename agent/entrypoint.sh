@@ -91,10 +91,30 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code blocks, 
 {\"title\": \"Short descriptive title (max 72 chars)\", \"description\": \"## Summary\\n\\nBrief description of changes.\\n\\n## Changes\\n\\n- Bullet points of what was done\"}"
 
     echo "[agent] Generating PR description with Claude..."
-    PR_JSON=$(claude --print --model "${CLAUDE_MODEL}" "${PR_PROMPT}" 2>/dev/null || echo "")
+    PR_RAW=$(claude --print --model "${CLAUDE_MODEL}" "${PR_PROMPT}" 2>/dev/null || echo "")
+
+    # Extract JSON from response (may be wrapped in markdown code blocks)
+    # First try to extract JSON from code blocks, then try raw response
+    PR_JSON=""
+    if [ -n "${PR_RAW}" ]; then
+        # Try to extract JSON from ```json ... ``` or ``` ... ``` blocks
+        PR_JSON=$(echo "${PR_RAW}" | sed -n '/^```/,/^```$/p' | sed '1d;$d' | tr -d '\n' || echo "")
+        # If that didn't work, try to find raw JSON object
+        if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+            PR_JSON=$(echo "${PR_RAW}" | grep -o '{[^}]*}' | head -1 || echo "")
+        fi
+        # Last resort: use raw output if it's valid JSON
+        if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+            if echo "${PR_RAW}" | jq -e . >/dev/null 2>&1; then
+                PR_JSON="${PR_RAW}"
+            fi
+        fi
+    fi
 
     # Extract title and description, with fallbacks
-    if [ -n "${PR_JSON}" ]; then
+    PR_TITLE=""
+    PR_BODY=""
+    if [ -n "${PR_JSON}" ] && echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
         PR_TITLE=$(echo "${PR_JSON}" | jq -r '.title // empty' 2>/dev/null || echo "")
         PR_BODY=$(echo "${PR_JSON}" | jq -r '.description // empty' 2>/dev/null || echo "")
     fi
@@ -117,7 +137,7 @@ ${DIFF_SUMMARY}"
     PR_BODY="${PR_BODY}
 
 ---
-*Implemented by [Verve AI Agent](https://github.com/verve-ai/verve)*
+*Implemented by Verve AI Agent*
 **Task ID:** \`${TASK_ID}\`"
 
     # Create the PR

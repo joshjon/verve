@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-worker build-agent run-server run-worker test-task clean tidy
+.PHONY: all build build-server build-worker build-agent build-agent-no-cache run-server run-worker test-task clean tidy ui-install ui-dev ui-build
 
 # Build all components
 all: build-agent build
@@ -15,6 +15,9 @@ build-worker:
 # Build agent Docker image
 build-agent:
 	docker build -t verve-agent:latest ./agent
+
+build-agent-no-cache:
+	docker build --no-cache -t verve-agent:latest ./agent
 
 # Run components
 run-server: build-server
@@ -44,4 +47,15 @@ tidy:
 # Clean build artifacts
 clean:
 	rm -rf bin/
+	rm -rf ui/dist/
 	docker rmi verve-agent:latest 2>/dev/null || true
+
+# UI commands
+ui-install:
+	cd ui && pnpm install
+
+ui-dev:
+	cd ui && pnpm dev
+
+ui-build:
+	cd ui && pnpm build
