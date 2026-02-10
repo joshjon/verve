@@ -4,6 +4,60 @@ A distributed AI agent orchestrator platform. Dispatches AI coding agents powere
 
 See [DESIGN.md](DESIGN.md) for detailed architecture and design documentation.
 
+## System Architecture
+
+```mermaid
+flowchart LR
+    subgraph User["User Interface"]
+        UI[Web Dashboard]
+    end
+
+    subgraph Server["API Server"]
+        API[REST API]
+        Store[(PostgreSQL / In-Memory)]
+    end
+
+    subgraph Workers["Agent Worker Pool Instance 1...N"]
+        W1[Agent Worker Pool Coordinator]
+
+       subgraph Agent1["Agent Worker Docker Container"]
+          CC1[Claude Code CLI]
+          Git1[Git + GitHub CLI]
+       end
+       
+       subgraph Agent2["Agent Worker Docker Container"]
+          CC2[Claude Code CLI]
+          Git2[Git + GitHub CLI]
+       end
+    end
+
+    GH[(GitHub Repository)]
+
+    UI --> API
+    API <--> Store
+    API -->|Sync PRs| GH
+
+    W1 -->|Poll for tasks| API
+    W1 -->|Stream logs| API
+
+    W1 -->|Spawn| Agent1
+    W1 -->|Spawn| Agent2
+
+   Git1 -->|Clone, Push, Create PR| GH
+   Git2 -->|Clone, Push, Create PR| GH
+```
+
+### Flow Overview
+
+1. **Task Creation** - User submits task via UI or API
+2. **Task Storage** - Server stores task in PostgreSQL (or in-memory)
+3. **Agent Worker Polling** - Agent Workers long-poll for pending tasks with met dependencies
+4. **Task Claiming** - Worker atomically claims a task
+5. **Agent Spawn** - Worker creates isolated Docker container
+6. **Code Implementation** - Claude Code implements the task
+7. **PR Creation** - Agent commits, pushes, and creates pull request
+8. **Status Sync** - Server periodically syncs PR merge status from GitHub
+
 ## Prerequisites
 
 - Go 1.22+
