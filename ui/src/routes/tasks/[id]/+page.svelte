@@ -6,7 +6,6 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
-	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { goto } from '$app/navigation';
 	import { marked } from 'marked';
 	import {
@@ -42,6 +41,9 @@
 	let closing = $state(false);
 	let showCloseForm = $state(false);
 	let closeReason = $state('');
+	let logsContainer: HTMLDivElement | null = $state(null);
+	let autoScroll = $state(true);
+	let lastLogCount = $state(0);
 
 	const taskId = $derived($page.params.id);
 
@@ -94,6 +96,28 @@
 
 	// Render description as markdown
 	const renderedDescription = $derived(task ? marked(task.description) : '');
+
+	// Auto-scroll logs when new logs arrive
+	$effect(() => {
+		if (task?.logs && task.logs.length > lastLogCount) {
+			lastLogCount = task.logs.length;
+			if (autoScroll && logsContainer) {
+				// Use requestAnimationFrame to ensure DOM has updated
+				requestAnimationFrame(() => {
+					if (logsContainer) {
+						logsContainer.scrollTop = logsContainer.scrollHeight;
+					}
+				});
+			}
+		}
+	});
+
+	function handleLogsScroll(e: Event) {
+		const el = e.target as HTMLDivElement;
+		// Check if user is near bottom (within 50px)
+		const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+		autoScroll = isNearBottom;
+	}
 
 	onMount(() => {
 		loadTask();
@@ -368,7 +392,11 @@
 					</Card.Title>
 				</Card.Header>
 				<Card.Content>
-					<ScrollArea class="h-[400px] w-full rounded-lg border bg-zinc-950 p-4">
+					<div
+						bind:this={logsContainer}
+						onscroll={handleLogsScroll}
+						class="h-[400px] w-full rounded-lg border bg-zinc-950 p-4 overflow-y-auto"
+					>
 						{#if task.logs && task.logs.length > 0}
 							<pre class="text-green-400 text-xs font-mono whitespace-pre-wrap leading-relaxed">{task.logs.join('\n')}</pre>
 						{:else}
@@ -377,7 +405,7 @@
 								<p class="text-sm">No logs available yet</p>
 							</div>
 						{/if}
-					</ScrollArea>
+					</div>
 				</Card.Content>
 			</Card.Root>
 

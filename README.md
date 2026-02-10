@@ -2,8 +2,6 @@
 
 A distributed AI agent orchestrator platform. Dispatches AI coding agents powered by Claude Code to work on tasks within customer infrastructure using Docker-in-Docker isolation.
 
-**Last updated: February 11, 2026**
-
 See [DESIGN.md](DESIGN.md) for detailed architecture and design documentation.
 
 ## System Architecture
