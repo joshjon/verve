@@ -11,7 +11,7 @@
 		running: { label: 'Running', class: 'bg-blue-500 hover:bg-blue-500' },
 		review: { label: 'Review', class: 'bg-purple-500 hover:bg-purple-500' },
 		merged: { label: 'Merged', class: 'bg-green-500 hover:bg-green-500' },
-		completed: { label: 'Completed', class: 'bg-gray-500 hover:bg-gray-500' },
+		closed: { label: 'Closed', class: 'bg-gray-500 hover:bg-gray-500' },
 		failed: { label: 'Failed', class: 'bg-red-500 hover:bg-red-500' }
 	};
 

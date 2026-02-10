@@ -32,6 +32,10 @@ type CompleteRequest struct {
 	PRNumber       int    `json:"pr_number,omitempty"`
 }
 
+type CloseRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
 // CreateTask handles POST /api/v1/tasks
 func (h *Handlers) CreateTask(c echo.Context) error {
 	var req CreateTaskRequest
@@ -136,8 +140,8 @@ func (h *Handlers) CompleteTask(c echo.Context) error {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
 		}
 	} else {
-		// Success without PR (no changes) - mark as completed
-		if !h.store.UpdateStatus(id, TaskStatusCompleted) {
+		// Success without PR (no changes) - mark as closed
+		if !h.store.UpdateStatus(id, TaskStatusClosed) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
 		}
 	}
@@ -205,4 +209,22 @@ func (h *Handlers) SyncAllTasks(c echo.Context) error {
 		"synced": synced,
 		"merged": merged,
 	})
+}
+
+// CloseTask handles POST /api/v1/tasks/:id/close
+// Manually closes a task with an optional reason
+func (h *Handlers) CloseTask(c echo.Context) error {
+	id := c.Param("id")
+
+	var req CloseRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+
+	if !h.store.CloseTask(id, req.Reason) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+	}
+
+	task := h.store.Get(id)
+	return c.JSON(http.StatusOK, task)
 }

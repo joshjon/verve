@@ -11,12 +11,12 @@ import (
 type TaskStatus string
 
 const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusRunning   TaskStatus = "running"
-	TaskStatusReview    TaskStatus = "review"    // PR created, awaiting review/merge
-	TaskStatusMerged    TaskStatus = "merged"    // PR has been merged
-	TaskStatusCompleted TaskStatus = "completed" // Completed without PR (no changes)
-	TaskStatusFailed    TaskStatus = "failed"
+	TaskStatusPending TaskStatus = "pending"
+	TaskStatusRunning TaskStatus = "running"
+	TaskStatusReview  TaskStatus = "review" // PR created, awaiting review/merge
+	TaskStatusMerged  TaskStatus = "merged" // PR has been merged
+	TaskStatusClosed  TaskStatus = "closed" // Manually closed by user
+	TaskStatusFailed  TaskStatus = "failed"
 )
 
 type Task struct {
@@ -27,6 +27,7 @@ type Task struct {
 	PullRequestURL string     `json:"pull_request_url,omitempty"`
 	PRNumber       int        `json:"pr_number,omitempty"`
 	DependsOn      []string   `json:"depends_on,omitempty"`
+	CloseReason    string     `json:"close_reason,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
@@ -128,9 +129,8 @@ func (s *Store) dependenciesMet(t *Task) bool {
 			// Dependency doesn't exist - treat as unmet
 			return false
 		}
-		// Dependencies are met when parent task is completed, merged, or review
-		// (review means the work is done, just awaiting human merge)
-		if dep.Status != TaskStatusCompleted && dep.Status != TaskStatusMerged && dep.Status != TaskStatusReview {
+		// Dependencies are met only when parent task is merged or closed
+		if dep.Status != TaskStatusMerged && dep.Status != TaskStatusClosed {
 			return false
 		}
 	}
@@ -197,4 +197,19 @@ func (s *Store) GetTasksInReview() []*Task {
 		}
 	}
 	return tasks
+}
+
+// CloseTask closes a task with an optional reason.
+func (s *Store) CloseTask(id string, reason string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return false
+	}
+	task.Status = TaskStatusClosed
+	task.CloseReason = reason
+	task.UpdatedAt = time.Now()
+	return true
 }

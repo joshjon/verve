@@ -14,6 +14,9 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let syncing = $state(false);
+	let closing = $state(false);
+	let showCloseForm = $state(false);
+	let closeReason = $state('');
 
 	const taskId = $derived($page.params.id);
 
@@ -22,9 +25,14 @@
 		running: { label: 'Running', class: 'bg-blue-500 hover:bg-blue-500' },
 		review: { label: 'Review', class: 'bg-purple-500 hover:bg-purple-500' },
 		merged: { label: 'Merged', class: 'bg-green-500 hover:bg-green-500' },
-		completed: { label: 'Completed', class: 'bg-gray-500 hover:bg-gray-500' },
+		closed: { label: 'Closed', class: 'bg-gray-500 hover:bg-gray-500' },
 		failed: { label: 'Failed', class: 'bg-red-500 hover:bg-red-500' }
 	};
+
+	// Check if task can be closed (not already closed, merged, or failed)
+	const canClose = $derived(
+		task && !['closed', 'merged', 'failed'].includes(task.status)
+	);
 
 	onMount(() => {
 		loadTask();
@@ -55,6 +63,20 @@
 		}
 	}
 
+	async function handleClose() {
+		if (!task || closing) return;
+		closing = true;
+		try {
+			task = await client.closeTask(task.id, closeReason || undefined);
+			showCloseForm = false;
+			closeReason = '';
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			closing = false;
+		}
+	}
+
 	function formatDate(dateStr: string): string {
 		return new Date(dateStr).toLocaleString();
 	}
@@ -82,10 +104,55 @@
 						Created: {formatDate(task.created_at)}
 					</p>
 				</div>
-				<Badge class={cn('text-white', statusConfig[task.status]?.class)}>
-					{statusConfig[task.status]?.label ?? task.status}
-				</Badge>
+				<div class="flex items-center gap-2">
+					{#if canClose}
+						{#if showCloseForm}
+							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)}>
+								Cancel
+							</Button>
+						{:else}
+							<Button size="sm" variant="outline" onclick={() => (showCloseForm = true)}>
+								Close Task
+							</Button>
+						{/if}
+					{/if}
+					<Badge class={cn('text-white', statusConfig[task.status]?.class)}>
+						{statusConfig[task.status]?.label ?? task.status}
+					</Badge>
+				</div>
 			</div>
+
+			{#if showCloseForm}
+				<Card.Root class="border-destructive/50">
+					<Card.Header>
+						<Card.Title>Close Task</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="space-y-4">
+							<div>
+								<label for="close-reason" class="text-sm font-medium mb-2 block">
+									Reason (optional)
+								</label>
+								<textarea
+									id="close-reason"
+									bind:value={closeReason}
+									class="w-full border rounded-md p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+									placeholder="Why is this task being closed?"
+									disabled={closing}
+								></textarea>
+							</div>
+							<div class="flex justify-end gap-2">
+								<Button variant="outline" onclick={() => (showCloseForm = false)} disabled={closing}>
+									Cancel
+								</Button>
+								<Button variant="destructive" onclick={handleClose} disabled={closing}>
+									{closing ? 'Closing...' : 'Close Task'}
+								</Button>
+							</div>
+						</div>
+					</Card.Content>
+				</Card.Root>
+			{/if}
 
 			<Card.Root>
 				<Card.Header>
@@ -95,6 +162,17 @@
 					<p class="whitespace-pre-wrap">{task.description}</p>
 				</Card.Content>
 			</Card.Root>
+
+			{#if task.close_reason}
+				<Card.Root class="border-gray-500/50">
+					<Card.Header>
+						<Card.Title>Close Reason</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<p class="whitespace-pre-wrap text-muted-foreground">{task.close_reason}</p>
+					</Card.Content>
+				</Card.Root>
+			{/if}
 
 			{#if task.pull_request_url}
 				<Card.Root>

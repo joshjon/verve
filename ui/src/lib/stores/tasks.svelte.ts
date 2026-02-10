@@ -1,6 +1,6 @@
 import type { Task, TaskStatus } from '$lib/models/task';
 
-const ALL_STATUSES: TaskStatus[] = ['pending', 'running', 'review', 'merged', 'completed', 'failed'];
+const ALL_STATUSES: TaskStatus[] = ['pending', 'running', 'review', 'merged', 'closed', 'failed'];
 
 class TaskStore {
 	tasks = $state<Task[]>([]);
@@ -13,7 +13,7 @@ class TaskStore {
 			running: [],
 			review: [],
 			merged: [],
-			completed: [],
+			closed: [],
 			failed: []
 		};
 		for (const task of this.tasks) {

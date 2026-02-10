@@ -16,18 +16,32 @@
 	let selectedDeps = $state<string[]>([]);
 	let searchQuery = $state('');
 	let showDepDropdown = $state(false);
+	let inputElement = $state<HTMLInputElement | null>(null);
+	let dropdownStyle = $state('');
 
-	// Filter available tasks (exclude completed/failed and already selected)
+	// Filter available tasks (exclude closed/failed and already selected)
 	const availableTasks = $derived(
 		taskStore.tasks.filter(
 			(t) =>
-				!['completed', 'failed'].includes(t.status) &&
+				!['closed', 'failed'].includes(t.status) &&
 				!selectedDeps.includes(t.id) &&
 				(searchQuery === '' ||
 					t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
 					t.description.toLowerCase().includes(searchQuery.toLowerCase()))
 		)
 	);
+
+	function updateDropdownPosition() {
+		if (inputElement) {
+			const rect = inputElement.getBoundingClientRect();
+			dropdownStyle = `top: ${rect.bottom + 4}px; left: ${rect.left}px; width: ${rect.width}px;`;
+		}
+	}
+
+	function handleInputFocus() {
+		updateDropdownPosition();
+		showDepDropdown = true;
+	}
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -114,51 +128,17 @@
 						</div>
 					{/if}
 
-					<div class="relative">
-						<input
-							id="dep-search"
-							type="text"
-							bind:value={searchQuery}
-							onfocus={() => (showDepDropdown = true)}
-							class="w-full border rounded-md p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-							placeholder="Search tasks to add as dependency..."
-							disabled={loading}
-							autocomplete="off"
-						/>
-						{#if showDepDropdown && availableTasks.length > 0}
-							<div
-								class="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto"
-							>
-								{#each availableTasks as task (task.id)}
-									<button
-										type="button"
-										class="w-full text-left px-3 py-2 hover:bg-accent cursor-pointer"
-										onclick={() => addDependency(task.id)}
-									>
-										<div class="font-mono text-xs">{task.id}</div>
-										<div class="text-sm text-muted-foreground truncate">
-											{task.description}
-										</div>
-									</button>
-								{/each}
-							</div>
-						{/if}
-						{#if showDepDropdown && searchQuery && availableTasks.length === 0}
-							<div
-								class="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg p-3 text-sm text-muted-foreground"
-							>
-								No matching tasks found.
-							</div>
-						{/if}
-					</div>
-					{#if showDepDropdown}
-						<button
-							type="button"
-							class="fixed inset-0 z-40"
-							onclick={() => (showDepDropdown = false)}
-							aria-label="Close dropdown"
-						></button>
-					{/if}
+					<input
+						id="dep-search"
+						type="text"
+						bind:value={searchQuery}
+						bind:this={inputElement}
+						onfocus={handleInputFocus}
+						class="w-full border rounded-md p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+						placeholder="Search tasks to add as dependency..."
+						disabled={loading}
+						autocomplete="off"
+					/>
 				</div>
 
 				{#if error}
@@ -176,3 +156,41 @@
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
+
+{#if showDepDropdown}
+	<!-- Backdrop to close dropdown -->
+	<button
+		type="button"
+		class="fixed inset-0 z-[100]"
+		onclick={() => (showDepDropdown = false)}
+		aria-label="Close dropdown"
+	></button>
+
+	<!-- Dropdown rendered as fixed position portal -->
+	{#if availableTasks.length > 0}
+		<div
+			class="fixed z-[101] bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto"
+			style={dropdownStyle}
+		>
+			{#each availableTasks as task (task.id)}
+				<button
+					type="button"
+					class="w-full text-left px-3 py-2 hover:bg-accent cursor-pointer"
+					onclick={() => addDependency(task.id)}
+				>
+					<div class="font-mono text-xs">{task.id}</div>
+					<div class="text-sm text-muted-foreground truncate">
+						{task.description}
+					</div>
+				</button>
+			{/each}
+		</div>
+	{:else if searchQuery}
+		<div
+			class="fixed z-[101] bg-popover border rounded-md shadow-lg p-3 text-sm text-muted-foreground"
+			style={dropdownStyle}
+		>
+			No matching tasks found.
+		</div>
+	{/if}
+{/if}

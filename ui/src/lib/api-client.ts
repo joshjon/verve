@@ -55,6 +55,18 @@ export class VerveClient {
 		}
 		return res.json();
 	}
+
+	async closeTask(id: string, reason?: string): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/close`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to close task');
+		}
+		return res.json();
+	}
 }
 
 export const client = new VerveClient();

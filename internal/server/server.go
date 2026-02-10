@@ -49,6 +49,7 @@ func New(cfg Config) *Server {
 	api.GET("/tasks/:id", handlers.GetTask)
 	api.POST("/tasks/:id/logs", handlers.AppendLogs)
 	api.POST("/tasks/:id/complete", handlers.CompleteTask)
+	api.POST("/tasks/:id/close", handlers.CloseTask)
 	api.POST("/tasks/:id/sync", handlers.SyncTaskStatus)
 
 	return &Server{
