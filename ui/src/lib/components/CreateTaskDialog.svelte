@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
+	import { FileText, Link2, Search, X, Loader2, Sparkles } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -67,93 +68,121 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-[500px]">
+	<Dialog.Content class="sm:max-w-[540px]">
 		<Dialog.Header>
-			<Dialog.Title>Create New Task</Dialog.Title>
+			<Dialog.Title class="flex items-center gap-2">
+				<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+					<Sparkles class="w-4 h-4 text-primary" />
+				</div>
+				Create New Task
+			</Dialog.Title>
 			<Dialog.Description>
-				Describe the task you want the AI agent to complete.
+				Describe the task you want the AI agent to complete. Be specific for best results.
 			</Dialog.Description>
 		</Dialog.Header>
 		<form onsubmit={handleSubmit}>
-			<div class="py-4 space-y-4">
+			<div class="py-4 space-y-5">
 				<div>
-					<label for="description" class="text-sm font-medium mb-2 block">Description</label>
+					<label for="description" class="text-sm font-medium mb-2 flex items-center gap-2">
+						<FileText class="w-4 h-4 text-muted-foreground" />
+						Description
+					</label>
 					<textarea
 						id="description"
 						bind:value={description}
 						autofocus
-						class="w-full border rounded-md p-3 min-h-[100px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-						placeholder="e.g., Add a function that calculates the Fibonacci sequence..."
+						class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+						placeholder="e.g., Add a function that calculates the Fibonacci sequence and include unit tests..."
 						disabled={loading}
 					></textarea>
 				</div>
 
 				<div>
-					<label for="dep-search" class="text-sm font-medium mb-2 block"
-						>Dependencies (optional)</label
-					>
+					<label for="dep-search" class="text-sm font-medium mb-2 flex items-center gap-2">
+						<Link2 class="w-4 h-4 text-muted-foreground" />
+						Dependencies
+						<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+					</label>
 
 					{#if selectedDeps.length > 0}
-						<div class="flex flex-wrap gap-1 mb-2">
+						<div class="flex flex-wrap gap-1.5 mb-3">
 							{#each selectedDeps as depId}
-								<Badge variant="secondary" class="gap-1">
-									{depId}
+								<Badge variant="secondary" class="gap-1 pl-2 pr-1 py-1">
+									<span class="font-mono text-xs">{depId}</span>
 									<button
 										type="button"
-										class="ml-1 hover:text-destructive"
+										class="ml-1 hover:bg-destructive/20 hover:text-destructive rounded p-0.5 transition-colors"
 										onclick={() => removeDependency(depId)}
 									>
-										&times;
+										<X class="w-3 h-3" />
 									</button>
 								</Badge>
 							{/each}
 						</div>
 					{/if}
 
-					<input
-						id="dep-search"
-						type="text"
-						bind:value={searchQuery}
-						class="w-full border rounded-md p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-						placeholder="Search tasks..."
-						disabled={loading}
-						autocomplete="off"
-					/>
+					<div class="relative">
+						<Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+						<input
+							id="dep-search"
+							type="text"
+							bind:value={searchQuery}
+							class="w-full border rounded-lg pl-9 pr-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+							placeholder="Search tasks to add as dependency..."
+							disabled={loading}
+							autocomplete="off"
+						/>
+					</div>
 
-					<div class="mt-2 border rounded-md max-h-32 overflow-y-auto bg-muted/30">
+					<div class="mt-2 border rounded-lg max-h-36 overflow-y-auto bg-muted/20">
 						{#if availableTasks.length > 0}
 							{#each availableTasks as task (task.id)}
 								<button
 									type="button"
-									class="w-full text-left px-3 py-2 hover:bg-accent cursor-pointer border-b last:border-b-0"
+									class="w-full text-left px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0 transition-colors"
 									onclick={() => addDependency(task.id)}
 								>
-									<div class="font-mono text-xs text-muted-foreground">{task.id}</div>
-									<div class="text-sm truncate">{task.description}</div>
+									<div class="flex items-center gap-2">
+										<span class="font-mono text-xs text-muted-foreground bg-background px-1.5 py-0.5 rounded">
+											{task.id}
+										</span>
+									</div>
+									<div class="text-sm truncate mt-1">{task.description}</div>
 								</button>
 							{/each}
 						{:else if searchQuery}
-							<div class="p-3 text-sm text-muted-foreground">
-								No matching tasks found.
+							<div class="p-4 text-sm text-muted-foreground text-center">
+								<Search class="w-5 h-5 mx-auto mb-2 opacity-40" />
+								No matching tasks found
 							</div>
 						{:else}
-							<div class="p-3 text-sm text-muted-foreground">
-								No tasks available as dependencies.
+							<div class="p-4 text-sm text-muted-foreground text-center">
+								<Link2 class="w-5 h-5 mx-auto mb-2 opacity-40" />
+								No tasks available as dependencies
 							</div>
 						{/if}
 					</div>
 				</div>
 
 				{#if error}
-					<p class="text-sm text-destructive">{error}</p>
+					<div class="bg-destructive/10 text-destructive text-sm p-3 rounded-lg flex items-center gap-2">
+						<X class="w-4 h-4 flex-shrink-0" />
+						{error}
+					</div>
 				{/if}
 			</div>
-			<Dialog.Footer>
+			<Dialog.Footer class="gap-2">
 				<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={loading || !description.trim()}>
-					{loading ? 'Creating...' : 'Create Task'}
+				<Button type="submit" disabled={loading || !description.trim()} class="gap-2">
+					{#if loading}
+						<Loader2 class="w-4 h-4 animate-spin" />
+						Creating...
+					{:else}
+						<Sparkles class="w-4 h-4" />
+						Create Task
+					{/if}
 				</Button>
 			</Dialog.Footer>
 		</form>

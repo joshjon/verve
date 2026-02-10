@@ -2,13 +2,31 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { client } from '$lib/api-client';
-	import type { Task } from '$lib/models/task';
+	import type { Task, TaskStatus } from '$lib/models/task';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { goto } from '$app/navigation';
-	import { cn } from '$lib/utils';
+	import {
+		ArrowLeft,
+		Clock,
+		Play,
+		Eye,
+		GitMerge,
+		CheckCircle,
+		XCircle,
+		FileText,
+		GitPullRequest,
+		Link2,
+		Terminal,
+		RefreshCw,
+		X,
+		Calendar,
+		Loader2
+	} from 'lucide-svelte';
+	import type { ComponentType } from 'svelte';
+	import type { Icon } from 'lucide-svelte';
 
 	let task = $state<Task | null>(null);
 	let loading = $state(true);
@@ -20,19 +38,52 @@
 
 	const taskId = $derived($page.params.id);
 
-	const statusConfig: Record<string, { label: string; class: string }> = {
-		pending: { label: 'Pending', class: 'bg-yellow-500 hover:bg-yellow-500' },
-		running: { label: 'Running', class: 'bg-blue-500 hover:bg-blue-500' },
-		review: { label: 'Review', class: 'bg-purple-500 hover:bg-purple-500' },
-		merged: { label: 'Merged', class: 'bg-green-500 hover:bg-green-500' },
-		closed: { label: 'Closed', class: 'bg-gray-500 hover:bg-gray-500' },
-		failed: { label: 'Failed', class: 'bg-red-500 hover:bg-red-500' }
+	const statusConfig: Record<
+		TaskStatus,
+		{ label: string; icon: ComponentType<Icon>; bgClass: string; textClass: string }
+	> = {
+		pending: {
+			label: 'Pending',
+			icon: Clock,
+			bgClass: 'bg-amber-500',
+			textClass: 'text-amber-600 dark:text-amber-400'
+		},
+		running: {
+			label: 'Running',
+			icon: Play,
+			bgClass: 'bg-blue-500',
+			textClass: 'text-blue-600 dark:text-blue-400'
+		},
+		review: {
+			label: 'In Review',
+			icon: Eye,
+			bgClass: 'bg-purple-500',
+			textClass: 'text-purple-600 dark:text-purple-400'
+		},
+		merged: {
+			label: 'Merged',
+			icon: GitMerge,
+			bgClass: 'bg-green-500',
+			textClass: 'text-green-600 dark:text-green-400'
+		},
+		closed: {
+			label: 'Closed',
+			icon: CheckCircle,
+			bgClass: 'bg-gray-500',
+			textClass: 'text-gray-600 dark:text-gray-400'
+		},
+		failed: {
+			label: 'Failed',
+			icon: XCircle,
+			bgClass: 'bg-red-500',
+			textClass: 'text-red-600 dark:text-red-400'
+		}
 	};
 
-	// Check if task can be closed (not already closed, merged, or failed)
-	const canClose = $derived(
-		task && !['closed', 'merged', 'failed'].includes(task.status)
-	);
+	const canClose = $derived(task && !['closed', 'merged', 'failed'].includes(task.status));
+
+	const currentStatusConfig = $derived(task ? statusConfig[task.status] : null);
+	const StatusIcon = $derived(currentStatusConfig?.icon ?? Clock);
 
 	onMount(() => {
 		loadTask();
@@ -80,52 +131,86 @@
 	function formatDate(dateStr: string): string {
 		return new Date(dateStr).toLocaleString();
 	}
+
+	function formatRelativeTime(dateStr: string): string {
+		const date = new Date(dateStr);
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMins = Math.floor(diffMs / 60000);
+		const diffHours = Math.floor(diffMs / 3600000);
+		const diffDays = Math.floor(diffMs / 86400000);
+
+		if (diffMins < 1) return 'Just now';
+		if (diffMins < 60) return `${diffMins}m ago`;
+		if (diffHours < 24) return `${diffHours}h ago`;
+		return `${diffDays}d ago`;
+	}
 </script>
 
 <div class="p-6 max-w-4xl mx-auto">
-	<Button variant="ghost" onclick={() => goto('/')} class="mb-4">
-		<span class="mr-2">&larr;</span> Back to Dashboard
+	<Button variant="ghost" onclick={() => goto('/')} class="mb-6 gap-2 -ml-2">
+		<ArrowLeft class="w-4 h-4" />
+		Back to Dashboard
 	</Button>
 
 	{#if loading}
-		<div class="flex items-center justify-center py-12">
+		<div class="flex flex-col items-center justify-center py-16">
+			<Loader2 class="w-8 h-8 animate-spin text-primary mb-4" />
 			<p class="text-muted-foreground">Loading task...</p>
 		</div>
 	{:else if error && !task}
-		<div class="bg-destructive/10 text-destructive p-4 rounded-md">
-			{error}
+		<div
+			class="bg-destructive/10 text-destructive p-4 rounded-lg flex items-center gap-3 border border-destructive/20"
+		>
+			<XCircle class="w-5 h-5 flex-shrink-0" />
+			<span>{error}</span>
 		</div>
 	{:else if task}
 		<div class="space-y-6">
-			<div class="flex items-start justify-between">
-				<div>
-					<h1 class="text-2xl font-bold font-mono">{task.id}</h1>
-					<p class="text-sm text-muted-foreground mt-1">
-						Created: {formatDate(task.created_at)}
-					</p>
+			<!-- Header -->
+			<div class="flex items-start justify-between gap-4">
+				<div class="flex-1">
+					<div class="flex items-center gap-3 mb-2">
+						<span class="font-mono text-sm text-muted-foreground bg-muted px-2 py-1 rounded">
+							{task.id}
+						</span>
+						<Badge class="{currentStatusConfig?.bgClass} text-white gap-1">
+							<StatusIcon class="w-3 h-3" />
+							{currentStatusConfig?.label}
+						</Badge>
+					</div>
+					<div class="flex items-center gap-4 text-sm text-muted-foreground">
+						<span class="flex items-center gap-1">
+							<Calendar class="w-4 h-4" />
+							Created {formatRelativeTime(task.created_at)}
+						</span>
+					</div>
 				</div>
 				<div class="flex items-center gap-2">
 					{#if canClose}
 						{#if showCloseForm}
-							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)}>
+							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">
+								<X class="w-4 h-4" />
 								Cancel
 							</Button>
 						{:else}
-							<Button size="sm" variant="outline" onclick={() => (showCloseForm = true)}>
+							<Button size="sm" variant="outline" onclick={() => (showCloseForm = true)} class="gap-1">
+								<XCircle class="w-4 h-4" />
 								Close Task
 							</Button>
 						{/if}
 					{/if}
-					<Badge class={cn('text-white', statusConfig[task.status]?.class)}>
-						{statusConfig[task.status]?.label ?? task.status}
-					</Badge>
 				</div>
 			</div>
 
+			<!-- Close Form -->
 			{#if showCloseForm}
-				<Card.Root class="border-destructive/50">
-					<Card.Header>
-						<Card.Title>Close Task</Card.Title>
+				<Card.Root class="border-destructive/30 bg-destructive/5">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<XCircle class="w-4 h-4 text-destructive" />
+							Close Task
+						</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<div class="space-y-4">
@@ -136,7 +221,7 @@
 								<textarea
 									id="close-reason"
 									bind:value={closeReason}
-									class="w-full border rounded-md p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+									class="w-full border rounded-lg p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
 									placeholder="Why is this task being closed?"
 									disabled={closing}
 								></textarea>
@@ -145,8 +230,14 @@
 								<Button variant="outline" onclick={() => (showCloseForm = false)} disabled={closing}>
 									Cancel
 								</Button>
-								<Button variant="destructive" onclick={handleClose} disabled={closing}>
-									{closing ? 'Closing...' : 'Close Task'}
+								<Button variant="destructive" onclick={handleClose} disabled={closing} class="gap-2">
+									{#if closing}
+										<Loader2 class="w-4 h-4 animate-spin" />
+										Closing...
+									{:else}
+										<XCircle class="w-4 h-4" />
+										Close Task
+									{/if}
 								</Button>
 							</div>
 						</div>
@@ -154,19 +245,27 @@
 				</Card.Root>
 			{/if}
 
+			<!-- Description -->
 			<Card.Root>
-				<Card.Header>
-					<Card.Title>Description</Card.Title>
+				<Card.Header class="pb-3">
+					<Card.Title class="text-base flex items-center gap-2">
+						<FileText class="w-4 h-4 text-muted-foreground" />
+						Description
+					</Card.Title>
 				</Card.Header>
 				<Card.Content>
-					<p class="whitespace-pre-wrap">{task.description}</p>
+					<p class="whitespace-pre-wrap leading-relaxed">{task.description}</p>
 				</Card.Content>
 			</Card.Root>
 
+			<!-- Close Reason -->
 			{#if task.close_reason}
-				<Card.Root class="border-gray-500/50">
-					<Card.Header>
-						<Card.Title>Close Reason</Card.Title>
+				<Card.Root class="border-gray-500/30">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<CheckCircle class="w-4 h-4 text-gray-500" />
+							Close Reason
+						</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<p class="whitespace-pre-wrap text-muted-foreground">{task.close_reason}</p>
@@ -174,22 +273,34 @@
 				</Card.Root>
 			{/if}
 
+			<!-- Pull Request -->
 			{#if task.pull_request_url}
-				<Card.Root>
-					<Card.Header>
-						<Card.Title>Pull Request</Card.Title>
+				<Card.Root class="border-purple-500/30 bg-purple-500/5">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<GitPullRequest class="w-4 h-4 text-purple-500" />
+							Pull Request
+						</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<div class="flex items-center gap-4">
 							<a
 								href={task.pull_request_url}
-								class="text-primary hover:underline"
+								class="text-primary hover:underline font-medium flex items-center gap-2"
 								target="_blank"
 								rel="noopener noreferrer"
 							>
+								<GitPullRequest class="w-4 h-4" />
 								PR #{task.pr_number}
 							</a>
-							<Button size="sm" variant="outline" onclick={syncStatus} disabled={syncing}>
+							<Button
+								size="sm"
+								variant="outline"
+								onclick={syncStatus}
+								disabled={syncing}
+								class="gap-2"
+							>
+								<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
 								{syncing ? 'Syncing...' : 'Sync Status'}
 							</Button>
 						</div>
@@ -197,45 +308,73 @@
 				</Card.Root>
 			{/if}
 
+			<!-- Dependencies -->
 			{#if task.depends_on && task.depends_on.length > 0}
 				<Card.Root>
-					<Card.Header>
-						<Card.Title>Dependencies</Card.Title>
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<Link2 class="w-4 h-4 text-muted-foreground" />
+							Dependencies
+							<span class="text-xs text-muted-foreground font-normal">
+								({task.depends_on.length})
+							</span>
+						</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<div class="flex flex-wrap gap-2">
 							{#each task.depends_on as depId}
-								<Badge
-									variant="outline"
-									class="cursor-pointer hover:bg-accent"
+								<button
+									class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-muted hover:bg-accent text-sm font-mono transition-colors"
 									onclick={() => goto(`/tasks/${depId}`)}
 								>
+									<Link2 class="w-3 h-3" />
 									{depId}
-								</Badge>
+								</button>
 							{/each}
 						</div>
 					</Card.Content>
 				</Card.Root>
 			{/if}
 
+			<!-- Logs -->
 			<Card.Root>
-				<Card.Header>
-					<Card.Title>Logs</Card.Title>
+				<Card.Header class="pb-3">
+					<Card.Title class="text-base flex items-center gap-2">
+						<Terminal class="w-4 h-4 text-muted-foreground" />
+						Logs
+						{#if task.status === 'running'}
+							<span class="flex items-center gap-1 text-xs text-blue-500 font-normal">
+								<span class="relative flex h-2 w-2">
+									<span
+										class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"
+									></span>
+									<span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+								</span>
+								Live
+							</span>
+						{/if}
+					</Card.Title>
 				</Card.Header>
 				<Card.Content>
-					<ScrollArea class="h-[400px] w-full rounded-md border bg-black p-4">
+					<ScrollArea class="h-[400px] w-full rounded-lg border bg-zinc-950 p-4">
 						{#if task.logs && task.logs.length > 0}
-							<pre
-								class="text-green-400 text-xs font-mono whitespace-pre-wrap">{task.logs.join('\n')}</pre>
+							<pre class="text-green-400 text-xs font-mono whitespace-pre-wrap leading-relaxed">{task.logs.join('\n')}</pre>
 						{:else}
-							<p class="text-muted-foreground text-sm">No logs available yet.</p>
+							<div class="flex flex-col items-center justify-center h-full text-muted-foreground">
+								<Terminal class="w-8 h-8 opacity-20 mb-2" />
+								<p class="text-sm">No logs available yet</p>
+							</div>
 						{/if}
 					</ScrollArea>
 				</Card.Content>
 			</Card.Root>
 
-			<div class="text-sm text-muted-foreground">
-				Last updated: {formatDate(task.updated_at)}
+			<!-- Footer -->
+			<div class="flex items-center justify-between text-sm text-muted-foreground pt-2">
+				<span class="flex items-center gap-1">
+					<Clock class="w-4 h-4" />
+					Last updated: {formatDate(task.updated_at)}
+				</span>
 			</div>
 		</div>
 	{/if}
