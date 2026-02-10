@@ -15,12 +15,13 @@ import (
 
 // Config holds the worker configuration
 type Config struct {
-	APIURL          string
-	GitHubToken     string
-	GitHubRepo      string
-	AnthropicAPIKey string
-	ClaudeModel     string // Model to use (haiku, sonnet, opus) - defaults to haiku
-	AgentImage      string // Docker image for agent - defaults to verve-agent:latest
+	APIURL             string
+	GitHubToken        string
+	GitHubRepo         string
+	AnthropicAPIKey    string
+	ClaudeModel        string // Model to use (haiku, sonnet, opus) - defaults to haiku
+	AgentImage         string // Docker image for agent - defaults to verve-agent:latest
+	MaxConcurrentTasks int    // Maximum concurrent tasks (default: 1)
 }
 
 type Task struct {
@@ -34,6 +35,13 @@ type Worker struct {
 	docker       *DockerRunner
 	client       *http.Client
 	pollInterval time.Duration
+
+	// Concurrency control
+	maxConcurrent int
+	semaphore     chan struct{}
+	wg            sync.WaitGroup
+	activeTasks   int
+	activeMu      sync.Mutex
 }
 
 func New(cfg Config) (*Worker, error) {
@@ -42,11 +50,19 @@ func New(cfg Config) (*Worker, error) {
 		return nil, err
 	}
 
+	// Default to 1 concurrent task if not specified
+	maxConcurrent := cfg.MaxConcurrentTasks
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
+
 	return &Worker{
-		config:       cfg,
-		docker:       docker,
-		client:       &http.Client{Timeout: 60 * time.Second},
-		pollInterval: 5 * time.Second,
+		config:        cfg,
+		docker:        docker,
+		client:        &http.Client{Timeout: 60 * time.Second},
+		pollInterval:  5 * time.Second,
+		maxConcurrent: maxConcurrent,
+		semaphore:     make(chan struct{}, maxConcurrent),
 	}, nil
 }
 
@@ -56,6 +72,7 @@ func (w *Worker) Close() error {
 
 func (w *Worker) Run(ctx context.Context) error {
 	log.Println("Worker starting...")
+	log.Printf("Max concurrent tasks: %d", w.maxConcurrent)
 
 	// Ensure agent image exists
 	if err := w.docker.EnsureImage(ctx); err != nil {
@@ -66,25 +83,58 @@ func (w *Worker) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Worker shutting down...")
+			log.Println("Worker shutting down, waiting for active tasks...")
+			w.wg.Wait()
+			log.Println("All tasks completed, worker stopped")
 			return ctx.Err()
 		default:
 		}
 
+		// Try to acquire a semaphore slot (non-blocking check first)
+		select {
+		case w.semaphore <- struct{}{}:
+			// Got a slot, proceed to poll for task
+		default:
+			// All slots full, wait a bit before checking again
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
 		task, err := w.pollForTask(ctx)
 		if err != nil {
+			// Release slot on error
+			<-w.semaphore
 			log.Printf("Error polling for task: %v", err)
 			time.Sleep(w.pollInterval)
 			continue
 		}
 
 		if task == nil {
-			// No task available, continue polling
+			// No task available, release slot and continue polling
+			<-w.semaphore
 			continue
 		}
 
-		log.Printf("Claimed task %s: %s", task.ID, task.Description)
-		w.executeTask(ctx, task)
+		// Track active task count for logging
+		w.activeMu.Lock()
+		w.activeTasks++
+		activeCount := w.activeTasks
+		w.activeMu.Unlock()
+
+		log.Printf("Claimed task %s (%d/%d active): %s", task.ID, activeCount, w.maxConcurrent, task.Description)
+
+		// Execute task in goroutine
+		w.wg.Add(1)
+		go func(t *Task) {
+			defer w.wg.Done()
+			defer func() {
+				<-w.semaphore // Release semaphore slot
+				w.activeMu.Lock()
+				w.activeTasks--
+				w.activeMu.Unlock()
+			}()
+			w.executeTask(ctx, t)
+		}(task)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"verve/internal/worker"
@@ -13,12 +14,13 @@ import (
 func main() {
 	// Load configuration from environment
 	cfg := worker.Config{
-		APIURL:          getEnvOrDefault("API_URL", "http://localhost:8080"),
-		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
-		GitHubRepo:      os.Getenv("GITHUB_REPO"),
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-		ClaudeModel:     getEnvOrDefault("CLAUDE_MODEL", "haiku"),
-		AgentImage:      getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
+		APIURL:             getEnvOrDefault("API_URL", "http://localhost:8080"),
+		GitHubToken:        os.Getenv("GITHUB_TOKEN"),
+		GitHubRepo:         os.Getenv("GITHUB_REPO"),
+		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
+		ClaudeModel:        getEnvOrDefault("CLAUDE_MODEL", "haiku"),
+		AgentImage:         getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
+		MaxConcurrentTasks: getEnvOrDefaultInt("MAX_CONCURRENT_TASKS", 3),
 	}
 
 	// Validate required configuration
@@ -36,6 +38,7 @@ func main() {
 	log.Printf("Configured for repository: %s", cfg.GitHubRepo)
 	log.Printf("Using Claude model: %s", cfg.ClaudeModel)
 	log.Printf("Using agent image: %s", cfg.AgentImage)
+	log.Printf("Max concurrent tasks: %d", cfg.MaxConcurrentTasks)
 
 	w, err := worker.New(cfg)
 	if err != nil {
@@ -63,6 +66,16 @@ func main() {
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvOrDefaultInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intVal, err := strconv.Atoi(value); err == nil {
+			return intVal
+		}
+		log.Printf("Warning: invalid integer for %s, using default %d", key, defaultValue)
 	}
 	return defaultValue
 }

@@ -169,6 +169,7 @@ The server uses these credentials to check if PRs have been merged (background s
 | `API_URL` | No | `http://localhost:8080` | Verve API server URL |
 | `CLAUDE_MODEL` | No | `haiku` | Claude model to use (`haiku`, `sonnet`, `opus`) |
 | `AGENT_IMAGE` | No | `verve-agent:latest` | Docker image for agent (use custom image for additional dependencies) |
+| `MAX_CONCURRENT_TASKS` | No | `1` | Maximum tasks to process in parallel (each task gets its own Docker container) |
 
 ### Getting a GitHub Token
 
@@ -235,6 +236,22 @@ Build an example:
 docker build -f agent/examples/Dockerfile.python -t verve-agent:python ./agent
 AGENT_IMAGE=verve-agent:python make run-worker
 ```
+
+## Parallel Task Execution
+
+By default, the worker processes one task at a time. To process multiple tasks in parallel, set `MAX_CONCURRENT_TASKS`:
+
+```bash
+# Process up to 5 tasks concurrently
+MAX_CONCURRENT_TASKS=5 make run-worker
+```
+
+Each concurrent task runs in its own isolated Docker container. The worker will:
+- Poll for new tasks as long as there are available slots
+- Execute multiple tasks simultaneously (up to the limit)
+- Wait for all active tasks to complete on graceful shutdown
+
+**Resource considerations**: Each agent container uses ~500MB-1GB of memory. Set the limit based on your available resources.
 
 ## How It Works
 
