@@ -46,12 +46,61 @@ echo "[agent] Task: ${TASK_DESCRIPTION}"
 echo ""
 
 # Run Claude Code in non-interactive mode
-# --print: Output to stdout (for log streaming)
+# --output-format stream-json: Stream JSON events for real-time output
+# --verbose: Required for stream-json, shows thinking
 # --dangerously-skip-permissions: Skip permission prompts (we trust the agent)
 # --model: Use specified model (defaults to haiku for cost efficiency)
 CLAUDE_MODEL="${CLAUDE_MODEL:-haiku}"
 echo "[agent] Using model: ${CLAUDE_MODEL}"
-claude --print --dangerously-skip-permissions --model "${CLAUDE_MODEL}" "${TASK_DESCRIPTION}"
+
+# Use stream-json for real-time output, parse with jq
+# Events include: assistant (text/thinking), tool_use, tool_result, result
+claude --output-format stream-json --verbose --dangerously-skip-permissions --model "${CLAUDE_MODEL}" "${TASK_DESCRIPTION}" 2>&1 | while IFS= read -r line; do
+    # Skip empty lines
+    [ -z "$line" ] && continue
+
+    # Try to parse as JSON
+    if echo "$line" | jq -e . >/dev/null 2>&1; then
+        TYPE=$(echo "$line" | jq -r '.type // empty' 2>/dev/null)
+
+        case "$TYPE" in
+            "assistant")
+                # Extract content from assistant messages
+                CONTENT_TYPE=$(echo "$line" | jq -r '.message.content[0].type // empty' 2>/dev/null)
+                case "$CONTENT_TYPE" in
+                    "thinking")
+                        THINKING=$(echo "$line" | jq -r '.message.content[0].thinking // empty' 2>/dev/null)
+                        if [ -n "$THINKING" ]; then
+                            echo "[thinking] $THINKING"
+                        fi
+                        ;;
+                    "text")
+                        TEXT=$(echo "$line" | jq -r '.message.content[0].text // empty' 2>/dev/null)
+                        if [ -n "$TEXT" ]; then
+                            echo "[claude] $TEXT"
+                        fi
+                        ;;
+                    "tool_use")
+                        TOOL_NAME=$(echo "$line" | jq -r '.message.content[0].name // empty' 2>/dev/null)
+                        if [ -n "$TOOL_NAME" ]; then
+                            echo "[tool] Using: $TOOL_NAME"
+                        fi
+                        ;;
+                esac
+                ;;
+            "result")
+                # Final result
+                RESULT_TEXT=$(echo "$line" | jq -r '.result // empty' 2>/dev/null)
+                if [ -n "$RESULT_TEXT" ] && [ "$RESULT_TEXT" != "null" ]; then
+                    echo "[result] $RESULT_TEXT"
+                fi
+                ;;
+        esac
+    else
+        # Not JSON, print as-is (might be stderr or other output)
+        echo "$line"
+    fi
+done
 
 echo ""
 echo "[agent] Claude Code session completed"

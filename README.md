@@ -2,6 +2,8 @@
 
 A distributed AI agent orchestrator platform. Dispatches AI coding agents powered by Claude Code to work on tasks within customer infrastructure using Docker-in-Docker isolation.
 
+**Last updated: February 11, 2026**
+
 See [DESIGN.md](DESIGN.md) for detailed architecture and design documentation.
 
 ## System Architecture
@@ -169,7 +171,7 @@ The server uses these credentials to check if PRs have been merged (background s
 | `API_URL` | No | `http://localhost:8080` | Verve API server URL |
 | `CLAUDE_MODEL` | No | `haiku` | Claude model to use (`haiku`, `sonnet`, `opus`) |
 | `AGENT_IMAGE` | No | `verve-agent:latest` | Docker image for agent (use custom image for additional dependencies) |
-| `MAX_CONCURRENT_TASKS` | No | `1` | Maximum tasks to process in parallel (each task gets its own Docker container) |
+| `MAX_CONCURRENT_TASKS` | No | `3` | Maximum tasks to process in parallel (each task gets its own Docker container) |
 
 ### Getting a GitHub Token
 
