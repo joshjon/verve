@@ -8,15 +8,17 @@ import (
 )
 
 type Handlers struct {
-	store *Store
+	store        *Store
+	githubClient *GitHubClient
 }
 
-func NewHandlers(store *Store) *Handlers {
-	return &Handlers{store: store}
+func NewHandlers(store *Store, githubClient *GitHubClient) *Handlers {
+	return &Handlers{store: store, githubClient: githubClient}
 }
 
 type CreateTaskRequest struct {
-	Description string `json:"description"`
+	Description string   `json:"description"`
+	DependsOn   []string `json:"depends_on,omitempty"`
 }
 
 type LogsRequest struct {
@@ -24,8 +26,10 @@ type LogsRequest struct {
 }
 
 type CompleteRequest struct {
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	Success        bool   `json:"success"`
+	Error          string `json:"error,omitempty"`
+	PullRequestURL string `json:"pull_request_url,omitempty"`
+	PRNumber       int    `json:"pr_number,omitempty"`
 }
 
 // CreateTask handles POST /api/v1/tasks
@@ -38,7 +42,14 @@ func (h *Handlers) CreateTask(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "description required"})
 	}
 
-	task := h.store.Create(req.Description)
+	opts := &CreateOptions{
+		DependsOn: req.DependsOn,
+	}
+
+	task, err := h.store.Create(req.Description, opts)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
 	return c.JSON(http.StatusCreated, task)
 }
 
@@ -114,14 +125,50 @@ func (h *Handlers) CompleteTask(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
-	status := TaskStatusCompleted
 	if !req.Success {
-		status = TaskStatusFailed
-	}
-
-	if !h.store.UpdateStatus(id, status) {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+		// Failed task
+		if !h.store.UpdateStatus(id, TaskStatusFailed) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+		}
+	} else if req.PullRequestURL != "" {
+		// Success with PR - set to review status
+		if !h.store.SetPullRequest(id, req.PullRequestURL, req.PRNumber) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+		}
+	} else {
+		// Success without PR (no changes) - mark as completed
+		if !h.store.UpdateStatus(id, TaskStatusCompleted) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+		}
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// SyncTaskStatus handles POST /api/v1/tasks/:id/sync
+// Checks GitHub to update PR merge status
+func (h *Handlers) SyncTaskStatus(c echo.Context) error {
+	id := c.Param("id")
+	task := h.store.Get(id)
+	if task == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+	}
+
+	if task.Status != TaskStatusReview {
+		return c.JSON(http.StatusOK, task)
+	}
+
+	// Check GitHub for PR status
+	if h.githubClient != nil && task.PRNumber > 0 {
+		merged, err := h.githubClient.IsPRMerged(c.Request().Context(), task.PRNumber)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to check PR status: " + err.Error()})
+		}
+		if merged {
+			h.store.UpdateStatus(id, TaskStatusMerged)
+			task = h.store.Get(id) // Refresh
+		}
+	}
+
+	return c.JSON(http.StatusOK, task)
 }

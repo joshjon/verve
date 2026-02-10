@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -201,10 +202,31 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	// Create log streamer for real-time log streaming
 	streamer := newLogStreamer(ctx, w, task.ID)
 
+	// Track PR info if we see the marker
+	var prURL string
+	var prNumber int
+	var prMu sync.Mutex
+
 	// Log callback - called from Docker log streaming goroutine
 	onLog := func(line string) {
 		log.Printf("[agent] %s", line)
 		streamer.AddLine(line)
+
+		// Parse PR marker
+		if strings.HasPrefix(line, "VERVE_PR_CREATED:") {
+			jsonStr := strings.TrimPrefix(line, "VERVE_PR_CREATED:")
+			var prInfo struct {
+				URL    string `json:"url"`
+				Number int    `json:"number"`
+			}
+			if err := json.Unmarshal([]byte(jsonStr), &prInfo); err == nil {
+				prMu.Lock()
+				prURL = prInfo.URL
+				prNumber = prInfo.Number
+				prMu.Unlock()
+				log.Printf("[worker] Captured PR URL: %s (#%d)", prURL, prNumber)
+			}
+		}
 	}
 
 	// Create agent config from worker config
@@ -223,16 +245,22 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	// Stop the streamer and flush remaining logs
 	streamer.Stop()
 
-	// Report completion
+	// Get captured PR info
+	prMu.Lock()
+	capturedPRURL := prURL
+	capturedPRNumber := prNumber
+	prMu.Unlock()
+
+	// Report completion with PR info
 	if result.Error != nil {
 		log.Printf("Task %s failed with error: %v", task.ID, result.Error)
-		w.completeTask(ctx, task.ID, false, result.Error.Error())
+		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0)
 	} else if result.Success {
 		log.Printf("Task %s completed successfully", task.ID)
-		w.completeTask(ctx, task.ID, true, "")
+		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber)
 	} else {
 		log.Printf("Task %s failed with exit code %d", task.ID, result.ExitCode)
-		w.completeTask(ctx, task.ID, false, fmt.Sprintf("exit code %d", result.ExitCode))
+		w.completeTask(ctx, task.ID, false, fmt.Sprintf("exit code %d", result.ExitCode), "", 0)
 	}
 }
 
@@ -257,10 +285,14 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, logs []string) err
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
+	}
+	if prURL != "" {
+		payload["pull_request_url"] = prURL
+		payload["pr_number"] = prNumber
 	}
 	body, _ := json.Marshal(payload)
 

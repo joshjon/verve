@@ -78,9 +78,32 @@ make list-tasks
 make get-task ID=tsk_xxxxxxxx
 ```
 
-When the task completes, a new branch `verve/task-{task_id}` will be pushed to your repository.
+When the task completes:
+- A new branch `verve/task-{task_id}` is pushed to your repository
+- A pull request is automatically created with an AI-generated description
+- Task status changes to `review` with the PR URL
+
+## Task Statuses
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Task created, waiting to be claimed |
+| `running` | Task claimed by worker, agent executing |
+| `review` | PR created, awaiting human review/merge |
+| `merged` | PR has been merged |
+| `completed` | Task completed without changes |
+| `failed` | Task failed with error |
 
 ## Configuration
+
+### Server Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GITHUB_TOKEN` | No | - | GitHub token for PR status sync |
+| `GITHUB_REPO` | No | - | Repository for PR status sync (format: `owner/repo`) |
+
+The server uses these credentials to check if PRs have been merged (background sync every 30 seconds).
 
 ### Worker Environment Variables
 
@@ -107,15 +130,18 @@ When the task completes, a new branch `verve/task-{task_id}` will be pushed to y
 
 ## How It Works
 
-1. **Create Task**: You submit a task description via the API
-2. **Worker Claims Task**: The worker polls for pending tasks and claims one
+1. **Create Task**: You submit a task description via the API (optionally with dependencies)
+2. **Worker Claims Task**: The worker polls for pending tasks with met dependencies and claims one
 3. **Agent Spawns**: Worker creates an isolated Docker container with:
    - Git (configured with your GitHub token)
    - Claude Code CLI (configured with your Anthropic API key)
+   - GitHub CLI for PR creation
 4. **Clone & Branch**: Agent clones your repo and creates a task branch
 5. **Claude Code Runs**: Claude Code implements the task, making code changes
 6. **Commit & Push**: Agent commits changes and pushes the branch
-7. **Task Completes**: Worker reports success and the branch is ready for review
+7. **Create PR**: Agent creates a pull request with AI-generated title and description
+8. **Await Review**: Task enters `review` status with PR URL, awaiting human merge
+9. **Merged**: Once PR is merged, background sync updates status to `merged`
 
 ## API Endpoints
 
@@ -127,6 +153,37 @@ When the task completes, a new branch `verve/task-{task_id}` will be pushed to y
 | GET | `/api/v1/tasks/poll` | Long-poll for pending tasks (worker) |
 | POST | `/api/v1/tasks/:id/logs` | Append logs (worker) |
 | POST | `/api/v1/tasks/:id/complete` | Mark task complete (worker) |
+| POST | `/api/v1/tasks/:id/sync` | Refresh PR merge status from GitHub |
+
+### Create Task with Dependencies
+
+```bash
+# Create a task that depends on another task
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Add unit tests for the hello world function",
+    "depends_on": ["tsk_abc123"]
+  }'
+```
+
+Dependent tasks remain in `pending` until all parent tasks reach `review`, `completed`, or `merged` status.
+
+### Task Response
+
+```json
+{
+  "id": "tsk_xyz789",
+  "description": "Add a hello world function",
+  "status": "review",
+  "pull_request_url": "https://github.com/owner/repo/pull/42",
+  "pr_number": 42,
+  "depends_on": ["tsk_abc123"],
+  "logs": ["[agent] Starting...", "..."],
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-15T11:45:00Z"
+}
+```
 
 ## Project Structure
 
