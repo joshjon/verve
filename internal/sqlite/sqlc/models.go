@@ -12,11 +12,17 @@ type Task struct {
 	ID             string
 	Description    string
 	Status         string
-	Logs           string
 	PullRequestUrl *string
 	PrNumber       *int64
 	DependsOn      string
 	CloseReason    *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type TaskLog struct {
+	ID        int64
+	TaskID    string
+	Lines     string
+	CreatedAt time.Time
 }

@@ -43,7 +43,6 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		ID:          t.ID.String(),
 		Description: t.Description,
 		Status:      string(t.Status),
-		Logs:        marshalJSONStrings(t.Logs),
 		DependsOn:   marshalJSONStrings(t.DependsOn),
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
@@ -76,17 +75,25 @@ func (r *TaskRepository) ListPendingTasks(ctx context.Context) ([]*task.Task, er
 }
 
 func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, logs []string) error {
-	// SQLite doesn't support array concatenation in SQL, so we read-modify-write.
-	current, err := r.db.ReadTaskLogs(ctx, id.String())
-	if err != nil {
-		return tagTaskErr(err)
-	}
-	existing := unmarshalJSONStrings(current)
-	merged := append(existing, logs...)
-	return tagTaskErr(r.db.SetTaskLogs(ctx, sqlc.SetTaskLogsParams{
-		ID:   id.String(),
-		Logs: marshalJSONStrings(merged),
+	return tagTaskErr(r.db.AppendTaskLogs(ctx, sqlc.AppendTaskLogsParams{
+		TaskID: id.String(),
+		Lines:  marshalJSONStrings(logs),
 	}))
+}
+
+func (r *TaskRepository) ReadTaskLogs(ctx context.Context, id task.TaskID) ([]string, error) {
+	batches, err := r.db.ReadTaskLogs(ctx, id.String())
+	if err != nil {
+		return nil, tagTaskErr(err)
+	}
+	var logs []string
+	for _, batch := range batches {
+		logs = append(logs, unmarshalJSONStrings(batch)...)
+	}
+	if logs == nil {
+		logs = []string{}
+	}
+	return logs, nil
 }
 
 func (r *TaskRepository) UpdateTaskStatus(ctx context.Context, id task.TaskID, status task.Status) error {

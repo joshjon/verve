@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, description, status, logs, depends_on, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO task (id, description, status, depends_on, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = ?;
@@ -11,12 +11,11 @@ SELECT * FROM task ORDER BY created_at DESC;
 -- name: ListPendingTasks :many
 SELECT * FROM task WHERE status = 'pending' ORDER BY created_at ASC;
 
--- name: ReadTaskLogs :one
-SELECT logs FROM task WHERE id = ?;
+-- name: AppendTaskLogs :exec
+INSERT INTO task_log (task_id, lines) VALUES (?, ?);
 
--- name: SetTaskLogs :exec
-UPDATE task SET logs = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ?;
+-- name: ReadTaskLogs :many
+SELECT lines FROM task_log WHERE task_id = ? ORDER BY id;
 
 -- name: UpdateTaskStatus :exec
 UPDATE task SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')

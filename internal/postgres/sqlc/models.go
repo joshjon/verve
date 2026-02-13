@@ -85,11 +85,17 @@ type Task struct {
 	ID             string             `json:"id"`
 	Description    string             `json:"description"`
 	Status         TaskStatus         `json:"status"`
-	Logs           []string           `json:"logs"`
 	PullRequestUrl *string            `json:"pull_request_url"`
 	PrNumber       *int32             `json:"pr_number"`
 	DependsOn      []string           `json:"depends_on"`
 	CloseReason    *string            `json:"close_reason"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TaskLog struct {
+	ID        int64              `json:"id"`
+	TaskID    string             `json:"task_id"`
+	Lines     []string           `json:"lines"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }

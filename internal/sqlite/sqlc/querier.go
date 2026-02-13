@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
 	ClaimTask(ctx context.Context, id string) (int64, error)
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
 	CreateTask(ctx context.Context, arg CreateTaskParams) error
@@ -16,9 +17,8 @@ type Querier interface {
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
 	ReadTask(ctx context.Context, id string) (*Task, error)
-	ReadTaskLogs(ctx context.Context, id string) (string, error)
+	ReadTaskLogs(ctx context.Context, taskID string) ([]string, error)
 	ReadTaskStatus(ctx context.Context, id string) (string, error)
-	SetTaskLogs(ctx context.Context, arg SetTaskLogsParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	TaskExists(ctx context.Context, id string) (int64, error)
 	UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error

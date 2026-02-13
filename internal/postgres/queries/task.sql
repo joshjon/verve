@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, description, status, logs, depends_on, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+INSERT INTO task (id, description, status, depends_on, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = $1;
@@ -12,8 +12,10 @@ SELECT * FROM task ORDER BY created_at DESC;
 SELECT * FROM task WHERE status = 'pending' ORDER BY created_at ASC;
 
 -- name: AppendTaskLogs :exec
-UPDATE task SET logs = logs || @logs::TEXT[], updated_at = NOW()
-WHERE id = @id;
+INSERT INTO task_log (task_id, lines) VALUES (@id, @lines);
+
+-- name: ReadTaskLogs :many
+SELECT lines FROM task_log WHERE task_id = @id ORDER BY id;
 
 -- name: UpdateTaskStatus :exec
 UPDATE task SET status = $2, updated_at = NOW()

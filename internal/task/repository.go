@@ -22,6 +22,7 @@ type TaskRepository interface {
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error
+	ReadTaskLogs(ctx context.Context, id TaskID) ([]string, error)
 	UpdateTaskStatus(ctx context.Context, id TaskID, status Status) error
 	SetTaskPullRequest(ctx context.Context, id TaskID, prURL string, prNumber int) error
 	ListTasksInReview(ctx context.Context) ([]*Task, error)

@@ -44,7 +44,6 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		ID:          t.ID.String(),
 		Description: t.Description,
 		Status:      sqlc.TaskStatus(t.Status),
-		Logs:        t.Logs,
 		DependsOn:   t.DependsOn,
 		CreatedAt:   pgTimestamptz(t.CreatedAt),
 		UpdatedAt:   pgTimestamptz(t.UpdatedAt),
@@ -78,9 +77,24 @@ func (r *TaskRepository) ListPendingTasks(ctx context.Context) ([]*task.Task, er
 
 func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, logs []string) error {
 	return tagTaskErr(r.db.AppendTaskLogs(ctx, sqlc.AppendTaskLogsParams{
-		ID:   id.String(),
-		Logs: logs,
+		ID:    id.String(),
+		Lines: logs,
 	}))
+}
+
+func (r *TaskRepository) ReadTaskLogs(ctx context.Context, id task.TaskID) ([]string, error) {
+	batches, err := r.db.ReadTaskLogs(ctx, id.String())
+	if err != nil {
+		return nil, tagTaskErr(err)
+	}
+	var logs []string
+	for _, batch := range batches {
+		logs = append(logs, batch...)
+	}
+	if logs == nil {
+		logs = []string{}
+	}
+	return logs, nil
 }
 
 func (r *TaskRepository) UpdateTaskStatus(ctx context.Context, id task.TaskID, status task.Status) error {

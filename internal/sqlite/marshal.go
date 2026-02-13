@@ -12,7 +12,6 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 		ID:          task.MustParseTaskID(in.ID),
 		Description: in.Description,
 		Status:      task.Status(in.Status),
-		Logs:        unmarshalJSONStrings(in.Logs),
 		DependsOn:   unmarshalJSONStrings(in.DependsOn),
 		CreatedAt:   in.CreatedAt,
 		UpdatedAt:   in.UpdatedAt,

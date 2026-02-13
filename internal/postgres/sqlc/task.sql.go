@@ -12,17 +12,16 @@ import (
 )
 
 const appendTaskLogs = `-- name: AppendTaskLogs :exec
-UPDATE task SET logs = logs || $1::TEXT[], updated_at = NOW()
-WHERE id = $2
+INSERT INTO task_log (task_id, lines) VALUES ($1, $2)
 `
 
 type AppendTaskLogsParams struct {
-	Logs []string `json:"logs"`
-	ID   string   `json:"id"`
+	ID    string   `json:"id"`
+	Lines []string `json:"lines"`
 }
 
 func (q *Queries) AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error {
-	_, err := q.db.Exec(ctx, appendTaskLogs, arg.Logs, arg.ID)
+	_, err := q.db.Exec(ctx, appendTaskLogs, arg.ID, arg.Lines)
 	return err
 }
 
@@ -55,15 +54,14 @@ func (q *Queries) CloseTask(ctx context.Context, arg CloseTaskParams) error {
 }
 
 const createTask = `-- name: CreateTask :exec
-INSERT INTO task (id, description, status, logs, depends_on, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO task (id, description, status, depends_on, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateTaskParams struct {
 	ID          string             `json:"id"`
 	Description string             `json:"description"`
 	Status      TaskStatus         `json:"status"`
-	Logs        []string           `json:"logs"`
 	DependsOn   []string           `json:"depends_on"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -74,7 +72,6 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 		arg.ID,
 		arg.Description,
 		arg.Status,
-		arg.Logs,
 		arg.DependsOn,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -83,7 +80,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 }
 
 const listPendingTasks = `-- name: ListPendingTasks :many
-SELECT id, description, status, logs, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE status = 'pending' ORDER BY created_at ASC
+SELECT id, description, status, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE status = 'pending' ORDER BY created_at ASC
 `
 
 func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
@@ -99,7 +96,6 @@ func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
 			&i.ID,
 			&i.Description,
 			&i.Status,
-			&i.Logs,
 			&i.PullRequestUrl,
 			&i.PrNumber,
 			&i.DependsOn,
@@ -118,7 +114,7 @@ func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, description, status, logs, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task ORDER BY created_at DESC
+SELECT id, description, status, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task ORDER BY created_at DESC
 `
 
 func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
@@ -134,7 +130,6 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 			&i.ID,
 			&i.Description,
 			&i.Status,
-			&i.Logs,
 			&i.PullRequestUrl,
 			&i.PrNumber,
 			&i.DependsOn,
@@ -153,7 +148,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 }
 
 const listTasksInReview = `-- name: ListTasksInReview :many
-SELECT id, description, status, logs, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE status = 'review'
+SELECT id, description, status, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE status = 'review'
 `
 
 func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
@@ -169,7 +164,6 @@ func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 			&i.ID,
 			&i.Description,
 			&i.Status,
-			&i.Logs,
 			&i.PullRequestUrl,
 			&i.PrNumber,
 			&i.DependsOn,
@@ -188,7 +182,7 @@ func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 }
 
 const readTask = `-- name: ReadTask :one
-SELECT id, description, status, logs, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE id = $1
+SELECT id, description, status, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE id = $1
 `
 
 func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
@@ -198,7 +192,6 @@ func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
 		&i.ID,
 		&i.Description,
 		&i.Status,
-		&i.Logs,
 		&i.PullRequestUrl,
 		&i.PrNumber,
 		&i.DependsOn,
@@ -207,6 +200,30 @@ func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
 		&i.UpdatedAt,
 	)
 	return &i, err
+}
+
+const readTaskLogs = `-- name: ReadTaskLogs :many
+SELECT lines FROM task_log WHERE task_id = $1 ORDER BY id
+`
+
+func (q *Queries) ReadTaskLogs(ctx context.Context, id string) ([][]string, error) {
+	rows, err := q.db.Query(ctx, readTaskLogs, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]string
+	for rows.Next() {
+		var lines []string
+		if err := rows.Scan(&lines); err != nil {
+			return nil, err
+		}
+		items = append(items, lines)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const readTaskStatus = `-- name: ReadTaskStatus :one

@@ -38,7 +38,6 @@ func NewTask(description string, dependsOn []string) *Task {
 		ID:          NewTaskID(),
 		Description: description,
 		Status:      StatusPending,
-		Logs:        []string{},
 		DependsOn:   dependsOn,
 		CreatedAt:   now,
 		UpdatedAt:   now,

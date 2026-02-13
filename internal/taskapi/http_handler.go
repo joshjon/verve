@@ -72,10 +72,19 @@ func (h *HTTPHandler) GetTask(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
 	}
 
-	t, err := h.store.ReadTask(c.Request().Context(), id)
+	ctx := c.Request().Context()
+
+	t, err := h.store.ReadTask(ctx, id)
 	if err != nil {
 		return jsonError(c, err)
 	}
+
+	logs, err := h.store.ReadTaskLogs(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	t.Logs = logs
+
 	return c.JSON(http.StatusOK, t)
 }
 

@@ -128,6 +128,11 @@ func dependenciesMet(ctx context.Context, repo Repository, dependsOn []string) b
 	return true
 }
 
+// ReadTaskLogs reads all logs for a task.
+func (s *Store) ReadTaskLogs(ctx context.Context, id TaskID) ([]string, error) {
+	return s.repo.ReadTaskLogs(ctx, id)
+}
+
 // AppendTaskLogs appends log lines to a task.
 func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error {
 	if err := s.repo.AppendTaskLogs(ctx, id, logs); err != nil {

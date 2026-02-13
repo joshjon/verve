@@ -17,6 +17,7 @@ type Querier interface {
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
 	ReadTask(ctx context.Context, id string) (*Task, error)
+	ReadTaskLogs(ctx context.Context, id string) ([][]string, error)
 	ReadTaskStatus(ctx context.Context, id string) (TaskStatus, error)
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	TaskExists(ctx context.Context, id string) (bool, error)

@@ -14,7 +14,6 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 		ID:          task.MustParseTaskID(in.ID),
 		Description: in.Description,
 		Status:      task.Status(in.Status),
-		Logs:        in.Logs,
 		DependsOn:   in.DependsOn,
 	}
 	if in.PullRequestUrl != nil {
@@ -31,10 +30,6 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	}
 	if in.UpdatedAt.Valid {
 		t.UpdatedAt = in.UpdatedAt.Time
-	}
-	// Ensure slices are never nil for proper JSON serialization.
-	if t.Logs == nil {
-		t.Logs = []string{}
 	}
 	if t.DependsOn == nil {
 		t.DependsOn = []string{}
