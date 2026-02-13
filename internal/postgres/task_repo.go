@@ -45,6 +45,7 @@ func NewTaskRepository(pool *pgxpool.Pool) *TaskRepository {
 func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
 		ID:          t.ID.String(),
+		RepoID:      t.RepoID,
 		Description: t.Description,
 		Status:      sqlc.TaskStatus(t.Status),
 		DependsOn:   t.DependsOn,
@@ -70,8 +71,24 @@ func (r *TaskRepository) ListTasks(ctx context.Context) ([]*task.Task, error) {
 	return unmarshalTaskList(rows), nil
 }
 
+func (r *TaskRepository) ListTasksByRepo(ctx context.Context, repoID string) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksByRepo(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
 func (r *TaskRepository) ListPendingTasks(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListPendingTasks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []string) ([]*task.Task, error) {
+	rows, err := r.db.ListPendingTasksByRepos(ctx, repoIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +156,18 @@ func (r *TaskRepository) ListTasksInReview(ctx context.Context) ([]*task.Task, e
 		return nil, err
 	}
 	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksInReviewByRepo(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) HasTasksForRepo(ctx context.Context, repoID string) (bool, error) {
+	return r.db.HasTasksForRepo(ctx, repoID)
 }
 
 func (r *TaskRepository) CloseTask(ctx context.Context, id task.TaskID, reason string) error {

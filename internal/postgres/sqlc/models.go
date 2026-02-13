@@ -81,8 +81,17 @@ func AllTaskStatusValues() []TaskStatus {
 	}
 }
 
+type Repo struct {
+	ID        string             `json:"id"`
+	Owner     string             `json:"owner"`
+	Name      string             `json:"name"`
+	FullName  string             `json:"full_name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Task struct {
 	ID             string             `json:"id"`
+	RepoID         string             `json:"repo_id"`
 	Description    string             `json:"description"`
 	Status         TaskStatus         `json:"status"`
 	PullRequestUrl *string            `json:"pull_request_url"`

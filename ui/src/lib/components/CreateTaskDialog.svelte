@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { client } from '$lib/api-client';
 	import { taskStore } from '$lib/stores/tasks.svelte';
+	import { repoStore } from '$lib/stores/repos.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
@@ -37,7 +38,9 @@
 		error = null;
 
 		try {
-			await client.createTask(description, selectedDeps.length > 0 ? selectedDeps : undefined);
+			const repoId = repoStore.selectedRepoId;
+			if (!repoId) throw new Error('No repository selected');
+			await client.createTaskInRepo(repoId, description, selectedDeps.length > 0 ? selectedDeps : undefined);
 			description = '';
 			selectedDeps = [];
 			open = false;

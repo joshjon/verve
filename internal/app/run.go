@@ -13,27 +13,33 @@ import (
 	"verve/internal/github"
 	"verve/internal/postgres"
 	pgmigrations "verve/internal/postgres/migrations"
+	"verve/internal/repo"
 	"verve/internal/sqlite"
 	litemigrations "verve/internal/sqlite/migrations"
 	"verve/internal/task"
 	"verve/internal/taskapi"
 )
 
+type stores struct {
+	task *task.Store
+	repo *repo.Store
+}
+
 // Run starts the API server. If cfg.DatabaseURL is empty, it falls back to
 // an in-memory SQLite database with a warning.
 func Run(ctx context.Context, logger log.Logger, cfg Config) error {
-	store, cleanup, err := initStore(ctx, logger, cfg)
+	s, cleanup, err := initStores(ctx, logger, cfg)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	gh := github.NewClient(cfg.GitHub.Token, cfg.GitHub.Repo)
+	gh := github.NewClient(cfg.GitHub.Token)
 
-	return serve(ctx, logger, cfg, store, gh)
+	return serve(ctx, logger, cfg, s, gh)
 }
 
-func initStore(ctx context.Context, logger log.Logger, cfg Config) (*task.Store, func(), error) {
+func initStores(ctx context.Context, logger log.Logger, cfg Config) (stores, func(), error) {
 	if cfg.DatabaseURL == "" {
 		logger.Warn("DATABASE_URL not set, using in-memory SQLite (data will not persist)")
 		return initSQLite(ctx)
@@ -41,44 +47,52 @@ func initStore(ctx context.Context, logger log.Logger, cfg Config) (*task.Store,
 	return initPostgres(ctx, logger, cfg.Postgres)
 }
 
-func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig) (*task.Store, func(), error) {
+func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig) (stores, func(), error) {
 	pool, err := pgdb.Dial(ctx, cfg.User, cfg.Password, cfg.HostPort, cfg.Database)
 	if err != nil {
-		return nil, nil, fmt.Errorf("dial postgres: %w", err)
+		return stores{}, nil, fmt.Errorf("dial postgres: %w", err)
 	}
 
 	if err := pgdb.Migrate(pool, pgmigrations.FS); err != nil {
 		pool.Close()
-		return nil, nil, fmt.Errorf("migrate postgres: %w", err)
+		return stores{}, nil, fmt.Errorf("migrate postgres: %w", err)
 	}
 
 	notifier := postgres.NewEventNotifier(pool, logger)
 	broker := task.NewBroker(notifier)
 	go notifier.Listen(ctx, broker)
 
-	repo := postgres.NewTaskRepository(pool)
-	store := task.NewStore(repo, broker)
-	return store, func() { pool.Close() }, nil
+	taskRepo := postgres.NewTaskRepository(pool)
+	taskStore := task.NewStore(taskRepo, broker)
+
+	repoRepo := postgres.NewRepoRepository(pool)
+	repoStore := repo.NewStore(repoRepo, taskStore)
+
+	return stores{task: taskStore, repo: repoStore}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context) (*task.Store, func(), error) {
+func initSQLite(ctx context.Context) (stores, func(), error) {
 	db, err := sqlitedb.Open(ctx, sqlitedb.WithInMemory())
 	if err != nil {
-		return nil, nil, fmt.Errorf("open sqlite: %w", err)
+		return stores{}, nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
 	if err := sqlitedb.Migrate(db, litemigrations.FS); err != nil {
 		db.Close()
-		return nil, nil, fmt.Errorf("migrate sqlite: %w", err)
+		return stores{}, nil, fmt.Errorf("migrate sqlite: %w", err)
 	}
 
 	broker := task.NewBroker(nil)
-	repo := sqlite.NewTaskRepository(db)
-	store := task.NewStore(repo, broker)
-	return store, func() { db.Close() }, nil
+	taskRepo := sqlite.NewTaskRepository(db)
+	taskStore := task.NewStore(taskRepo, broker)
+
+	repoRepo := sqlite.NewRepoRepository(db)
+	repoStore := repo.NewStore(repoRepo, taskStore)
+
+	return stores{task: taskStore, repo: repoStore}, func() { db.Close() }, nil
 }
 
-func serve(ctx context.Context, logger log.Logger, cfg Config, store *task.Store, gh *github.Client) error {
+func serve(ctx context.Context, logger log.Logger, cfg Config, s stores, gh *github.Client) error {
 	opts := []server.Option{
 		server.WithLogger(logger),
 		server.WithRequestTimeout(server.DefaultRequestTimeout, "/api/v1/events", "/api/v1/tasks/:id/logs"),
@@ -92,11 +106,11 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, store *task.Store
 		return fmt.Errorf("create server: %w", err)
 	}
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(store, gh))
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, gh))
 
 	// Background PR sync.
 	if gh != nil {
-		go backgroundSync(ctx, logger, store, gh, 30*time.Second)
+		go backgroundSync(ctx, logger, s, gh, 30*time.Second)
 		logger.Info("background PR sync started", "interval", "30s")
 	}
 
@@ -130,7 +144,7 @@ func Serve(ctx context.Context, logger log.Logger, srv *server.Server) error {
 	}
 }
 
-func backgroundSync(ctx context.Context, logger log.Logger, store *task.Store, gh *github.Client, interval time.Duration) {
+func backgroundSync(ctx context.Context, logger log.Logger, s stores, gh *github.Client, interval time.Duration) {
 	logger = logger.With("component", "pr_sync")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -140,23 +154,30 @@ func backgroundSync(ctx context.Context, logger log.Logger, store *task.Store, g
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			tasks, err := store.ListTasksInReview(ctx)
+			repos, err := s.repo.ListRepos(ctx)
 			if err != nil {
-				logger.Error("failed to list review tasks", "error", err)
+				logger.Error("failed to list repos", "error", err)
 				continue
 			}
-			for _, t := range tasks {
-				if t.PRNumber > 0 {
-					merged, err := gh.IsPRMerged(ctx, t.PRNumber)
-					if err != nil {
-						logger.Error("failed to check PR status", "task_id", t.ID, "error", err)
-						continue
-					}
-					if merged {
-						if err := store.UpdateTaskStatus(ctx, t.ID, task.StatusMerged); err != nil {
-							logger.Error("failed to update task status", "task_id", t.ID, "error", err)
-						} else {
-							logger.Info("task PR merged", "task_id", t.ID)
+			for _, r := range repos {
+				tasks, err := s.task.ListTasksInReviewByRepo(ctx, r.ID.String())
+				if err != nil {
+					logger.Error("failed to list review tasks", "repo", r.FullName, "error", err)
+					continue
+				}
+				for _, t := range tasks {
+					if t.PRNumber > 0 {
+						merged, err := gh.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
+						if err != nil {
+							logger.Error("failed to check PR status", "task_id", t.ID, "error", err)
+							continue
+						}
+						if merged {
+							if err := s.task.UpdateTaskStatus(ctx, t.ID, task.StatusMerged); err != nil {
+								logger.Error("failed to update task status", "task_id", t.ID, "error", err)
+							} else {
+								logger.Info("task PR merged", "task_id", t.ID)
+							}
 						}
 					}
 				}

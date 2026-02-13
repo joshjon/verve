@@ -5,43 +5,137 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/joshjon/kit/errtag"
 	"github.com/labstack/echo/v4"
 
 	"verve/internal/github"
+	"verve/internal/repo"
 	"verve/internal/task"
 )
 
-// HTTPHandler handles task-related HTTP requests.
+// HTTPHandler handles task and repo HTTP requests.
 type HTTPHandler struct {
-	store  *task.Store
-	github *github.Client
+	store     *task.Store
+	repoStore *repo.Store
+	github    *github.Client
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, githubClient *github.Client) *HTTPHandler {
-	return &HTTPHandler{store: store, github: githubClient}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubClient *github.Client) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, github: githubClient}
 }
 
-// Register adds the task endpoints to the provided Echo router group.
+// Register adds the endpoints to the provided Echo router group.
 func (h *HTTPHandler) Register(g *echo.Group) {
 	g.GET("/events", h.Events)
-	g.POST("/tasks", h.CreateTask)
-	g.GET("/tasks", h.ListTasks)
-	g.POST("/tasks/sync", h.SyncAllTasks)
-	g.GET("/tasks/poll", h.PollTask)
+
+	// Repo management
+	g.GET("/repos", h.ListRepos)
+	g.POST("/repos", h.AddRepo)
+	g.DELETE("/repos/:repo_id", h.RemoveRepo)
+	g.GET("/repos/available", h.ListAvailableRepos)
+
+	// Repo-scoped task operations
+	g.GET("/repos/:repo_id/tasks", h.ListTasksByRepo)
+	g.POST("/repos/:repo_id/tasks", h.CreateTask)
+	g.POST("/repos/:repo_id/tasks/sync", h.SyncRepoTasks)
+
+	// Task operations (globally unique IDs)
 	g.GET("/tasks/:id", h.GetTask)
 	g.GET("/tasks/:id/logs", h.StreamLogs)
 	g.POST("/tasks/:id/logs", h.AppendLogs)
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
 	g.POST("/tasks/:id/sync", h.SyncTaskStatus)
+
+	// Worker polling
+	g.GET("/tasks/poll", h.PollTask)
 }
 
-// CreateTask handles POST /tasks
+// --- Repo Handlers ---
+
+// ListRepos handles GET /repos
+func (h *HTTPHandler) ListRepos(c echo.Context) error {
+	repos, err := h.repoStore.ListRepos(c.Request().Context())
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, repos)
+}
+
+// AddRepo handles POST /repos
+func (h *HTTPHandler) AddRepo(c echo.Context) error {
+	var req AddRepoRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.FullName == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("full_name required"))
+	}
+
+	r, err := repo.NewRepo(req.FullName)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse(err.Error()))
+	}
+
+	if err := h.repoStore.CreateRepo(c.Request().Context(), r); err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusCreated, r)
+}
+
+// RemoveRepo handles DELETE /repos/:repo_id
+func (h *HTTPHandler) RemoveRepo(c echo.Context) error {
+	id, err := repo.ParseRepoID(c.Param("repo_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
+	}
+
+	if err := h.repoStore.DeleteRepo(c.Request().Context(), id); err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, statusOK())
+}
+
+// ListAvailableRepos handles GET /repos/available
+func (h *HTTPHandler) ListAvailableRepos(c echo.Context) error {
+	if h.github == nil {
+		return c.JSON(http.StatusServiceUnavailable, errorResponse("GitHub token not configured"))
+	}
+
+	repos, err := h.github.ListAccessibleRepos(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("failed to list GitHub repos: "+err.Error()))
+	}
+	return c.JSON(http.StatusOK, repos)
+}
+
+// --- Task Handlers ---
+
+// ListTasksByRepo handles GET /repos/:repo_id/tasks
+func (h *HTTPHandler) ListTasksByRepo(c echo.Context) error {
+	id, err := repo.ParseRepoID(c.Param("repo_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
+	}
+
+	tasks, err := h.store.ListTasksByRepo(c.Request().Context(), id.String())
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, tasks)
+}
+
+// CreateTask handles POST /repos/:repo_id/tasks
 func (h *HTTPHandler) CreateTask(c echo.Context) error {
+	repoID, err := repo.ParseRepoID(c.Param("repo_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
+	}
+
 	var req CreateTaskRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
@@ -50,20 +144,11 @@ func (h *HTTPHandler) CreateTask(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse("description required"))
 	}
 
-	t := task.NewTask(req.Description, req.DependsOn)
+	t := task.NewTask(repoID.String(), req.Description, req.DependsOn)
 	if err := h.store.CreateTask(c.Request().Context(), t); err != nil {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusCreated, t)
-}
-
-// ListTasks handles GET /tasks
-func (h *HTTPHandler) ListTasks(c echo.Context) error {
-	tasks, err := h.store.ListTasks(c.Request().Context())
-	if err != nil {
-		return jsonError(c, err)
-	}
-	return c.JSON(http.StatusOK, tasks)
 }
 
 // GetTask handles GET /tasks/:id
@@ -82,12 +167,18 @@ func (h *HTTPHandler) GetTask(c echo.Context) error {
 
 // PollTask handles GET /tasks/poll
 // Long-polls for a pending task, claiming it atomically.
+// Accepts ?repos=id1,id2 to filter by repo IDs.
 func (h *HTTPHandler) PollTask(c echo.Context) error {
 	timeout := 30 * time.Second
 	deadline := time.Now().Add(timeout)
 
+	var repoIDs []string
+	if reposParam := c.QueryParam("repos"); reposParam != "" {
+		repoIDs = strings.Split(reposParam, ",")
+	}
+
 	for {
-		t, err := h.store.ClaimPendingTask(c.Request().Context())
+		t, err := h.store.ClaimPendingTask(c.Request().Context(), repoIDs)
 		if err != nil {
 			return jsonError(c, err)
 		}
@@ -174,9 +265,19 @@ func (h *HTTPHandler) SyncTaskStatus(c echo.Context) error {
 	}
 
 	if t.Status == task.StatusReview && h.github != nil && t.PRNumber > 0 {
-		merged, err := h.github.IsPRMerged(ctx, t.PRNumber)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, errorResponse("failed to check PR status: "+err.Error()))
+		// Look up repo to get owner/name for the GitHub API call.
+		repoID, parseErr := repo.ParseRepoID(t.RepoID)
+		if parseErr != nil {
+			return c.JSON(http.StatusInternalServerError, errorResponse("invalid repo ID on task"))
+		}
+		r, readErr := h.repoStore.ReadRepo(ctx, repoID)
+		if readErr != nil {
+			return jsonError(c, readErr)
+		}
+
+		merged, ghErr := h.github.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
+		if ghErr != nil {
+			return c.JSON(http.StatusInternalServerError, errorResponse("failed to check PR status: "+ghErr.Error()))
 		}
 		if merged {
 			if err := h.store.UpdateTaskStatus(ctx, id, task.StatusMerged); err != nil {
@@ -192,15 +293,25 @@ func (h *HTTPHandler) SyncTaskStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, t)
 }
 
-// SyncAllTasks handles POST /tasks/sync
-func (h *HTTPHandler) SyncAllTasks(c echo.Context) error {
+// SyncRepoTasks handles POST /repos/:repo_id/tasks/sync
+func (h *HTTPHandler) SyncRepoTasks(c echo.Context) error {
+	repoID, err := repo.ParseRepoID(c.Param("repo_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
+	}
+
 	if h.github == nil {
 		return c.JSON(http.StatusOK, map[string]int{"synced": 0, "merged": 0})
 	}
 
 	ctx := c.Request().Context()
 
-	tasks, err := h.store.ListTasksInReview(ctx)
+	r, err := h.repoStore.ReadRepo(ctx, repoID)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
+	tasks, err := h.store.ListTasksInReviewByRepo(ctx, repoID.String())
 	if err != nil {
 		return jsonError(c, err)
 	}
@@ -210,7 +321,7 @@ func (h *HTTPHandler) SyncAllTasks(c echo.Context) error {
 	for _, t := range tasks {
 		if t.PRNumber > 0 {
 			synced++
-			isMerged, err := h.github.IsPRMerged(ctx, t.PRNumber)
+			isMerged, err := h.github.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
 			if err != nil {
 				continue
 			}
@@ -303,15 +414,26 @@ func (h *HTTPHandler) StreamLogs(c echo.Context) error {
 }
 
 // Events handles GET /events as a Server-Sent Events stream.
+// Optionally filtered by ?repo_id=xxx.
 func (h *HTTPHandler) Events(c echo.Context) error {
+	repoIDFilter := c.QueryParam("repo_id")
+
 	w := c.Response()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 
-	// Send init event with full task list (logs nil'd).
-	tasks, err := h.store.ListTasks(c.Request().Context())
+	ctx := c.Request().Context()
+
+	// Send init event with task list (logs nil'd), filtered by repo if specified.
+	var tasks []*task.Task
+	var err error
+	if repoIDFilter != "" {
+		tasks, err = h.store.ListTasksByRepo(ctx, repoIDFilter)
+	} else {
+		tasks, err = h.store.ListTasks(ctx)
+	}
 	if err != nil {
 		return err
 	}
@@ -329,10 +451,14 @@ func (h *HTTPHandler) Events(c echo.Context) error {
 	for {
 		select {
 		case event := <-ch:
+			// Filter by repo if specified.
+			if repoIDFilter != "" && event.RepoID != repoIDFilter {
+				continue
+			}
 			if err := writeSSE(w, event.Type, event); err != nil {
 				return nil
 			}
-		case <-c.Request().Context().Done():
+		case <-ctx.Done():
 			return nil
 		}
 	}

@@ -28,16 +28,12 @@ func main() {
 		},
 		GitHub: app.GitHubConfig{
 			Token: os.Getenv("GITHUB_TOKEN"),
-			Repo:  os.Getenv("GITHUB_REPO"),
 		},
 		CorsOrigins: []string{"http://localhost:5173", "http://localhost:8080"},
 	}
 
 	if cfg.GitHub.Token == "" {
-		logger.Warn("GITHUB_TOKEN not set, PR status sync disabled")
-	}
-	if cfg.GitHub.Repo == "" {
-		logger.Warn("GITHUB_REPO not set, PR status sync disabled")
+		logger.Warn("GITHUB_TOKEN not set, PR status sync and repo listing disabled")
 	}
 
 	if err := app.Run(ctx, logger, cfg); err != nil {

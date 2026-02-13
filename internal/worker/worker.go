@@ -18,7 +18,7 @@ import (
 type Config struct {
 	APIURL             string
 	GitHubToken        string
-	GitHubRepo         string
+	GitHubRepos        []string // "owner/repo" format, comma-separated from env
 	AnthropicAPIKey    string
 	ClaudeModel        string // Model to use (haiku, sonnet, opus) - defaults to haiku
 	AgentImage         string // Docker image for agent - defaults to verve-agent:latest
@@ -28,8 +28,14 @@ type Config struct {
 
 type Task struct {
 	ID          string `json:"id"`
+	RepoID      string `json:"repo_id"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
+}
+
+type apiRepo struct {
+	ID       string `json:"id"`
+	FullName string `json:"full_name"`
 }
 
 type Worker struct {
@@ -38,6 +44,10 @@ type Worker struct {
 	client       *http.Client
 	logger       log.Logger
 	pollInterval time.Duration
+
+	// Repo mapping: repo ID -> full name (e.g. "owner/repo")
+	repoIDs   []string            // repo IDs to poll for
+	repoNames map[string]string   // repo ID -> full name
 
 	// Concurrency control
 	maxConcurrent int
@@ -75,13 +85,19 @@ func (w *Worker) Close() error {
 }
 
 func (w *Worker) Run(ctx context.Context) error {
-	w.logger.Info("worker starting", "max_concurrent", w.maxConcurrent)
+	w.logger.Info("worker starting", "max_concurrent", w.maxConcurrent, "repos", w.config.GitHubRepos)
 
 	// Ensure agent image exists
 	if err := w.docker.EnsureImage(ctx); err != nil {
 		return err
 	}
 	w.logger.Info("agent image verified", "image", w.docker.AgentImage())
+
+	// Fetch repos from API and build ID mapping
+	if err := w.initRepoMapping(ctx); err != nil {
+		return fmt.Errorf("init repo mapping: %w", err)
+	}
+	w.logger.Info("repo mapping initialized", "repo_ids", w.repoIDs)
 
 	for {
 		select {
@@ -155,8 +171,58 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
+func (w *Worker) initRepoMapping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", w.config.APIURL+"/api/v1/repos", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to list repos: status %d: %s", resp.StatusCode, body)
+	}
+
+	var repos []apiRepo
+	if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
+		return err
+	}
+
+	// Build full name -> ID lookup
+	nameToID := make(map[string]string, len(repos))
+	idToName := make(map[string]string, len(repos))
+	for _, r := range repos {
+		nameToID[r.FullName] = r.ID
+		idToName[r.ID] = r.FullName
+	}
+
+	// Map configured repo full names to their IDs
+	var repoIDs []string
+	for _, fullName := range w.config.GitHubRepos {
+		id, ok := nameToID[fullName]
+		if !ok {
+			return fmt.Errorf("configured repo %q not found on server — add it via the API first", fullName)
+		}
+		repoIDs = append(repoIDs, id)
+	}
+
+	w.repoIDs = repoIDs
+	w.repoNames = idToName
+	return nil
+}
+
 func (w *Worker) pollForTask(ctx context.Context) (*Task, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", w.config.APIURL+"/api/v1/tasks/poll", nil)
+	pollURL := w.config.APIURL + "/api/v1/tasks/poll"
+	if len(w.repoIDs) > 0 {
+		pollURL += "?repos=" + strings.Join(w.repoIDs, ",")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", pollURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -299,12 +365,20 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 		}
 	}
 
+	// Look up repo full name from task's RepoID
+	repoFullName := w.repoNames[task.RepoID]
+	if repoFullName == "" {
+		taskLogger.Error("unknown repo ID for task", "repo_id", task.RepoID)
+		w.completeTask(ctx, task.ID, false, fmt.Sprintf("unknown repo ID: %s", task.RepoID), "", 0)
+		return
+	}
+
 	// Create agent config from worker config
 	agentCfg := AgentConfig{
 		TaskID:          task.ID,
 		TaskDescription: task.Description,
 		GitHubToken:     w.config.GitHubToken,
-		GitHubRepo:      w.config.GitHubRepo,
+		GitHubRepo:      repoFullName,
 		AnthropicAPIKey: w.config.AnthropicAPIKey,
 		ClaudeModel:     w.config.ClaudeModel,
 		DryRun:          w.config.DryRun,

@@ -2,6 +2,7 @@ export type TaskStatus = 'pending' | 'running' | 'review' | 'merged' | 'closed' 
 
 export interface Task {
 	id: string;
+	repo_id: string;
 	description: string;
 	status: TaskStatus;
 	logs: string[];

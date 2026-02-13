@@ -10,6 +10,7 @@ import (
 func unmarshalTask(in *sqlc.Task) *task.Task {
 	t := &task.Task{
 		ID:          task.MustParseTaskID(in.ID),
+		RepoID:      in.RepoID,
 		Description: in.Description,
 		Status:      task.Status(in.Status),
 		DependsOn:   unmarshalJSONStrings(in.DependsOn),

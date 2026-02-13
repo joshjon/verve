@@ -1,5 +1,10 @@
 package taskapi
 
+// AddRepoRequest is the request body for adding a repo.
+type AddRepoRequest struct {
+	FullName string `json:"full_name"`
+}
+
 // CreateTaskRequest is the request body for creating a task.
 type CreateTaskRequest struct {
 	Description string   `json:"description"`

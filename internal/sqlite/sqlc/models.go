@@ -8,8 +8,17 @@ import (
 	"time"
 )
 
+type Repo struct {
+	ID        string
+	Owner     string
+	Name      string
+	FullName  string
+	CreatedAt time.Time
+}
+
 type Task struct {
 	ID             string
+	RepoID         string
 	Description    string
 	Status         string
 	PullRequestUrl *string

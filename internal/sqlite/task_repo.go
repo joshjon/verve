@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"github.com/joshjon/kit/errtag"
 	"github.com/joshjon/kit/tx"
@@ -44,6 +45,7 @@ func NewTaskRepository(db DB) *TaskRepository {
 func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
 		ID:          t.ID.String(),
+		RepoID:      t.RepoID,
 		Description: t.Description,
 		Status:      string(t.Status),
 		DependsOn:   marshalJSONStrings(t.DependsOn),
@@ -69,12 +71,47 @@ func (r *TaskRepository) ListTasks(ctx context.Context) ([]*task.Task, error) {
 	return unmarshalTaskList(rows), nil
 }
 
+func (r *TaskRepository) ListTasksByRepo(ctx context.Context, repoID string) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksByRepo(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
 func (r *TaskRepository) ListPendingTasks(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListPendingTasks(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return unmarshalTaskList(rows), nil
+}
+
+// ListPendingTasksByRepos returns pending tasks filtered by repo IDs.
+// SQLite doesn't support ANY($1::text[]), so we build the query dynamically.
+func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []string) ([]*task.Task, error) {
+	if len(repoIDs) == 0 {
+		return nil, nil
+	}
+	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
+	args := make([]any, len(repoIDs))
+	for i, id := range repoIDs {
+		args[i] = id
+	}
+	rows, err := r.dbtx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tasks []*task.Task
+	for rows.Next() {
+		var t sqlc.Task
+		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, unmarshalTask(&t))
+	}
+	return tasks, rows.Err()
 }
 
 func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, logs []string) error {
@@ -138,6 +175,22 @@ func (r *TaskRepository) ListTasksInReview(ctx context.Context) ([]*task.Task, e
 		return nil, err
 	}
 	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksInReviewByRepo(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) HasTasksForRepo(ctx context.Context, repoID string) (bool, error) {
+	result, err := r.db.HasTasksForRepo(ctx, repoID)
+	if err != nil {
+		return false, err
+	}
+	return result != 0, nil
 }
 
 func (r *TaskRepository) CloseTask(ctx context.Context, id task.TaskID, reason string) error {

@@ -38,7 +38,6 @@ services:
       POSTGRES_HOST_PORT: postgres:5432
       POSTGRES_DATABASE: verve
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      GITHUB_REPO: ${GITHUB_REPO:-}
 
   ui:
     build: ./ui
@@ -58,7 +57,7 @@ services:
     environment:
       API_URL: http://server:7400
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_REPOS: ${GITHUB_REPOS:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-haiku}
       AGENT_IMAGE: ${AGENT_IMAGE:-verve-agent:latest}

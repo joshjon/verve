@@ -1,3 +1,11 @@
+CREATE TABLE repo (
+    id         TEXT PRIMARY KEY,
+    owner      TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    full_name  TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TYPE task_status AS ENUM (
     'pending',
     'running',
@@ -9,6 +17,7 @@ CREATE TYPE task_status AS ENUM (
 
 CREATE TABLE task (
     id               TEXT        PRIMARY KEY,
+    repo_id          TEXT        NOT NULL REFERENCES repo(id),
     description      TEXT        NOT NULL,
     status           task_status NOT NULL DEFAULT 'pending',
     pull_request_url TEXT,
@@ -19,6 +28,7 @@ CREATE TABLE task (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_task_repo_id ON task(repo_id);
 CREATE INDEX idx_task_status ON task(status);
 CREATE INDEX idx_task_status_pr ON task(status, pr_number) WHERE pr_number IS NOT NULL;
 

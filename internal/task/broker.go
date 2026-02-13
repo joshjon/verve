@@ -16,6 +16,7 @@ const (
 // Event represents a task mutation broadcast to SSE subscribers.
 type Event struct {
 	Type   string   `json:"type"`
+	RepoID string   `json:"repo_id,omitempty"`
 	Task   *Task    `json:"task,omitempty"`
 	TaskID TaskID   `json:"task_id,omitempty"`
 	Logs   []string `json:"logs,omitempty"`

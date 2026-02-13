@@ -60,7 +60,7 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 
 	t := *task
 	t.Logs = nil
-	s.broker.Publish(ctx, Event{Type: EventTaskCreated, Task: &t})
+	s.broker.Publish(ctx, Event{Type: EventTaskCreated, RepoID: task.RepoID, Task: &t})
 	return nil
 }
 
@@ -74,14 +74,36 @@ func (s *Store) ListTasks(ctx context.Context) ([]*Task, error) {
 	return s.repo.ListTasks(ctx)
 }
 
+// ListTasksByRepo returns all tasks for a given repo.
+func (s *Store) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error) {
+	return s.repo.ListTasksByRepo(ctx, repoID)
+}
+
+// ListTasksInReviewByRepo returns tasks in review status for a given repo.
+func (s *Store) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error) {
+	return s.repo.ListTasksInReviewByRepo(ctx, repoID)
+}
+
+// HasTasksForRepo checks whether any tasks exist for a given repo.
+func (s *Store) HasTasksForRepo(ctx context.Context, repoID string) (bool, error) {
+	return s.repo.HasTasksForRepo(ctx, repoID)
+}
+
 // ClaimPendingTask finds a pending task with all dependencies met and claims it
-// by setting its status to running. The read-check-claim flow is wrapped in a
-// transaction and uses optimistic locking (WHERE status = 'pending') so that
-// concurrent workers cannot claim the same task.
-func (s *Store) ClaimPendingTask(ctx context.Context) (*Task, error) {
+// by setting its status to running. When repoIDs is non-empty, only tasks
+// belonging to those repos are considered. The read-check-claim flow is wrapped
+// in a transaction and uses optimistic locking (WHERE status = 'pending') so
+// that concurrent workers cannot claim the same task.
+func (s *Store) ClaimPendingTask(ctx context.Context, repoIDs []string) (*Task, error) {
 	var claimed *Task
 	err := s.repo.BeginTxFunc(ctx, func(ctx context.Context, _ tx.Tx, repo Repository) error {
-		pending, err := repo.ListPendingTasks(ctx)
+		var pending []*Task
+		var err error
+		if len(repoIDs) > 0 {
+			pending, err = repo.ListPendingTasksByRepos(ctx, repoIDs)
+		} else {
+			pending, err = repo.ListPendingTasks(ctx)
+		}
 		if err != nil {
 			return err
 		}
@@ -105,7 +127,7 @@ func (s *Store) ClaimPendingTask(ctx context.Context) (*Task, error) {
 	if err == nil && claimed != nil {
 		t := *claimed
 		t.Logs = nil
-		s.broker.Publish(ctx, Event{Type: EventTaskUpdated, Task: &t})
+		s.broker.Publish(ctx, Event{Type: EventTaskUpdated, RepoID: claimed.RepoID, Task: &t})
 	}
 	return claimed, err
 }
@@ -147,6 +169,7 @@ func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) er
 	s.broker.Publish(ctx, Event{Type: EventLogsAppended, TaskID: id, Logs: logs})
 	return nil
 }
+
 
 // UpdateTaskStatus updates a task's status.
 func (s *Store) UpdateTaskStatus(ctx context.Context, id TaskID, status Status) error {
@@ -202,5 +225,5 @@ func (s *Store) publishTaskUpdated(ctx context.Context, id TaskID) {
 		return
 	}
 	t.Logs = nil
-	s.broker.Publish(ctx, Event{Type: EventTaskUpdated, Task: t})
+	s.broker.Publish(ctx, Event{Type: EventTaskUpdated, RepoID: t.RepoID, Task: t})
 }

@@ -20,5 +20,4 @@ type PostgresConfig struct {
 // GitHubConfig holds GitHub API parameters for PR sync.
 type GitHubConfig struct {
 	Token string
-	Repo  string // "owner/repo" format
 }

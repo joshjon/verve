@@ -12,10 +12,19 @@ type Querier interface {
 	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
 	ClaimTask(ctx context.Context, id string) (int64, error)
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
+	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	CreateTask(ctx context.Context, arg CreateTaskParams) error
+	DeleteRepo(ctx context.Context, id string) error
+	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
+	ListPendingTasksByRepos(ctx context.Context, dollar_1 []string) ([]*Task, error)
+	ListRepos(ctx context.Context) ([]*Repo, error)
 	ListTasks(ctx context.Context) ([]*Task, error)
+	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
+	ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error)
+	ReadRepo(ctx context.Context, id string) (*Repo, error)
+	ReadRepoByFullName(ctx context.Context, fullName string) (*Repo, error)
 	ReadTask(ctx context.Context, id string) (*Task, error)
 	ReadTaskLogs(ctx context.Context, id string) ([][]string, error)
 	ReadTaskStatus(ctx context.Context, id string) (TaskStatus, error)

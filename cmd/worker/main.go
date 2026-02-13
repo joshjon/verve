@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/joshjon/kit/log"
@@ -18,11 +19,22 @@ func main() {
 
 	logger := log.NewLogger(log.WithDevelopment())
 
+	// Parse GITHUB_REPOS (comma-separated list of owner/repo)
+	var githubRepos []string
+	if reposEnv := os.Getenv("GITHUB_REPOS"); reposEnv != "" {
+		for _, r := range strings.Split(reposEnv, ",") {
+			r = strings.TrimSpace(r)
+			if r != "" {
+				githubRepos = append(githubRepos, r)
+			}
+		}
+	}
+
 	// Load configuration from environment
 	cfg := worker.Config{
 		APIURL:             getEnvOrDefault("API_URL", "http://localhost:7400"),
 		GitHubToken:        os.Getenv("GITHUB_TOKEN"),
-		GitHubRepo:         os.Getenv("GITHUB_REPO"),
+		GitHubRepos:        githubRepos,
 		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
 		ClaudeModel:        getEnvOrDefault("CLAUDE_MODEL", "haiku"),
 		AgentImage:         getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
@@ -35,8 +47,8 @@ func main() {
 		logger.Error("GITHUB_TOKEN environment variable is required")
 		os.Exit(1)
 	}
-	if cfg.GitHubRepo == "" {
-		logger.Error("GITHUB_REPO environment variable is required (e.g., owner/repo)")
+	if len(cfg.GitHubRepos) == 0 {
+		logger.Error("GITHUB_REPOS environment variable is required (comma-separated, e.g., owner/repo1,owner/repo2)")
 		os.Exit(1)
 	}
 	if !cfg.DryRun && cfg.AnthropicAPIKey == "" {
@@ -46,7 +58,7 @@ func main() {
 
 	logger.Info("worker configured",
 		"api_url", cfg.APIURL,
-		"repo", cfg.GitHubRepo,
+		"repos", cfg.GitHubRepos,
 		"model", cfg.ClaudeModel,
 		"image", cfg.AgentImage,
 		"max_concurrent", cfg.MaxConcurrentTasks,

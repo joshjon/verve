@@ -17,6 +17,7 @@ const (
 // Task represents a unit of work dispatched to an AI coding agent.
 type Task struct {
 	ID             TaskID    `json:"id"`
+	RepoID         string    `json:"repo_id"`
 	Description    string    `json:"description"`
 	Status         Status    `json:"status"`
 	Logs           []string  `json:"logs"`
@@ -29,13 +30,14 @@ type Task struct {
 }
 
 // NewTask creates a new Task with a generated TaskID and pending status.
-func NewTask(description string, dependsOn []string) *Task {
+func NewTask(repoID, description string, dependsOn []string) *Task {
 	now := time.Now()
 	if dependsOn == nil {
 		dependsOn = []string{}
 	}
 	return &Task{
 		ID:          NewTaskID(),
+		RepoID:      repoID,
 		Description: description,
 		Status:      StatusPending,
 		DependsOn:   dependsOn,
