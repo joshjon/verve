@@ -56,6 +56,10 @@ export class VerveClient {
 		return res.json();
 	}
 
+	eventsURL(): string {
+		return `${this.baseUrl}/events`;
+	}
+
 	async closeTask(id: string, reason?: string): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}/close`, {
 			method: 'POST',

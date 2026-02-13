@@ -6,7 +6,7 @@ require (
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/joshjon/kit v0.0.0-20260202015923-10eea3337fcb
+	github.com/joshjon/kit v0.0.0-20260213112627-d0db03dbebf8
 	github.com/labstack/echo/v4 v4.15.0
 	go.jetify.com/typeid v1.3.0
 	modernc.org/sqlite v1.45.0

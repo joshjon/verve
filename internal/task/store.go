@@ -9,9 +9,10 @@ import (
 )
 
 // Store wraps a Repository and adds application-level concerns such as
-// pending task notification and dependency validation.
+// pending task notification, dependency validation, and event broadcasting.
 type Store struct {
 	repo      Repository
+	broker    *Broker
 	pendingMu sync.Mutex
 	pendingCh chan struct{}
 }
@@ -20,8 +21,19 @@ type Store struct {
 func NewStore(repo Repository) *Store {
 	return &Store{
 		repo:      repo,
+		broker:    NewBroker(),
 		pendingCh: make(chan struct{}, 1),
 	}
+}
+
+// Subscribe returns a channel that receives task events.
+func (s *Store) Subscribe() chan Event {
+	return s.broker.Subscribe()
+}
+
+// Unsubscribe removes and closes a subscriber channel.
+func (s *Store) Unsubscribe(ch chan Event) {
+	s.broker.Unsubscribe(ch)
 }
 
 // CreateTask validates dependencies and creates a new task.
@@ -45,6 +57,10 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 		return err
 	}
 	s.notifyPending()
+
+	t := *task
+	t.Logs = nil
+	s.broker.Publish(Event{Type: EventTaskCreated, Task: &t})
 	return nil
 }
 
@@ -86,6 +102,11 @@ func (s *Store) ClaimPendingTask(ctx context.Context) (*Task, error) {
 		}
 		return nil
 	})
+	if err == nil && claimed != nil {
+		t := *claimed
+		t.Logs = nil
+		s.broker.Publish(Event{Type: EventTaskUpdated, Task: &t})
+	}
 	return claimed, err
 }
 
@@ -109,17 +130,29 @@ func dependenciesMet(ctx context.Context, repo Repository, dependsOn []string) b
 
 // AppendTaskLogs appends log lines to a task.
 func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error {
-	return s.repo.AppendTaskLogs(ctx, id, logs)
+	if err := s.repo.AppendTaskLogs(ctx, id, logs); err != nil {
+		return err
+	}
+	s.broker.Publish(Event{Type: EventLogsAppended, TaskID: id, Logs: logs})
+	return nil
 }
 
 // UpdateTaskStatus updates a task's status.
 func (s *Store) UpdateTaskStatus(ctx context.Context, id TaskID, status Status) error {
-	return s.repo.UpdateTaskStatus(ctx, id, status)
+	if err := s.repo.UpdateTaskStatus(ctx, id, status); err != nil {
+		return err
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
 }
 
 // SetTaskPullRequest sets the PR URL and number, moving the task to review status.
 func (s *Store) SetTaskPullRequest(ctx context.Context, id TaskID, prURL string, prNumber int) error {
-	return s.repo.SetTaskPullRequest(ctx, id, prURL, prNumber)
+	if err := s.repo.SetTaskPullRequest(ctx, id, prURL, prNumber); err != nil {
+		return err
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
 }
 
 // ListTasksInReview returns all tasks in review status.
@@ -129,7 +162,11 @@ func (s *Store) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 
 // CloseTask closes a task with an optional reason.
 func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
-	return s.repo.CloseTask(ctx, id, reason)
+	if err := s.repo.CloseTask(ctx, id, reason); err != nil {
+		return err
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
 }
 
 // WaitForPending returns a channel that signals when a pending task might be available.
@@ -146,4 +183,13 @@ func (s *Store) notifyPending() {
 	case s.pendingCh <- struct{}{}:
 	default:
 	}
+}
+
+func (s *Store) publishTaskUpdated(ctx context.Context, id TaskID) {
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return
+	}
+	t.Logs = nil
+	s.broker.Publish(Event{Type: EventTaskUpdated, Task: t})
 }

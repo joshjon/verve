@@ -12,30 +12,38 @@
 	let syncResult = $state<{ synced: number; merged: number } | null>(null);
 
 	onMount(() => {
-		loadTasks();
-		const interval = setInterval(loadTasks, 5000);
-		return () => clearInterval(interval);
-	});
+		const es = new EventSource(client.eventsURL());
 
-	async function loadTasks() {
-		taskStore.loading = true;
-		try {
-			const tasks = await client.listTasks();
-			taskStore.setTasks(tasks);
-			taskStore.error = null;
-		} catch (e) {
-			taskStore.error = (e as Error).message;
-		} finally {
+		es.addEventListener('init', (e) => {
+			taskStore.setTasks(JSON.parse(e.data));
 			taskStore.loading = false;
-		}
-	}
+			taskStore.error = null;
+		});
+
+		es.addEventListener('task_created', (e) => {
+			const event = JSON.parse(e.data);
+			taskStore.addTask(event.task);
+		});
+
+		es.addEventListener('task_updated', (e) => {
+			const event = JSON.parse(e.data);
+			taskStore.updateTask(event.task);
+		});
+
+		es.onerror = () => {
+			taskStore.error = 'Connection lost. Reconnecting...';
+		};
+
+		taskStore.loading = true;
+
+		return () => es.close();
+	});
 
 	async function syncAllPRs() {
 		syncing = true;
 		syncResult = null;
 		try {
 			syncResult = await client.syncAllTasks();
-			await loadTasks();
 			setTimeout(() => {
 				syncResult = null;
 			}, 3000);
@@ -112,4 +120,4 @@
 	</div>
 </div>
 
-<CreateTaskDialog bind:open={openCreate} onCreated={loadTasks} />
+<CreateTaskDialog bind:open={openCreate} onCreated={() => {}} />

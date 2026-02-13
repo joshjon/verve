@@ -76,6 +76,7 @@ func initSQLite(ctx context.Context) (*task.Store, func(), error) {
 func serve(ctx context.Context, logger log.Logger, cfg Config, store *task.Store, gh *github.Client) error {
 	opts := []server.Option{
 		server.WithLogger(logger),
+		server.WithRequestTimeout(server.DefaultRequestTimeout, "/api/v1/events"),
 	}
 	if len(cfg.CorsOrigins) > 0 {
 		opts = append(opts, server.WithCORS(cfg.CorsOrigins...))

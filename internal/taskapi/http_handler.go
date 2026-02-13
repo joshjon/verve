@@ -1,7 +1,9 @@
 package taskapi
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -25,6 +27,7 @@ func NewHTTPHandler(store *task.Store, githubClient *github.Client) *HTTPHandler
 
 // Register adds the task endpoints to the provided Echo router group.
 func (h *HTTPHandler) Register(g *echo.Group) {
+	g.GET("/events", h.Events)
 	g.POST("/tasks", h.CreateTask)
 	g.GET("/tasks", h.ListTasks)
 	g.POST("/tasks/sync", h.SyncAllTasks)
@@ -243,6 +246,54 @@ func (h *HTTPHandler) CloseTask(c echo.Context) error {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, t)
+}
+
+// Events handles GET /events as a Server-Sent Events stream.
+func (h *HTTPHandler) Events(c echo.Context) error {
+	w := c.Response()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	// Send init event with full task list (logs nil'd).
+	tasks, err := h.store.ListTasks(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	for _, t := range tasks {
+		t.Logs = nil
+	}
+	if err := writeSSE(w, "init", tasks); err != nil {
+		return err
+	}
+
+	// Subscribe to broker and stream events.
+	ch := h.store.Subscribe()
+	defer h.store.Unsubscribe(ch)
+
+	for {
+		select {
+		case event := <-ch:
+			if err := writeSSE(w, event.Type, event); err != nil {
+				return nil
+			}
+		case <-c.Request().Context().Done():
+			return nil
+		}
+	}
+}
+
+func writeSSE(w *echo.Response, event string, data any) error {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b); err != nil {
+		return err
+	}
+	w.Flush()
+	return nil
 }
 
 // jsonError maps errtag-tagged errors to appropriate HTTP status codes.

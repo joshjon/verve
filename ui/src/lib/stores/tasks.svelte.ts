@@ -32,10 +32,21 @@ class TaskStore {
 		this.tasks = tasks;
 	}
 
+	addTask(task: Task) {
+		this.tasks = [...this.tasks, task];
+	}
+
 	updateTask(task: Task) {
 		const idx = this.tasks.findIndex((t) => t.id === task.id);
 		if (idx >= 0) {
+			// Preserve existing logs when incoming task has null logs (SSE omits them).
+			if (task.logs == null) {
+				task = { ...task, logs: this.tasks[idx].logs };
+			}
 			this.tasks[idx] = task;
+		} else {
+			// Upsert: task not found, add it.
+			this.tasks = [...this.tasks, task];
 		}
 	}
 

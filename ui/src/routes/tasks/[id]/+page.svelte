@@ -121,8 +121,30 @@
 
 	onMount(() => {
 		loadTask();
-		const interval = setInterval(loadTask, 2000);
-		return () => clearInterval(interval);
+
+		const es = new EventSource(client.eventsURL());
+
+		es.addEventListener('init', () => {
+			// On reconnect, re-fetch full task to catch any missed logs.
+			loadTask();
+		});
+
+		es.addEventListener('task_updated', (e) => {
+			const event = JSON.parse(e.data);
+			if (event.task?.id === taskId && task) {
+				// Preserve existing logs since SSE events omit them.
+				task = { ...event.task, logs: task.logs };
+			}
+		});
+
+		es.addEventListener('logs_appended', (e) => {
+			const event = JSON.parse(e.data);
+			if (event.task_id === taskId && task) {
+				task = { ...task, logs: [...(task.logs || []), ...event.logs] };
+			}
+		});
+
+		return () => es.close();
 	});
 
 	async function loadTask() {
