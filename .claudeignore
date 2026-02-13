@@ -1,0 +1,47 @@
+# dotenvx - NEVER read private keys
+.env.keys
+
+# Unencrypted .env files (encrypted .env.production and .env.dev are OK to read)
+.env
+.env.local
+.env.*.local
+.env.local.*
+
+# Age/SOPS keys
+key.txt
+keys.txt
+age/keys.txt
+
+# Fly.io
+.fly/
+
+# Build artifacts that might contain secrets
+dist/
+build/
+
+# Database
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs (might contain sensitive data)
+*.log
+
+# Secrets directories
+secrets/
+credentials.json
+service-account.json
+
+# SSH/Certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_ed25519*
+
+# Database dumps
+*.dump

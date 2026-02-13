@@ -2,67 +2,46 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"verve/internal/server"
+	"github.com/joshjon/kit/log"
+
+	"verve/internal/app"
 )
 
 func main() {
-	log.Println("Starting Verve API server...")
-
-	cfg := server.Config{
-		GitHubToken: os.Getenv("GITHUB_TOKEN"),
-		GitHubRepo:  os.Getenv("GITHUB_REPO"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-	}
-
-	if cfg.GitHubToken == "" {
-		log.Println("Warning: GITHUB_TOKEN not set - PR status sync disabled")
-	}
-	if cfg.GitHubRepo == "" {
-		log.Println("Warning: GITHUB_REPO not set - PR status sync disabled")
-	}
-	if cfg.DatabaseURL == "" {
-		log.Println("Warning: DATABASE_URL not set - using in-memory storage")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	srv, err := server.New(ctx, cfg)
-	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
+	logger := log.NewLogger(log.WithDevelopment())
+
+	cfg := app.Config{
+		Port:        7400,
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+		Postgres: app.PostgresConfig{
+			User:     os.Getenv("POSTGRES_USER"),
+			Password: os.Getenv("POSTGRES_PASSWORD"),
+			HostPort: os.Getenv("POSTGRES_HOST_PORT"),
+			Database: os.Getenv("POSTGRES_DATABASE"),
+		},
+		GitHub: app.GitHubConfig{
+			Token: os.Getenv("GITHUB_TOKEN"),
+			Repo:  os.Getenv("GITHUB_REPO"),
+		},
+		CorsOrigins: []string{"http://localhost:5173", "http://localhost:8080"},
 	}
-	defer srv.Close()
 
-	// Start background PR status sync
-	srv.StartBackgroundSync(ctx, 30*time.Second)
-
-	// Start server in goroutine
-	go func() {
-		if err := srv.Start(":8080"); err != nil {
-			log.Printf("Server stopped: %v", err)
-		}
-	}()
-
-	// Wait for shutdown signal
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
-
-	log.Println("Received shutdown signal, shutting down...")
-	cancel()
-
-	// Give the server 10 seconds to finish
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatal(err)
+	if cfg.GitHub.Token == "" {
+		logger.Warn("GITHUB_TOKEN not set, PR status sync disabled")
 	}
-	log.Println("Server stopped")
+	if cfg.GitHub.Repo == "" {
+		logger.Warn("GITHUB_REPO not set, PR status sync disabled")
+	}
+
+	if err := app.Run(ctx, logger, cfg); err != nil {
+		logger.Error("server failed", "error", err)
+		os.Exit(1)
+	}
 }

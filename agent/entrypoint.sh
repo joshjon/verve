@@ -18,7 +18,7 @@ if [ -z "$GITHUB_REPO" ]; then
     exit 1
 fi
 
-if [ -z "$ANTHROPIC_API_KEY" ]; then
+if [ "$DRY_RUN" != "true" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
     echo "[error] ANTHROPIC_API_KEY is not set"
     exit 1
 fi
@@ -39,6 +39,68 @@ cd /workspace/repo
 BRANCH="verve/task-${TASK_ID}"
 echo "[agent] Creating branch: ${BRANCH}"
 git checkout -b "${BRANCH}"
+
+if [ "$DRY_RUN" = "true" ]; then
+    # Dry run mode - skip Claude, make a dummy change
+    echo "[agent] DRY RUN mode - skipping Claude Code"
+    echo ""
+
+    cat > "verve-dry-run.md" <<DRYEOF
+# Verve Dry Run
+
+- **Task ID:** ${TASK_ID}
+- **Description:** ${TASK_DESCRIPTION}
+- **Timestamp:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+DRYEOF
+
+    echo "[agent] Created dummy file: verve-dry-run.md"
+
+    # Commit and push
+    echo "[agent] Committing changes..."
+    git add -A
+    git commit -m "dry-run: ${TASK_DESCRIPTION}
+
+Implemented by Verve AI Agent (dry run)
+Task ID: ${TASK_ID}"
+
+    echo "[agent] Pushing branch to origin..."
+    git push -u origin "${BRANCH}"
+    echo "[agent] Branch pushed successfully: ${BRANCH}"
+
+    # Create PR with simple description
+    echo "[agent] Creating pull request..."
+    PR_TITLE="[Dry Run] ${TASK_DESCRIPTION}"
+    PR_BODY="## Dry Run
+
+This PR was created in dry-run mode (no Claude API calls).
+
+**Task ID:** \`${TASK_ID}\`
+**Description:** ${TASK_DESCRIPTION}
+
+---
+*Implemented by Verve AI Agent (dry run)*"
+
+    PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
+    PR_EXIT_CODE=$?
+
+    if [ ${PR_EXIT_CODE} -eq 0 ]; then
+        PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
+        if [ -n "${PR_URL}" ]; then
+            PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
+            echo "[agent] Pull request created: ${PR_URL}"
+            echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
+        else
+            echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
+        fi
+    else
+        echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
+    fi
+
+    echo ""
+    echo "=== Task Completed Successfully (Dry Run) ==="
+    echo "Branch: ${BRANCH}"
+    exit 0
+fi
 
 # Run Claude Code
 echo "[agent] Starting Claude Code session..."

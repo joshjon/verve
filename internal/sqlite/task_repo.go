@@ -1,0 +1,174 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+
+	"github.com/joshjon/kit/errtag"
+	"github.com/joshjon/kit/tx"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
+
+	"verve/internal/sqlite/sqlc"
+	"verve/internal/task"
+)
+
+var _ task.Repository = (*TaskRepository)(nil)
+
+// TaskRepository implements task.Repository using SQLite.
+type TaskRepository struct {
+	db   *sqlc.Queries
+	txer *tx.SQLiteRepositoryTxer[task.Repository]
+}
+
+// NewTaskRepository creates a new TaskRepository backed by the given SQLite DB.
+func NewTaskRepository(db DB) *TaskRepository {
+	return &TaskRepository{
+		db: sqlc.New(db),
+		txer: tx.NewSQLiteRepositoryTxer(db, tx.SQLiteRepositoryTxerConfig[task.Repository]{
+			Timeout: tx.DefaultTimeout,
+			WithTxFunc: func(repo task.Repository, txer *tx.SQLiteRepositoryTxer[task.Repository], sqlTx *sql.Tx) task.Repository {
+				cpy := *repo.(*TaskRepository)
+				cpy.db = cpy.db.WithTx(sqlTx)
+				cpy.txer = txer
+				return task.Repository(&cpy)
+			},
+		}),
+	}
+}
+
+func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
+	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
+		ID:          t.ID.String(),
+		Description: t.Description,
+		Status:      string(t.Status),
+		Logs:        marshalJSONStrings(t.Logs),
+		DependsOn:   marshalJSONStrings(t.DependsOn),
+		CreatedAt:   t.CreatedAt,
+		UpdatedAt:   t.UpdatedAt,
+	})
+	return tagTaskErr(err)
+}
+
+func (r *TaskRepository) ReadTask(ctx context.Context, id task.TaskID) (*task.Task, error) {
+	row, err := r.db.ReadTask(ctx, id.String())
+	if err != nil {
+		return nil, tagTaskErr(err)
+	}
+	return unmarshalTask(row), nil
+}
+
+func (r *TaskRepository) ListTasks(ctx context.Context) ([]*task.Task, error) {
+	rows, err := r.db.ListTasks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) ListPendingTasks(ctx context.Context) ([]*task.Task, error) {
+	rows, err := r.db.ListPendingTasks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, logs []string) error {
+	// SQLite doesn't support array concatenation in SQL, so we read-modify-write.
+	current, err := r.db.ReadTaskLogs(ctx, id.String())
+	if err != nil {
+		return tagTaskErr(err)
+	}
+	existing := unmarshalJSONStrings(current)
+	merged := append(existing, logs...)
+	return tagTaskErr(r.db.SetTaskLogs(ctx, sqlc.SetTaskLogsParams{
+		ID:   id.String(),
+		Logs: marshalJSONStrings(merged),
+	}))
+}
+
+func (r *TaskRepository) UpdateTaskStatus(ctx context.Context, id task.TaskID, status task.Status) error {
+	return tagTaskErr(r.db.UpdateTaskStatus(ctx, sqlc.UpdateTaskStatusParams{
+		ID:     id.String(),
+		Status: string(status),
+	}))
+}
+
+func (r *TaskRepository) SetTaskPullRequest(ctx context.Context, id task.TaskID, prURL string, prNumber int) error {
+	return tagTaskErr(r.db.SetTaskPullRequest(ctx, sqlc.SetTaskPullRequestParams{
+		ID:             id.String(),
+		PullRequestUrl: &prURL,
+		PrNumber:       ptr(int64(prNumber)),
+	}))
+}
+
+func (r *TaskRepository) ListTasksInReview(ctx context.Context) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksInReview(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
+func (r *TaskRepository) CloseTask(ctx context.Context, id task.TaskID, reason string) error {
+	return tagTaskErr(r.db.CloseTask(ctx, sqlc.CloseTaskParams{
+		ID:          id.String(),
+		CloseReason: &reason,
+	}))
+}
+
+func (r *TaskRepository) TaskExists(ctx context.Context, id task.TaskID) (bool, error) {
+	result, err := r.db.TaskExists(ctx, id.String())
+	if err != nil {
+		return false, err
+	}
+	return result != 0, nil
+}
+
+func (r *TaskRepository) ReadTaskStatus(ctx context.Context, id task.TaskID) (task.Status, error) {
+	status, err := r.db.ReadTaskStatus(ctx, id.String())
+	if err != nil {
+		return "", tagTaskErr(err)
+	}
+	return task.Status(status), nil
+}
+
+func (r *TaskRepository) ClaimTask(ctx context.Context, id task.TaskID) (bool, error) {
+	rows, err := r.db.ClaimTask(ctx, id.String())
+	return rows > 0, err
+}
+
+func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {
+	return r.txer.WithTx(r, txn)
+}
+
+func (r *TaskRepository) BeginTxFunc(ctx context.Context, fn func(ctx context.Context, txn tx.Tx, repo task.Repository) error) error {
+	return r.txer.BeginTxFunc(ctx, r, fn)
+}
+
+func tagTaskErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return errtag.Tag[task.ErrTagTaskNotFound](err)
+	}
+	if isSQLiteErrCode(err, sqlite3.SQLITE_CONSTRAINT, sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
+		return errtag.Tag[task.ErrTagTaskConflict](err)
+	}
+	return tx.TagSQLiteTimeoutErr(err)
+}
+
+func isSQLiteErrCode(err error, codes ...int) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		for _, code := range codes {
+			if sqliteErr.Code() == code {
+				return true
+			}
+		}
+	}
+	return false
+}

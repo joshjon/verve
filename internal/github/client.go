@@ -1,4 +1,4 @@
-package server
+package github
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"strings"
 )
 
-// GitHubClient handles GitHub API interactions
-type GitHubClient struct {
+// Client handles GitHub API interactions.
+type Client struct {
 	token      string
 	httpClient *http.Client
 	owner      string
 	repo       string
 }
 
-// NewGitHubClient creates a new GitHub API client.
+// NewClient creates a new GitHub API client.
 // Returns nil if token or repoFullName is empty.
-func NewGitHubClient(token, repoFullName string) *GitHubClient {
+func NewClient(token, repoFullName string) *Client {
 	if token == "" || repoFullName == "" {
 		return nil
 	}
@@ -28,7 +28,7 @@ func NewGitHubClient(token, repoFullName string) *GitHubClient {
 		return nil
 	}
 
-	return &GitHubClient{
+	return &Client{
 		token:      token,
 		httpClient: &http.Client{},
 		owner:      parts[0],
@@ -36,19 +36,19 @@ func NewGitHubClient(token, repoFullName string) *GitHubClient {
 	}
 }
 
-// IsPRMerged checks if a PR has been merged
-func (g *GitHubClient) IsPRMerged(ctx context.Context, prNumber int) (bool, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", g.owner, g.repo, prNumber)
+// IsPRMerged checks if a PR has been merged.
+func (c *Client) IsPRMerged(ctx context.Context, prNumber int) (bool, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", c.owner, c.repo, prNumber)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return false, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+g.token)
+	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := g.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return false, err
 	}

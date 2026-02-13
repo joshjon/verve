@@ -311,11 +311,16 @@
 
 			<!-- Pull Request -->
 			{#if task.pull_request_url}
-				<Card.Root class="border-purple-500/30 bg-purple-500/5">
+				<Card.Root class={task.status === 'merged' ? 'border-green-500/30 bg-green-500/10' : 'border-purple-500/30 bg-purple-500/5'}>
 					<Card.Header class="pb-3">
 						<Card.Title class="text-base flex items-center gap-2">
-							<GitPullRequest class="w-4 h-4 text-purple-500" />
-							Pull Request
+							{#if task.status === 'merged'}
+								<GitMerge class="w-4 h-4 text-green-500" />
+								Pull Request (Merged)
+							{:else}
+								<GitPullRequest class="w-4 h-4 text-purple-500" />
+								Pull Request
+							{/if}
 						</Card.Title>
 					</Card.Header>
 					<Card.Content>
@@ -329,16 +334,18 @@
 								<GitPullRequest class="w-4 h-4" />
 								PR #{task.pr_number}
 							</a>
-							<Button
-								size="sm"
-								variant="outline"
-								onclick={syncStatus}
-								disabled={syncing}
-								class="gap-2"
-							>
-								<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
-								{syncing ? 'Syncing...' : 'Sync Status'}
-							</Button>
+							{#if task.status !== 'merged'}
+								<Button
+									size="sm"
+									variant="outline"
+									onclick={syncStatus}
+									disabled={syncing}
+									class="gap-2"
+								>
+									<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
+									{syncing ? 'Syncing...' : 'Sync Status'}
+								</Button>
+							{/if}
 						</div>
 					</Card.Content>
 				</Card.Root>

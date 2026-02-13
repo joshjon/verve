@@ -1,0 +1,149 @@
+package task
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"github.com/joshjon/kit/tx"
+)
+
+// Store wraps a Repository and adds application-level concerns such as
+// pending task notification and dependency validation.
+type Store struct {
+	repo      Repository
+	pendingMu sync.Mutex
+	pendingCh chan struct{}
+}
+
+// NewStore creates a new Store backed by the given Repository.
+func NewStore(repo Repository) *Store {
+	return &Store{
+		repo:      repo,
+		pendingCh: make(chan struct{}, 1),
+	}
+}
+
+// CreateTask validates dependencies and creates a new task.
+func (s *Store) CreateTask(ctx context.Context, task *Task) error {
+	// Validate all dependencies exist
+	for _, depID := range task.DependsOn {
+		taskID, err := ParseTaskID(depID)
+		if err != nil {
+			return fmt.Errorf("invalid dependency ID %q: %w", depID, err)
+		}
+		exists, err := s.repo.TaskExists(ctx, taskID)
+		if err != nil {
+			return fmt.Errorf("check dependency %q: %w", depID, err)
+		}
+		if !exists {
+			return fmt.Errorf("dependency task not found: %s", depID)
+		}
+	}
+
+	if err := s.repo.CreateTask(ctx, task); err != nil {
+		return err
+	}
+	s.notifyPending()
+	return nil
+}
+
+// ReadTask reads a task by ID.
+func (s *Store) ReadTask(ctx context.Context, id TaskID) (*Task, error) {
+	return s.repo.ReadTask(ctx, id)
+}
+
+// ListTasks returns all tasks.
+func (s *Store) ListTasks(ctx context.Context) ([]*Task, error) {
+	return s.repo.ListTasks(ctx)
+}
+
+// ClaimPendingTask finds a pending task with all dependencies met and claims it
+// by setting its status to running. The read-check-claim flow is wrapped in a
+// transaction and uses optimistic locking (WHERE status = 'pending') so that
+// concurrent workers cannot claim the same task.
+func (s *Store) ClaimPendingTask(ctx context.Context) (*Task, error) {
+	var claimed *Task
+	err := s.repo.BeginTxFunc(ctx, func(ctx context.Context, _ tx.Tx, repo Repository) error {
+		pending, err := repo.ListPendingTasks(ctx)
+		if err != nil {
+			return err
+		}
+		for _, t := range pending {
+			if !dependenciesMet(ctx, repo, t.DependsOn) {
+				continue
+			}
+			ok, err := repo.ClaimTask(ctx, t.ID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue // Already claimed by another worker
+			}
+			t.Status = StatusRunning
+			claimed = t
+			return nil
+		}
+		return nil
+	})
+	return claimed, err
+}
+
+// dependenciesMet checks if all dependency tasks are in a terminal success state.
+func dependenciesMet(ctx context.Context, repo Repository, dependsOn []string) bool {
+	for _, depID := range dependsOn {
+		id, err := ParseTaskID(depID)
+		if err != nil {
+			return false
+		}
+		status, err := repo.ReadTaskStatus(ctx, id)
+		if err != nil {
+			return false
+		}
+		if status != StatusMerged && status != StatusClosed {
+			return false
+		}
+	}
+	return true
+}
+
+// AppendTaskLogs appends log lines to a task.
+func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error {
+	return s.repo.AppendTaskLogs(ctx, id, logs)
+}
+
+// UpdateTaskStatus updates a task's status.
+func (s *Store) UpdateTaskStatus(ctx context.Context, id TaskID, status Status) error {
+	return s.repo.UpdateTaskStatus(ctx, id, status)
+}
+
+// SetTaskPullRequest sets the PR URL and number, moving the task to review status.
+func (s *Store) SetTaskPullRequest(ctx context.Context, id TaskID, prURL string, prNumber int) error {
+	return s.repo.SetTaskPullRequest(ctx, id, prURL, prNumber)
+}
+
+// ListTasksInReview returns all tasks in review status.
+func (s *Store) ListTasksInReview(ctx context.Context) ([]*Task, error) {
+	return s.repo.ListTasksInReview(ctx)
+}
+
+// CloseTask closes a task with an optional reason.
+func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
+	return s.repo.CloseTask(ctx, id, reason)
+}
+
+// WaitForPending returns a channel that signals when a pending task might be available.
+func (s *Store) WaitForPending() <-chan struct{} {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	return s.pendingCh
+}
+
+func (s *Store) notifyPending() {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	select {
+	case s.pendingCh <- struct{}{}:
+	default:
+	}
+}

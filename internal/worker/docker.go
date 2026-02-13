@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/joshjon/kit/log"
 )
 
 const DefaultAgentImage = "verve-agent:latest"
@@ -18,9 +18,10 @@ const DefaultAgentImage = "verve-agent:latest"
 type DockerRunner struct {
 	client     *client.Client
 	agentImage string
+	logger     log.Logger
 }
 
-func NewDockerRunner(agentImage string) (*DockerRunner, error) {
+func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
@@ -28,7 +29,7 @@ func NewDockerRunner(agentImage string) (*DockerRunner, error) {
 	if agentImage == "" {
 		agentImage = DefaultAgentImage
 	}
-	return &DockerRunner{client: cli, agentImage: agentImage}, nil
+	return &DockerRunner{client: cli, agentImage: agentImage, logger: logger}, nil
 }
 
 func (d *DockerRunner) Close() error {
@@ -72,6 +73,7 @@ type AgentConfig struct {
 	GitHubRepo      string
 	AnthropicAPIKey string
 	ClaudeModel     string
+	DryRun          bool
 }
 
 // LogCallback is called for each log line from the container
@@ -81,17 +83,21 @@ type LogCallback func(line string)
 // The callback is called from a separate goroutine as logs arrive.
 func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogCallback) RunResult {
 	// Create container with all required environment variables
+	env := []string{
+		"TASK_ID=" + cfg.TaskID,
+		"TASK_DESCRIPTION=" + cfg.TaskDescription,
+		"GITHUB_TOKEN=" + cfg.GitHubToken,
+		"GITHUB_REPO=" + cfg.GitHubRepo,
+		"ANTHROPIC_API_KEY=" + cfg.AnthropicAPIKey,
+		"CLAUDE_MODEL=" + cfg.ClaudeModel,
+	}
+	if cfg.DryRun {
+		env = append(env, "DRY_RUN=true")
+	}
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
 			Image: d.agentImage,
-			Env: []string{
-				"TASK_ID=" + cfg.TaskID,
-				"TASK_DESCRIPTION=" + cfg.TaskDescription,
-				"GITHUB_TOKEN=" + cfg.GitHubToken,
-				"GITHUB_REPO=" + cfg.GitHubRepo,
-				"ANTHROPIC_API_KEY=" + cfg.AnthropicAPIKey,
-				"CLAUDE_MODEL=" + cfg.ClaudeModel,
-			},
+			Env:   env,
 		},
 		&container.HostConfig{
 			AutoRemove: false, // We'll remove it manually after getting logs
@@ -108,7 +114,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	defer func() {
 		// Remove container
 		if err := d.client.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true}); err != nil {
-			log.Printf("Warning: failed to remove container %s: %v", containerID, err)
+			d.logger.Warn("failed to remove container", "container_id", containerID, "error", err)
 		}
 	}()
 
@@ -170,7 +176,7 @@ func (d *DockerRunner) streamLogs(reader io.Reader, onLog LogCallback) {
 		defer stderrPipeW.Close()
 		_, err := stdcopy.StdCopy(stdoutPipeW, stderrPipeW, reader)
 		if err != nil && err != io.EOF {
-			log.Printf("Warning: error demultiplexing logs: %v", err)
+			d.logger.Warn("error demultiplexing logs", "error", err)
 		}
 	}()
 

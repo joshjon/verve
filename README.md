@@ -1,347 +1,57 @@
 # Verve
 
-A distributed AI agent orchestrator platform. Dispatches AI coding agents powered by Claude Code to work on tasks within customer infrastructure using Docker-in-Docker isolation.
-
-See [DESIGN.md](DESIGN.md) for detailed architecture and design documentation.
-
-## System Architecture
-
-```mermaid
-flowchart LR
-    subgraph User["User Interface"]
-        UI[Web Dashboard]
-    end
-
-    subgraph Server["API Server"]
-        API[REST API]
-        Store[(PostgreSQL / In-Memory)]
-    end
-
-    subgraph Workers["Agent Worker Pool Instance 1...N"]
-        W1[Agent Worker Pool Coordinator]
-
-       subgraph Agent1["Agent Worker Docker Container"]
-          CC1[Claude Code CLI]
-          Git1[Git + GitHub CLI]
-       end
-       
-       subgraph Agent2["Agent Worker Docker Container"]
-          CC2[Claude Code CLI]
-          Git2[Git + GitHub CLI]
-       end
-    end
-
-    GH[(GitHub Repository)]
-
-    UI --> API
-    API <--> Store
-    API -->|Sync PRs| GH
-
-    W1 -->|Poll for tasks| API
-    W1 -->|Stream logs| API
-
-    W1 -->|Spawn| Agent1
-    W1 -->|Spawn| Agent2
-
-   Git1 -->|Clone, Push, Create PR| GH
-   Git2 -->|Clone, Push, Create PR| GH
-```
-
-### Flow Overview
-
-1. **Task Creation** - User submits task via UI or API
-2. **Task Storage** - Server stores task in PostgreSQL (or in-memory)
-3. **Agent Worker Polling** - Agent Workers long-poll for pending tasks with met dependencies
-4. **Task Claiming** - Worker atomically claims a task
-5. **Agent Spawn** - Worker creates isolated Docker container
-6. **Code Implementation** - Claude Code implements the task
-7. **PR Creation** - Agent commits, pushes, and creates pull request
-8. **Status Sync** - Server periodically syncs PR merge status from GitHub
-
-## Prerequisites
-
-- Go 1.22+
-- Docker
-- GitHub Personal Access Token (with repo permissions)
-- Anthropic API Key (for Claude Code)
+A distributed AI agent orchestrator. Dispatches Claude Code agents to work on tasks within user infrastructure using isolated Docker containers. User source code never leaves their network — task descriptions go in, logs and PRs come out.
 
 ## Quick Start
 
-### 1. Configure credentials
+### Prerequisites
 
-Set the required environment variables:
+- Docker
+- [GitHub Personal Access Token](https://github.com/settings/tokens) (with repo permissions)
+- [Anthropic API Key](https://console.anthropic.com)
+
+### 1. Set credentials
+
+Create a `.env` file (see `.env.example`):
 
 ```bash
-# GitHub Personal Access Token with repo read/write permissions
-export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
-
-# Repository to work on (format: owner/repo)
-export GITHUB_REPO="your-username/your-repo"
-
-# Anthropic API key for Claude Code
-export ANTHROPIC_API_KEY="sk-ant-xxxxxxxxxxxxxxxxxxxx"
+GITHUB_TOKEN=ghp_...
+GITHUB_REPO=owner/repo
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-### 2. Build everything
+### 2. Start the stack
 
 ```bash
-# Build the agent Docker image (includes Claude Code CLI)
+# Build the agent image (needed for the worker to spawn containers)
 make build-agent
 
-# Build the server and worker binaries
-make build
+# Start PostgreSQL, API server, and worker
+make up
 ```
 
-### 3. Start the API server
+This starts four containers:
+- **postgres** — PostgreSQL 16 database
+- **server** — API server on `http://localhost:7400`
+- **ui** — Web dashboard on `http://localhost:8080`
+- **worker** — polls for tasks and spawns agent containers
+
+Useful commands:
 
 ```bash
-make run-server
+make logs     # Tail all container logs
+make down     # Stop everything
 ```
 
-The server runs on `http://localhost:8080`.
+### 3. Open the dashboard
 
-### 4. Start the worker (in a separate terminal)
+Open [http://localhost:8080](http://localhost:8080) to create tasks, monitor progress, and view agent logs.
 
-```bash
-# Make sure credentials are exported in this terminal too
-export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
-export GITHUB_REPO="your-username/your-repo"
-export ANTHROPIC_API_KEY="sk-ant-xxxxxxxxxxxxxxxxxxxx"
+When complete, the agent pushes a branch and opens a PR on your repository.
 
-make run-worker
-```
+## Documentation
 
-The worker connects to the API server and polls for tasks.
-
-### 5. Create a task
-
-```bash
-# Create a new task - Claude Code will implement it
-curl -X POST http://localhost:8080/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"description":"Add a hello world function to main.py"}'
-```
-
-### 6. Monitor progress
-
-```bash
-# List all tasks
-make list-tasks
-
-# Get a specific task (includes real-time logs from Claude Code)
-make get-task ID=tsk_xxxxxxxx
-```
-
-When the task completes:
-- A new branch `verve/task-{task_id}` is pushed to your repository
-- A pull request is automatically created with an AI-generated description
-- Task status changes to `review` with the PR URL
-
-## Task Statuses
-
-| Status | Description |
-|--------|-------------|
-| `pending` | Task created, waiting to be claimed |
-| `running` | Task claimed by worker, agent executing |
-| `review` | PR created, awaiting human review/merge |
-| `merged` | PR has been merged |
-| `completed` | Task completed without changes |
-| `failed` | Task failed with error |
-
-## Configuration
-
-### Server Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GITHUB_TOKEN` | No | - | GitHub token for PR status sync |
-| `GITHUB_REPO` | No | - | Repository for PR status sync (format: `owner/repo`) |
-
-The server uses these credentials to check if PRs have been merged (background sync every 30 seconds).
-
-### Worker Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GITHUB_TOKEN` | Yes | - | GitHub Personal Access Token with repo permissions |
-| `GITHUB_REPO` | Yes | - | Target repository (format: `owner/repo`) |
-| `ANTHROPIC_API_KEY` | Yes | - | Anthropic API key for Claude Code |
-| `API_URL` | No | `http://localhost:8080` | Verve API server URL |
-| `CLAUDE_MODEL` | No | `haiku` | Claude model to use (`haiku`, `sonnet`, `opus`) |
-| `AGENT_IMAGE` | No | `verve-agent:latest` | Docker image for agent (use custom image for additional dependencies) |
-| `MAX_CONCURRENT_TASKS` | No | `3` | Maximum tasks to process in parallel (each task gets its own Docker container) |
-
-### Getting a GitHub Token
-
-1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Generate a new token with the following permissions:
-   - `repo` (Full control of private repositories)
-3. Copy the token and set it as `GITHUB_TOKEN`
-
-### Getting an Anthropic API Key
-
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Create an API key
-3. Copy the key and set it as `ANTHROPIC_API_KEY`
-
-## Extending the Agent Image
-
-The base `verve-agent:latest` image includes Node.js, Git, and GitHub CLI. If your project requires additional dependencies (Python, Go, Rust, etc.), you can extend the base image.
-
-### Creating a Custom Agent Image
-
-Create a Dockerfile that extends the base image:
-
-```dockerfile
-# Dockerfile.custom
-FROM verve-agent:latest
-
-USER root
-
-# Install your dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-USER agent
-```
-
-Build and use your custom image:
-
-```bash
-# Build the base image first
-make build-agent
-
-# Build your custom image
-docker build -f Dockerfile.custom -t verve-agent:custom .
-
-# Run the worker with your custom image
-AGENT_IMAGE=verve-agent:custom make run-worker
-```
-
-### Example Dockerfiles
-
-Pre-built examples are available in `agent/examples/`:
-
-| File | Description |
-|------|-------------|
-| `Dockerfile.python` | Python 3 with pip and venv |
-| `Dockerfile.golang` | Go 1.22 |
-| `Dockerfile.full` | Python, Go, and Rust (larger image) |
-
-Build an example:
-
-```bash
-docker build -f agent/examples/Dockerfile.python -t verve-agent:python ./agent
-AGENT_IMAGE=verve-agent:python make run-worker
-```
-
-## Parallel Task Execution
-
-By default, the worker processes one task at a time. To process multiple tasks in parallel, set `MAX_CONCURRENT_TASKS`:
-
-```bash
-# Process up to 5 tasks concurrently
-MAX_CONCURRENT_TASKS=5 make run-worker
-```
-
-Each concurrent task runs in its own isolated Docker container. The worker will:
-- Poll for new tasks as long as there are available slots
-- Execute multiple tasks simultaneously (up to the limit)
-- Wait for all active tasks to complete on graceful shutdown
-
-**Resource considerations**: Each agent container uses ~500MB-1GB of memory. Set the limit based on your available resources.
-
-## How It Works
-
-1. **Create Task**: You submit a task description via the API (optionally with dependencies)
-2. **Worker Claims Task**: The worker polls for pending tasks with met dependencies and claims one
-3. **Agent Spawns**: Worker creates an isolated Docker container with:
-   - Git (configured with your GitHub token)
-   - Claude Code CLI (configured with your Anthropic API key)
-   - GitHub CLI for PR creation
-4. **Clone & Branch**: Agent clones your repo and creates a task branch
-5. **Claude Code Runs**: Claude Code implements the task, making code changes
-6. **Commit & Push**: Agent commits changes and pushes the branch
-7. **Create PR**: Agent creates a pull request with AI-generated title and description
-8. **Await Review**: Task enters `review` status with PR URL, awaiting human merge
-9. **Merged**: Once PR is merged, background sync updates status to `merged`
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/tasks` | Create a new task |
-| GET | `/api/v1/tasks` | List all tasks |
-| GET | `/api/v1/tasks/:id` | Get task details with logs |
-| GET | `/api/v1/tasks/poll` | Long-poll for pending tasks (worker) |
-| POST | `/api/v1/tasks/:id/logs` | Append logs (worker) |
-| POST | `/api/v1/tasks/:id/complete` | Mark task complete (worker) |
-| POST | `/api/v1/tasks/:id/sync` | Refresh PR merge status from GitHub |
-
-### Create Task with Dependencies
-
-```bash
-# Create a task that depends on another task
-curl -X POST http://localhost:8080/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "description": "Add unit tests for the hello world function",
-    "depends_on": ["tsk_abc123"]
-  }'
-```
-
-Dependent tasks remain in `pending` until all parent tasks reach `review`, `completed`, or `merged` status.
-
-### Task Response
-
-```json
-{
-  "id": "tsk_xyz789",
-  "description": "Add a hello world function",
-  "status": "review",
-  "pull_request_url": "https://github.com/owner/repo/pull/42",
-  "pr_number": 42,
-  "depends_on": ["tsk_abc123"],
-  "logs": ["[agent] Starting...", "..."],
-  "created_at": "2024-01-15T10:30:00Z",
-  "updated_at": "2024-01-15T11:45:00Z"
-}
-```
-
-## Project Structure
-
-```
-verve/
-├── cmd/
-│   ├── server/         # API server entrypoint
-│   └── worker/         # Worker entrypoint
-├── internal/
-│   ├── server/         # API server implementation
-│   └── worker/         # Worker and Docker management
-├── agent/              # Agent Docker image (with Claude Code)
-├── bin/                # Compiled binaries
-└── Makefile
-```
-
-## Make Targets
-
-```bash
-make build          # Build server and worker
-make build-agent    # Build agent Docker image
-make run-server     # Run API server
-make run-worker     # Run worker (requires env vars)
-make test-task      # Create a test task
-make list-tasks     # List all tasks
-make get-task ID=x  # Get specific task
-make clean          # Remove binaries and images
-make tidy           # Run go mod tidy
-```
-
-## Security Notes
-
-- **Never commit credentials**: Keep tokens in environment variables only
-- **Minimal permissions**: Use a GitHub token with only the permissions you need
-- **Container isolation**: Each task runs in an isolated Docker container
-- **No credential storage**: Credentials are passed at runtime, never baked into images
+- [Configuration](docs/configuration.md) — environment variables and credentials
+- [API Reference](docs/api.md) — endpoints, request/response formats, task statuses
+- [Custom Agents](docs/custom-agents.md) — extending the agent image with additional dependencies
+- [Design](DESIGN.md) — architecture and design decisions

@@ -2,9 +2,9 @@
 
 ## What is this?
 
-A platform that allows us to dispatch AI coding agents to work on tasks within a customer's own infrastructure. The system is split into two halves: a **central cloud platform** we control (task management, UI, logging) and a **worker component** that runs inside the customer's environment (task execution, code changes, PRs). The customer deploys a single Docker container that long-polls for work, spins up isolated agent sessions, streams logs back to us, and raises pull requests when done.
+A platform that allows us to dispatch AI coding agents to work on tasks within a user's own infrastructure. The system is split into two halves: a **central cloud platform** we control (task management, UI, logging) and a **worker component** that runs inside the user's environment (task execution, code changes, PRs). The user deploys a single Docker container that long-polls for work, spins up isolated agent sessions, streams logs back to us, and raises pull requests when done.
 
-The key design goal is that the customer's source code and secrets never leave their network. We send task descriptions *in*; we get logs and PR notifications *out*. The actual code manipulation happens entirely on their side.
+The key design goal is that the user's source code and secrets never leave their network. We send task descriptions *in*; we get logs and PR notifications *out*. The actual code manipulation happens entirely on their side.
 
 The project will be implemented as a single mono repo.
 
@@ -25,7 +25,7 @@ The project will be implemented as a single mono repo.
                           │  HTTPS (outbound from worker)
                           │
 ┌─────────────────────────┼────────────────────────┐
-│   Customer Environment  │                        │
+│   User Environment  │                        │
 │                         │                        │
 │              ┌──────────▼──────────┐             │
 │              │ Orchestrator Worker │             │
@@ -37,7 +37,7 @@ The project will be implemented as a single mono repo.
 │            │(ephemeral)│ │(ephemeral)│           │
 │            └───────────┘ └───────────┘           │
 │                                                  │
-│          Customer's repos, secrets, CI           │
+│          User's repos, secrets, CI           │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -49,7 +49,7 @@ The project will be implemented as a single mono repo.
 
 Stores the core domain model:
 
-- **Projects** — a customer project linked to a repository.
+- **Projects** — a user project linked to a repository.
 - **Tasks** — units of work within a project (e.g. "Add input validation to the signup form"). Each task has a status lifecycle: `pending → queued → running → completed | failed`.
 - **Task logs** — append-only log lines streamed from the worker, stored for real-time viewing in the UI.
 - **PR metadata** — branch name, PR URL, review status, linked task.
@@ -64,7 +64,7 @@ Key responsibilities:
 - **Log ingestion** — accepts batched log uploads from workers (`POST /tasks/{id}/logs`). Logs are appended to the database and pushed to any connected UI clients via WebSockets or SSE.
 - **Task lifecycle** — endpoints to create, update, and complete tasks. The worker calls back to report success/failure, branch name, and PR URL.
 - **Notifications** — triggers notifications to the UI (and potentially Slack, email, etc.) when a task's PR is ready for review.
-- **Authentication** — workers authenticate using a per-customer API key or short-lived token. The UI authenticates via standard session/OAuth.
+- **Authentication** — workers authenticate using a per-user API key or short-lived token. The UI authenticates via standard session/OAuth.
 
 ### UI
 
@@ -79,11 +79,11 @@ Core views:
 
 ---
 
-## Customer-Side: Orchestrator Worker
+## User-Side: Orchestrator Worker
 
 ### Deployment
 
-The worker is distributed as a **Docker image** that the customer runs in their environment (Kubernetes, ECS, a VM — whatever they use). The image contains a single Go (or similar) binary as its entrypoint. The customer provides configuration at deploy time:
+The worker is distributed as a **Docker image** that the user runs in their environment (Kubernetes, ECS, a VM — whatever they use). The image contains a single Go (or similar) binary as its entrypoint. The user provides configuration at deploy time:
 
 - API server URL and authentication token.
 - Git credentials (SSH key or token) for cloning repos and pushing branches.
@@ -107,7 +107,7 @@ The worker binary runs a continuous loop:
 
 ### Agent Isolation Modes
 
-Two options for isolating each agent's workspace. The choice likely depends on the customer's security posture and infrastructure.
+Two options for isolating each agent's workspace. The choice likely depends on the user's security posture and infrastructure.
 
 | | Docker-in-Docker (DinD) | Working Directory |
 |---|---|---|
@@ -115,7 +115,7 @@ Two options for isolating each agent's workspace. The choice likely depends on t
 | **Isolation** | Strong — full container boundary. Each agent is sandboxed from others and from the worker. | Weak — process-level only. Agents share the worker's kernel and could theoretically interfere with each other. |
 | **Requirements** | Docker socket access or a sidecar Docker daemon. Adds complexity (privileged mode or alternatives like sysbox). | Minimal — just filesystem access. Simpler to set up. |
 | **Cleanup** | Destroy the container. Clean and reliable. | Delete the working directory. Risk of leftover processes or temp files. |
-| **Best for** | Production / security-sensitive customers. | Development, quick iteration, or trusted environments. |
+| **Best for** | Production / security-sensitive users. | Development, quick iteration, or trusted environments. |
 
 The DinD approach is the stronger default for production. The working directory mode is useful for simpler setups or during development of the platform itself.
 
@@ -163,10 +163,10 @@ This gives near-real-time log visibility without requiring the agent itself to k
 
 - **Task schema** — what metadata does a task carry? Just a description, or structured fields like target files, acceptance criteria, test commands?
 - **Retry / failure handling** — if an agent fails mid-task, do we retry automatically? How many times? Do we resume or start fresh?
-- **Concurrency** — how many agents can a single worker run in parallel? Is this configurable per customer?
+- **Concurrency** — how many agents can a single worker run in parallel? Is this configurable per user?
 - **Agent framework** — what specific LLM and tooling framework powers the agent? Is this pluggable?
 - **Git workflow** — do we enforce a branch naming convention? Who owns the PR template? Do we auto-request reviewers?
 - **Security** — how do we handle secrets the agent might need (e.g. API keys for external services)? Are these injected into the agent's environment?
 - **Observability** — beyond logs, do we want metrics (agent duration, token usage, success rate)?
 - **Multi-repo tasks** — can a single task span changes across multiple repositories?
-- **Customer onboarding** — what's the minimal setup for a new customer? Docker image pull + config file + API key?
+- **User onboarding** — what's the minimal setup for a new user? Docker image pull + config file + API key?

@@ -5,3 +5,5 @@ bin/
 tmp/
 local/
 dist/
+
+.env

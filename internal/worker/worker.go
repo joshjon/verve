@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/joshjon/kit/log"
 )
 
 // Config holds the worker configuration
@@ -22,6 +23,7 @@ type Config struct {
 	ClaudeModel        string // Model to use (haiku, sonnet, opus) - defaults to haiku
 	AgentImage         string // Docker image for agent - defaults to verve-agent:latest
 	MaxConcurrentTasks int    // Maximum concurrent tasks (default: 1)
+	DryRun             bool   // Skip Claude and make a dummy change instead
 }
 
 type Task struct {
@@ -34,6 +36,7 @@ type Worker struct {
 	config       Config
 	docker       *DockerRunner
 	client       *http.Client
+	logger       log.Logger
 	pollInterval time.Duration
 
 	// Concurrency control
@@ -44,8 +47,8 @@ type Worker struct {
 	activeMu      sync.Mutex
 }
 
-func New(cfg Config) (*Worker, error) {
-	docker, err := NewDockerRunner(cfg.AgentImage)
+func New(cfg Config, logger log.Logger) (*Worker, error) {
+	docker, err := NewDockerRunner(cfg.AgentImage, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +63,7 @@ func New(cfg Config) (*Worker, error) {
 		config:        cfg,
 		docker:        docker,
 		client:        &http.Client{Timeout: 60 * time.Second},
+		logger:        logger,
 		pollInterval:  5 * time.Second,
 		maxConcurrent: maxConcurrent,
 		semaphore:     make(chan struct{}, maxConcurrent),
@@ -71,21 +75,20 @@ func (w *Worker) Close() error {
 }
 
 func (w *Worker) Run(ctx context.Context) error {
-	log.Println("Worker starting...")
-	log.Printf("Max concurrent tasks: %d", w.maxConcurrent)
+	w.logger.Info("worker starting", "max_concurrent", w.maxConcurrent)
 
 	// Ensure agent image exists
 	if err := w.docker.EnsureImage(ctx); err != nil {
 		return err
 	}
-	log.Printf("Agent image verified: %s", w.docker.AgentImage())
+	w.logger.Info("agent image verified", "image", w.docker.AgentImage())
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Worker shutting down, waiting for active tasks...")
+			w.logger.Info("worker shutting down, waiting for active tasks")
 			w.wg.Wait()
-			log.Println("All tasks completed, worker stopped")
+			w.logger.Info("all tasks completed, worker stopped")
 			return ctx.Err()
 		default:
 		}
@@ -104,7 +107,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		if err != nil {
 			// Release slot on error
 			<-w.semaphore
-			log.Printf("Error polling for task: %v", err)
+			w.logger.Error("error polling for task", "error", err)
 			time.Sleep(w.pollInterval)
 			continue
 		}
@@ -121,7 +124,12 @@ func (w *Worker) Run(ctx context.Context) error {
 		activeCount := w.activeTasks
 		w.activeMu.Unlock()
 
-		log.Printf("Claimed task %s (%d/%d active): %s", task.ID, activeCount, w.maxConcurrent, task.Description)
+		w.logger.Info("claimed task",
+			"task_id", task.ID,
+			"active", activeCount,
+			"max_concurrent", w.maxConcurrent,
+			"description", task.Description,
+		)
 
 		// Execute task - use goroutine only if concurrent execution is enabled
 		if w.maxConcurrent > 1 {
@@ -254,11 +262,13 @@ func (ls *logStreamer) flush() {
 
 	// Send to API server
 	if err := ls.worker.sendLogs(ls.ctx, ls.taskID, toSend); err != nil {
-		log.Printf("Failed to send logs: %v", err)
+		ls.worker.logger.Error("failed to send logs", "task_id", ls.taskID, "error", err)
 	}
 }
 
 func (w *Worker) executeTask(ctx context.Context, task *Task) {
+	taskLogger := w.logger.With("task_id", task.ID)
+
 	// Create log streamer for real-time log streaming
 	streamer := newLogStreamer(ctx, w, task.ID)
 
@@ -269,7 +279,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 
 	// Log callback - called from Docker log streaming goroutine
 	onLog := func(line string) {
-		log.Printf("[agent] %s", line)
+		taskLogger.Debug("agent output", "line", line)
 		streamer.AddLine(line)
 
 		// Parse PR marker
@@ -284,7 +294,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 				prURL = prInfo.URL
 				prNumber = prInfo.Number
 				prMu.Unlock()
-				log.Printf("[worker] Captured PR URL: %s (#%d)", prURL, prNumber)
+				taskLogger.Info("captured PR", "url", prURL, "number", prNumber)
 			}
 		}
 	}
@@ -297,6 +307,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 		GitHubRepo:      w.config.GitHubRepo,
 		AnthropicAPIKey: w.config.AnthropicAPIKey,
 		ClaudeModel:     w.config.ClaudeModel,
+		DryRun:          w.config.DryRun,
 	}
 
 	// Run the agent with streaming logs
@@ -313,13 +324,13 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 
 	// Report completion with PR info
 	if result.Error != nil {
-		log.Printf("Task %s failed with error: %v", task.ID, result.Error)
+		taskLogger.Error("task failed", "error", result.Error)
 		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0)
 	} else if result.Success {
-		log.Printf("Task %s completed successfully", task.ID)
+		taskLogger.Info("task completed successfully")
 		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber)
 	} else {
-		log.Printf("Task %s failed with exit code %d", task.ID, result.ExitCode)
+		taskLogger.Error("task failed", "exit_code", result.ExitCode)
 		w.completeTask(ctx, task.ID, false, fmt.Sprintf("exit code %d", result.ExitCode), "", 0)
 	}
 }

@@ -1,0 +1,41 @@
+-- name: CreateTask :exec
+INSERT INTO task (id, description, status, logs, depends_on, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: ReadTask :one
+SELECT * FROM task WHERE id = $1;
+
+-- name: ListTasks :many
+SELECT * FROM task ORDER BY created_at DESC;
+
+-- name: ListPendingTasks :many
+SELECT * FROM task WHERE status = 'pending' ORDER BY created_at ASC;
+
+-- name: AppendTaskLogs :exec
+UPDATE task SET logs = logs || @logs::TEXT[], updated_at = NOW()
+WHERE id = @id;
+
+-- name: UpdateTaskStatus :exec
+UPDATE task SET status = $2, updated_at = NOW()
+WHERE id = $1;
+
+-- name: SetTaskPullRequest :exec
+UPDATE task SET pull_request_url = $2, pr_number = $3, status = 'review', updated_at = NOW()
+WHERE id = $1;
+
+-- name: ListTasksInReview :many
+SELECT * FROM task WHERE status = 'review';
+
+-- name: CloseTask :exec
+UPDATE task SET status = 'closed', close_reason = $2, updated_at = NOW()
+WHERE id = $1;
+
+-- name: TaskExists :one
+SELECT EXISTS(SELECT 1 FROM task WHERE id = $1);
+
+-- name: ReadTaskStatus :one
+SELECT status FROM task WHERE id = $1;
+
+-- name: ClaimTask :execrows
+UPDATE task SET status = 'running', updated_at = NOW()
+WHERE id = $1 AND status = 'pending';

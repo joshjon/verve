@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-worker build-agent build-agent-no-cache run-server run-server-pg run-worker test-task clean tidy ui-install ui-dev ui-build db-up db-down db-logs
+.PHONY: all build build-server build-worker build-agent build-agent-no-cache run-server run-server-pg run-worker test-task clean tidy generate up down logs ui-install ui-dev ui-build
 
 # Build all components
 all: build-agent build
@@ -19,26 +19,49 @@ build-agent:
 build-agent-no-cache:
 	docker build --no-cache -t verve-agent:latest ./agent
 
-# Run components
+# Generate sqlc code
+generate:
+	go generate ./internal/postgres/... ./internal/sqlite/...
+
+# Run locally (without Docker)
 run-server: build-server
 	./bin/server
+
+run-server-pg: build-server
+	docker compose up -d postgres
+	@echo "Waiting for postgres..."
+	@sleep 2
+	DATABASE_URL=postgres POSTGRES_USER=verve POSTGRES_PASSWORD=verve POSTGRES_HOST_PORT=localhost:5432 POSTGRES_DATABASE=verve ./bin/server
 
 run-worker: build-worker
 	./bin/worker
 
+# Docker Compose (full stack)
+up:
+	docker compose up -d
+
+up-build:
+	docker compose up -d --build
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f
+
 # Create a test task
 test-task:
-	curl -X POST http://localhost:8080/api/v1/tasks \
+	curl -X POST http://localhost:7400/api/v1/tasks \
 		-H "Content-Type: application/json" \
 		-d '{"description":"Init project with hello world main function using a plain bash script"}'
 
 # List all tasks
 list-tasks:
-	curl -s http://localhost:8080/api/v1/tasks | jq .
+	curl -s http://localhost:7400/api/v1/tasks | jq .
 
 # Get task by ID (usage: make get-task ID=tsk_xxx)
 get-task:
-	curl -s http://localhost:8080/api/v1/tasks/$(ID) | jq .
+	curl -s http://localhost:7400/api/v1/tasks/$(ID) | jq .
 
 # Tidy dependencies
 tidy:
@@ -59,17 +82,3 @@ ui-dev:
 
 ui-build:
 	cd ui && pnpm build
-
-# Database commands
-db-up:
-	docker compose up -d postgres
-
-db-down:
-	docker compose down
-
-db-logs:
-	docker compose logs -f postgres
-
-# Run server with PostgreSQL
-run-server-pg: build-server db-up
-	DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable" ./bin/server
