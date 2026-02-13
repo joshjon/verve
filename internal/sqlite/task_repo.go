@@ -18,6 +18,7 @@ var _ task.Repository = (*TaskRepository)(nil)
 
 // TaskRepository implements task.Repository using SQLite.
 type TaskRepository struct {
+	dbtx sqlc.DBTX
 	db   *sqlc.Queries
 	txer *tx.SQLiteRepositoryTxer[task.Repository]
 }
@@ -25,11 +26,13 @@ type TaskRepository struct {
 // NewTaskRepository creates a new TaskRepository backed by the given SQLite DB.
 func NewTaskRepository(db DB) *TaskRepository {
 	return &TaskRepository{
-		db: sqlc.New(db),
+		dbtx: db,
+		db:   sqlc.New(db),
 		txer: tx.NewSQLiteRepositoryTxer(db, tx.SQLiteRepositoryTxerConfig[task.Repository]{
 			Timeout: tx.DefaultTimeout,
 			WithTxFunc: func(repo task.Repository, txer *tx.SQLiteRepositoryTxer[task.Repository], sqlTx *sql.Tx) task.Repository {
 				cpy := *repo.(*TaskRepository)
+				cpy.dbtx = sqlTx
 				cpy.db = cpy.db.WithTx(sqlTx)
 				cpy.txer = txer
 				return task.Repository(&cpy)
@@ -94,6 +97,24 @@ func (r *TaskRepository) ReadTaskLogs(ctx context.Context, id task.TaskID) ([]st
 		logs = []string{}
 	}
 	return logs, nil
+}
+
+func (r *TaskRepository) StreamTaskLogs(ctx context.Context, id task.TaskID, fn func(lines []string) error) error {
+	rows, err := r.dbtx.QueryContext(ctx, "SELECT lines FROM task_log WHERE task_id = ? ORDER BY id", id.String())
+	if err != nil {
+		return tagTaskErr(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var linesJSON string
+		if err := rows.Scan(&linesJSON); err != nil {
+			return err
+		}
+		if err := fn(unmarshalJSONStrings(linesJSON)); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func (r *TaskRepository) UpdateTaskStatus(ctx context.Context, id task.TaskID, status task.Status) error {

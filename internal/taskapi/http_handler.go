@@ -33,6 +33,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/sync", h.SyncAllTasks)
 	g.GET("/tasks/poll", h.PollTask)
 	g.GET("/tasks/:id", h.GetTask)
+	g.GET("/tasks/:id/logs", h.StreamLogs)
 	g.POST("/tasks/:id/logs", h.AppendLogs)
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
@@ -72,19 +73,10 @@ func (h *HTTPHandler) GetTask(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
 	}
 
-	ctx := c.Request().Context()
-
-	t, err := h.store.ReadTask(ctx, id)
+	t, err := h.store.ReadTask(c.Request().Context(), id)
 	if err != nil {
 		return jsonError(c, err)
 	}
-
-	logs, err := h.store.ReadTaskLogs(ctx, id)
-	if err != nil {
-		return jsonError(c, err)
-	}
-	t.Logs = logs
-
 	return c.JSON(http.StatusOK, t)
 }
 
@@ -255,6 +247,59 @@ func (h *HTTPHandler) CloseTask(c echo.Context) error {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, t)
+}
+
+// StreamLogs handles GET /tasks/:id/logs as a Server-Sent Events stream.
+// It streams historical log batches from the database one at a time, then
+// subscribes to the broker for live log events.
+func (h *HTTPHandler) StreamLogs(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	w := c.Response()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	ctx := c.Request().Context()
+
+	// Subscribe to broker BEFORE reading historical logs to avoid gaps.
+	ch := h.store.Subscribe()
+	defer h.store.Unsubscribe(ch)
+
+	// Stream existing log batches from the database one row at a time.
+	err = h.store.StreamTaskLogs(ctx, id, func(lines []string) error {
+		return writeSSE(w, task.EventLogsAppended, task.Event{
+			Type:   task.EventLogsAppended,
+			TaskID: id,
+			Logs:   lines,
+		})
+	})
+	if err != nil {
+		return nil
+	}
+
+	// Signal that all historical logs have been sent.
+	if err := writeSSE(w, "logs_done", map[string]any{}); err != nil {
+		return nil
+	}
+
+	// Stream live log events from the broker.
+	for {
+		select {
+		case event := <-ch:
+			if event.Type == task.EventLogsAppended && event.TaskID == id {
+				if err := writeSSE(w, event.Type, event); err != nil {
+					return nil
+				}
+			}
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 // Events handles GET /events as a Server-Sent Events stream.

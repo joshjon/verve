@@ -133,6 +133,12 @@ func (s *Store) ReadTaskLogs(ctx context.Context, id TaskID) ([]string, error) {
 	return s.repo.ReadTaskLogs(ctx, id)
 }
 
+// StreamTaskLogs iterates log batches from the database one row at a time,
+// calling fn for each batch. This avoids loading all logs into memory.
+func (s *Store) StreamTaskLogs(ctx context.Context, id TaskID, fn func(lines []string) error) error {
+	return s.repo.StreamTaskLogs(ctx, id, fn)
+}
+
 // AppendTaskLogs appends log lines to a task.
 func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error {
 	if err := s.repo.AppendTaskLogs(ctx, id, logs); err != nil {

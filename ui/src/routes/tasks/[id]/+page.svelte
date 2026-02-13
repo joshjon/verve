@@ -35,6 +35,7 @@
 	});
 
 	let task = $state<Task | null>(null);
+	let logs = $state<string[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let syncing = $state(false);
@@ -99,10 +100,9 @@
 
 	// Auto-scroll logs when new logs arrive
 	$effect(() => {
-		if (task?.logs && task.logs.length > lastLogCount) {
-			lastLogCount = task.logs.length;
+		if (logs.length > lastLogCount) {
+			lastLogCount = logs.length;
 			if (autoScroll && logsContainer) {
-				// Use requestAnimationFrame to ensure DOM has updated
 				requestAnimationFrame(() => {
 					if (logsContainer) {
 						logsContainer.scrollTop = logsContainer.scrollHeight;
@@ -122,29 +122,47 @@
 	onMount(() => {
 		loadTask();
 
+		// Task metadata updates via global SSE.
 		const es = new EventSource(client.eventsURL());
-
-		es.addEventListener('init', () => {
-			// On reconnect, re-fetch full task to catch any missed logs.
-			loadTask();
-		});
 
 		es.addEventListener('task_updated', (e) => {
 			const event = JSON.parse(e.data);
 			if (event.task?.id === taskId && task) {
-				// Preserve existing logs since SSE events omit them.
 				task = { ...event.task, logs: task.logs };
 			}
 		});
 
-		es.addEventListener('logs_appended', (e) => {
+		// Log streaming via dedicated SSE endpoint.
+		// Uses double-buffering so reconnects replace logs without flashing.
+		let logBuffer: string[] = [];
+		let historicalDone = false;
+
+		const logsES = new EventSource(client.taskLogsURL(taskId));
+
+		logsES.addEventListener('open', () => {
+			logBuffer = [];
+			historicalDone = false;
+		});
+
+		logsES.addEventListener('logs_appended', (e) => {
 			const event = JSON.parse(e.data);
-			if (event.task_id === taskId && task) {
-				task = { ...task, logs: [...(task.logs || []), ...event.logs] };
+			if (historicalDone) {
+				logs = [...logs, ...event.logs];
+			} else {
+				logBuffer.push(...event.logs);
 			}
 		});
 
-		return () => es.close();
+		logsES.addEventListener('logs_done', () => {
+			logs = logBuffer;
+			logBuffer = [];
+			historicalDone = true;
+		});
+
+		return () => {
+			es.close();
+			logsES.close();
+		};
 	});
 
 	async function loadTask() {
@@ -426,8 +444,8 @@
 						onscroll={handleLogsScroll}
 						class="h-[400px] w-full rounded-lg border bg-zinc-950 p-4 overflow-y-auto"
 					>
-						{#if task.logs && task.logs.length > 0}
-							<pre class="text-green-400 text-xs font-mono whitespace-pre-wrap leading-relaxed">{task.logs.join('\n')}</pre>
+						{#if logs.length > 0}
+							<pre class="text-green-400 text-xs font-mono whitespace-pre-wrap leading-relaxed">{logs.join('\n')}</pre>
 						{:else}
 							<div class="flex flex-col items-center justify-center h-full text-muted-foreground">
 								<Terminal class="w-8 h-8 opacity-20 mb-2" />

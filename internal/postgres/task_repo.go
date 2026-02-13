@@ -19,6 +19,7 @@ var _ task.Repository = (*TaskRepository)(nil)
 
 // TaskRepository implements task.Repository using PostgreSQL.
 type TaskRepository struct {
+	dbtx sqlc.DBTX
 	db   *sqlc.Queries
 	txer *tx.PGXRepositoryTxer[task.Repository]
 }
@@ -26,11 +27,13 @@ type TaskRepository struct {
 // NewTaskRepository creates a new TaskRepository backed by the given pgx pool.
 func NewTaskRepository(pool *pgxpool.Pool) *TaskRepository {
 	return &TaskRepository{
-		db: sqlc.New(pool),
+		dbtx: pool,
+		db:   sqlc.New(pool),
 		txer: tx.NewPGXRepositoryTxer(pool, tx.PGXRepositoryTxerConfig[task.Repository]{
 			Timeout: tx.DefaultTimeout,
 			WithTxFunc: func(repo task.Repository, txer *tx.PGXRepositoryTxer[task.Repository], pgxTx pgx.Tx) task.Repository {
 				cpy := *repo.(*TaskRepository)
+				cpy.dbtx = pgxTx
 				cpy.db = cpy.db.WithTx(pgxTx)
 				cpy.txer = txer
 				return task.Repository(&cpy)
@@ -95,6 +98,24 @@ func (r *TaskRepository) ReadTaskLogs(ctx context.Context, id task.TaskID) ([]st
 		logs = []string{}
 	}
 	return logs, nil
+}
+
+func (r *TaskRepository) StreamTaskLogs(ctx context.Context, id task.TaskID, fn func(lines []string) error) error {
+	rows, err := r.dbtx.Query(ctx, "SELECT lines FROM task_log WHERE task_id = $1 ORDER BY id", id.String())
+	if err != nil {
+		return tagTaskErr(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lines []string
+		if err := rows.Scan(&lines); err != nil {
+			return err
+		}
+		if err := fn(lines); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func (r *TaskRepository) UpdateTaskStatus(ctx context.Context, id task.TaskID, status task.Status) error {
