@@ -17,11 +17,11 @@ type Store struct {
 	pendingCh chan struct{}
 }
 
-// NewStore creates a new Store backed by the given Repository.
-func NewStore(repo Repository) *Store {
+// NewStore creates a new Store backed by the given Repository and Broker.
+func NewStore(repo Repository, broker *Broker) *Store {
 	return &Store{
 		repo:      repo,
-		broker:    NewBroker(),
+		broker:    broker,
 		pendingCh: make(chan struct{}, 1),
 	}
 }
@@ -60,7 +60,7 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 
 	t := *task
 	t.Logs = nil
-	s.broker.Publish(Event{Type: EventTaskCreated, Task: &t})
+	s.broker.Publish(ctx, Event{Type: EventTaskCreated, Task: &t})
 	return nil
 }
 
@@ -105,7 +105,7 @@ func (s *Store) ClaimPendingTask(ctx context.Context) (*Task, error) {
 	if err == nil && claimed != nil {
 		t := *claimed
 		t.Logs = nil
-		s.broker.Publish(Event{Type: EventTaskUpdated, Task: &t})
+		s.broker.Publish(ctx, Event{Type: EventTaskUpdated, Task: &t})
 	}
 	return claimed, err
 }
@@ -133,7 +133,7 @@ func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) er
 	if err := s.repo.AppendTaskLogs(ctx, id, logs); err != nil {
 		return err
 	}
-	s.broker.Publish(Event{Type: EventLogsAppended, TaskID: id, Logs: logs})
+	s.broker.Publish(ctx, Event{Type: EventLogsAppended, TaskID: id, Logs: logs})
 	return nil
 }
 
@@ -191,5 +191,5 @@ func (s *Store) publishTaskUpdated(ctx context.Context, id TaskID) {
 		return
 	}
 	t.Logs = nil
-	s.broker.Publish(Event{Type: EventTaskUpdated, Task: t})
+	s.broker.Publish(ctx, Event{Type: EventTaskUpdated, Task: t})
 }

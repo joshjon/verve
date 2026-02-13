@@ -38,10 +38,10 @@ func initStore(ctx context.Context, logger log.Logger, cfg Config) (*task.Store,
 		logger.Warn("DATABASE_URL not set, using in-memory SQLite (data will not persist)")
 		return initSQLite(ctx)
 	}
-	return initPostgres(ctx, cfg.Postgres)
+	return initPostgres(ctx, logger, cfg.Postgres)
 }
 
-func initPostgres(ctx context.Context, cfg PostgresConfig) (*task.Store, func(), error) {
+func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig) (*task.Store, func(), error) {
 	pool, err := pgdb.Dial(ctx, cfg.User, cfg.Password, cfg.HostPort, cfg.Database)
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial postgres: %w", err)
@@ -52,8 +52,12 @@ func initPostgres(ctx context.Context, cfg PostgresConfig) (*task.Store, func(),
 		return nil, nil, fmt.Errorf("migrate postgres: %w", err)
 	}
 
+	notifier := postgres.NewEventNotifier(pool, logger)
+	broker := task.NewBroker(notifier)
+	go notifier.Listen(ctx, broker)
+
 	repo := postgres.NewTaskRepository(pool)
-	store := task.NewStore(repo)
+	store := task.NewStore(repo, broker)
 	return store, func() { pool.Close() }, nil
 }
 
@@ -68,8 +72,9 @@ func initSQLite(ctx context.Context) (*task.Store, func(), error) {
 		return nil, nil, fmt.Errorf("migrate sqlite: %w", err)
 	}
 
+	broker := task.NewBroker(nil)
 	repo := sqlite.NewTaskRepository(db)
-	store := task.NewStore(repo)
+	store := task.NewStore(repo, broker)
 	return store, func() { db.Close() }, nil
 }
 
