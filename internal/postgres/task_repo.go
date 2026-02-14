@@ -43,16 +43,26 @@ func NewTaskRepository(pool *pgxpool.Pool) *TaskRepository {
 }
 
 func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
+	var acceptanceCriteria *string
+	if t.AcceptanceCriteria != "" {
+		acceptanceCriteria = &t.AcceptanceCriteria
+	}
+	var maxCostUSD *float64
+	if t.MaxCostUSD > 0 {
+		maxCostUSD = &t.MaxCostUSD
+	}
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
-		ID:          t.ID.String(),
-		RepoID:      t.RepoID,
-		Description: t.Description,
-		Status:      sqlc.TaskStatus(t.Status),
-		DependsOn:   t.DependsOn,
-		Attempt:     int32(t.Attempt),
-		MaxAttempts: int32(t.MaxAttempts),
-		CreatedAt:   pgTimestamptz(t.CreatedAt),
-		UpdatedAt:   pgTimestamptz(t.UpdatedAt),
+		ID:                 t.ID.String(),
+		RepoID:             t.RepoID,
+		Description:        t.Description,
+		Status:             sqlc.TaskStatus(t.Status),
+		DependsOn:          t.DependsOn,
+		Attempt:            int32(t.Attempt),
+		MaxAttempts:        int32(t.MaxAttempts),
+		AcceptanceCriteria: acceptanceCriteria,
+		MaxCostUsd:         maxCostUSD,
+		CreatedAt:          pgTimestamptz(t.CreatedAt),
+		UpdatedAt:          pgTimestamptz(t.UpdatedAt),
 	})
 	return tagTaskErr(err)
 }
@@ -206,6 +216,34 @@ func (r *TaskRepository) RetryTask(ctx context.Context, id task.TaskID, reason s
 		RetryReason: &reason,
 	})
 	return rows > 0, tagTaskErr(err)
+}
+
+func (r *TaskRepository) SetAgentStatus(ctx context.Context, id task.TaskID, status string) error {
+	return tagTaskErr(r.db.SetAgentStatus(ctx, sqlc.SetAgentStatusParams{
+		ID:          id.String(),
+		AgentStatus: &status,
+	}))
+}
+
+func (r *TaskRepository) SetRetryContext(ctx context.Context, id task.TaskID, retryCtx string) error {
+	return tagTaskErr(r.db.SetRetryContext(ctx, sqlc.SetRetryContextParams{
+		ID:           id.String(),
+		RetryContext: &retryCtx,
+	}))
+}
+
+func (r *TaskRepository) AddCost(ctx context.Context, id task.TaskID, costUSD float64) error {
+	return tagTaskErr(r.db.AddTaskCost(ctx, sqlc.AddTaskCostParams{
+		ID:      id.String(),
+		CostUsd: costUSD,
+	}))
+}
+
+func (r *TaskRepository) SetConsecutiveFailures(ctx context.Context, id task.TaskID, count int) error {
+	return tagTaskErr(r.db.SetConsecutiveFailures(ctx, sqlc.SetConsecutiveFailuresParams{
+		ID:                  id.String(),
+		ConsecutiveFailures: int32(count),
+	}))
 }
 
 func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {

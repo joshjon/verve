@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 )
 
 // GitHubRepo represents a repository returned by the GitHub API.
@@ -125,8 +127,10 @@ const (
 
 // CheckResult holds the result of a PR check query.
 type CheckResult struct {
-	Status  CheckStatus
-	Summary string // Human-readable summary of failures
+	Status       CheckStatus
+	Summary      string  // Human-readable summary of failures
+	FailedRunIDs []int64 // GitHub Actions job IDs for failed check runs
+	FailedNames  []string
 }
 
 // GetPRCheckStatus returns the combined check status for a PR's head commit.
@@ -181,6 +185,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	var checkRuns struct {
 		TotalCount int `json:"total_count"`
 		CheckRuns  []struct {
+			ID         int64   `json:"id"`
 			Name       string  `json:"name"`
 			Status     string  `json:"status"`
 			Conclusion *string `json:"conclusion"`
@@ -220,7 +225,8 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	}
 
 	// Combine results: check runs + commit statuses.
-	var failed []string
+	var failedNames []string
+	var failedRunIDs []int64
 	hasPending := false
 
 	for _, run := range checkRuns.CheckRuns {
@@ -229,7 +235,8 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 			continue
 		}
 		if run.Conclusion != nil && *run.Conclusion == "failure" {
-			failed = append(failed, run.Name)
+			failedNames = append(failedNames, run.Name)
+			failedRunIDs = append(failedRunIDs, run.ID)
 		}
 	}
 
@@ -237,14 +244,16 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 		if s.State == "pending" {
 			hasPending = true
 		} else if s.State == "failure" || s.State == "error" {
-			failed = append(failed, s.Context)
+			failedNames = append(failedNames, s.Context)
 		}
 	}
 
-	if len(failed) > 0 {
+	if len(failedNames) > 0 {
 		return &CheckResult{
-			Status:  CheckStatusFailure,
-			Summary: fmt.Sprintf("%s", failed),
+			Status:       CheckStatusFailure,
+			Summary:      fmt.Sprintf("%s", failedNames),
+			FailedRunIDs: failedRunIDs,
+			FailedNames:  failedNames,
 		}, nil
 	}
 	if hasPending {
@@ -295,6 +304,72 @@ func (c *Client) GetPRMergeability(ctx context.Context, owner, repo string, prNu
 		MergeableState: pr.MergeableState,
 		HasConflicts:   pr.MergeableState == "dirty",
 	}, nil
+}
+
+// GetFailedCheckLogs fetches the log output of failed check runs for a PR.
+// Returns a combined, truncated string of failed job logs (~4KB max).
+func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string, prNumber int) (string, error) {
+	checkResult, err := c.GetPRCheckStatus(ctx, owner, repoName, prNumber)
+	if err != nil {
+		return "", fmt.Errorf("get check status: %w", err)
+	}
+	if len(checkResult.FailedRunIDs) == 0 {
+		return "", nil
+	}
+
+	const maxTotalBytes = 4096
+	const maxLinesPerJob = 50
+	var parts []string
+	totalLen := 0
+
+	for i, jobID := range checkResult.FailedRunIDs {
+		if totalLen >= maxTotalBytes {
+			break
+		}
+
+		name := "unknown"
+		if i < len(checkResult.FailedNames) {
+			name = checkResult.FailedNames[i]
+		}
+
+		logURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/jobs/%d/logs", owner, repoName, jobID)
+		req, err := http.NewRequestWithContext(ctx, "GET", logURL, nil)
+		if err != nil {
+			continue
+		}
+		c.setHeaders(req)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024))
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			parts = append(parts, fmt.Sprintf("=== Failed: %s ===\n(could not fetch logs: HTTP %d)", name, resp.StatusCode))
+			continue
+		}
+
+		// Take last N lines
+		lines := strings.Split(string(body), "\n")
+		if len(lines) > maxLinesPerJob {
+			lines = lines[len(lines)-maxLinesPerJob:]
+		}
+		tail := strings.Join(lines, "\n")
+
+		remaining := maxTotalBytes - totalLen
+		if len(tail) > remaining {
+			tail = tail[len(tail)-remaining:]
+		}
+
+		part := fmt.Sprintf("=== Failed: %s ===\n%s", name, tail)
+		parts = append(parts, part)
+		totalLen += len(part)
+	}
+
+	return strings.Join(parts, "\n\n"), nil
 }
 
 func (c *Client) setHeaders(req *http.Request) {

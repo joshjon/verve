@@ -23,7 +23,13 @@
 		RefreshCw,
 		X,
 		Calendar,
-		Loader2
+		Loader2,
+		Target,
+		DollarSign,
+		AlertTriangle,
+		ChevronDown,
+		ChevronRight,
+		Activity
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -45,6 +51,43 @@
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
+	let showRetryContext = $state(false);
+
+	interface AgentStatusParsed {
+		files_modified?: string[];
+		tests_status?: string;
+		confidence?: string;
+		blockers?: string[];
+		criteria_met?: string[];
+		notes?: string;
+	}
+
+	const parsedAgentStatus = $derived.by(() => {
+		if (!task?.agent_status) return null;
+		try {
+			return JSON.parse(task.agent_status) as AgentStatusParsed;
+		} catch {
+			return null;
+		}
+	});
+
+	const confidenceColor = $derived.by(() => {
+		if (!parsedAgentStatus?.confidence) return '';
+		switch (parsedAgentStatus.confidence) {
+			case 'high':
+				return 'bg-green-500';
+			case 'medium':
+				return 'bg-amber-500';
+			case 'low':
+				return 'bg-red-500';
+			default:
+				return 'bg-gray-500';
+		}
+	});
+
+	function formatCost(cost: number): string {
+		return `$${cost.toFixed(2)}`;
+	}
 
 	const taskId = $derived($page.params.id);
 
@@ -326,11 +369,36 @@
 						<Card.Title class="text-base flex items-center gap-2">
 							<RefreshCw class="w-4 h-4 text-amber-500" />
 							Retry Attempt {task.attempt} of {task.max_attempts}
+							{#if task.consecutive_failures >= 2}
+								<Badge class="bg-red-500 text-white gap-1 text-xs">
+									<AlertTriangle class="w-3 h-3" />
+									{task.consecutive_failures} consecutive
+								</Badge>
+							{/if}
 						</Card.Title>
 					</Card.Header>
-					<Card.Content>
+					<Card.Content class="space-y-3">
 						{#if task.retry_reason}
 							<p class="text-sm text-muted-foreground">{task.retry_reason}</p>
+						{/if}
+						{#if task.retry_context}
+							<div>
+								<button
+									type="button"
+									class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+									onclick={() => (showRetryContext = !showRetryContext)}
+								>
+									{#if showRetryContext}
+										<ChevronDown class="w-4 h-4" />
+									{:else}
+										<ChevronRight class="w-4 h-4" />
+									{/if}
+									CI Failure Logs
+								</button>
+								{#if showRetryContext}
+									<pre class="mt-2 text-xs font-mono bg-zinc-950 text-green-400 rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap">{task.retry_context}</pre>
+								{/if}
+							</div>
 						{/if}
 					</Card.Content>
 				</Card.Root>
@@ -350,6 +418,21 @@
 					</div>
 				</Card.Content>
 			</Card.Root>
+
+			<!-- Acceptance Criteria -->
+			{#if task.acceptance_criteria}
+				<Card.Root class="border-blue-500/30 bg-blue-500/5">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<Target class="w-4 h-4 text-blue-500" />
+							Acceptance Criteria
+						</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<p class="whitespace-pre-wrap text-sm text-muted-foreground">{task.acceptance_criteria}</p>
+					</Card.Content>
+				</Card.Root>
+			{/if}
 
 			<!-- Close Reason -->
 			{#if task.close_reason}
@@ -436,6 +519,77 @@
 				</Card.Root>
 			{/if}
 
+			<!-- Agent Status -->
+			{#if parsedAgentStatus}
+				<Card.Root class="border-indigo-500/30 bg-indigo-500/5">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<Activity class="w-4 h-4 text-indigo-500" />
+							Agent Status
+							{#if parsedAgentStatus.confidence}
+								<Badge class="{confidenceColor} text-white text-xs">
+									{parsedAgentStatus.confidence} confidence
+								</Badge>
+							{/if}
+							{#if parsedAgentStatus.tests_status}
+								<Badge variant={parsedAgentStatus.tests_status === 'pass' ? 'default' : 'destructive'} class="text-xs gap-1">
+									{#if parsedAgentStatus.tests_status === 'pass'}
+										<CheckCircle class="w-3 h-3" />
+									{:else if parsedAgentStatus.tests_status === 'fail'}
+										<XCircle class="w-3 h-3" />
+									{/if}
+									Tests: {parsedAgentStatus.tests_status}
+								</Badge>
+							{/if}
+						</Card.Title>
+					</Card.Header>
+					<Card.Content class="space-y-3">
+						{#if parsedAgentStatus.criteria_met && parsedAgentStatus.criteria_met.length > 0}
+							<div>
+								<p class="text-sm font-medium mb-1.5">Criteria Met</p>
+								<div class="flex flex-wrap gap-1.5">
+									{#each parsedAgentStatus.criteria_met as criterion}
+										<Badge variant="secondary" class="gap-1 text-xs">
+											<CheckCircle class="w-3 h-3 text-green-500" />
+											{criterion}
+										</Badge>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						{#if parsedAgentStatus.blockers && parsedAgentStatus.blockers.length > 0}
+							<div>
+								<p class="text-sm font-medium mb-1.5">Blockers</p>
+								<div class="flex flex-wrap gap-1.5">
+									{#each parsedAgentStatus.blockers as blocker}
+										<Badge variant="destructive" class="gap-1 text-xs">
+											<AlertTriangle class="w-3 h-3" />
+											{blocker}
+										</Badge>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						{#if parsedAgentStatus.files_modified && parsedAgentStatus.files_modified.length > 0}
+							<div>
+								<p class="text-sm font-medium mb-1.5">Files Modified</p>
+								<div class="flex flex-wrap gap-1.5">
+									{#each parsedAgentStatus.files_modified as file}
+										<span class="text-xs font-mono bg-muted px-2 py-1 rounded">{file}</span>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						{#if parsedAgentStatus.notes}
+							<div>
+								<p class="text-sm font-medium mb-1">Notes</p>
+								<p class="text-sm text-muted-foreground">{parsedAgentStatus.notes}</p>
+							</div>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+			{/if}
+
 			<!-- Logs -->
 			<Card.Root>
 				<Card.Header class="pb-3">
@@ -479,6 +633,15 @@
 					<Clock class="w-4 h-4" />
 					Last updated: {formatDate(task.updated_at)}
 				</span>
+				{#if task.cost_usd > 0}
+					<span class="flex items-center gap-1">
+						<DollarSign class="w-4 h-4" />
+						Cost: {formatCost(task.cost_usd)}
+						{#if task.max_cost_usd}
+							<span class="text-muted-foreground">/ {formatCost(task.max_cost_usd)}</span>
+						{/if}
+					</span>
+				{/if}
 			</div>
 		</div>
 	{/if}

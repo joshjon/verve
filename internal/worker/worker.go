@@ -27,13 +27,18 @@ type Config struct {
 }
 
 type Task struct {
-	ID          string `json:"id"`
-	RepoID      string `json:"repo_id"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	Attempt     int    `json:"attempt"`
-	MaxAttempts int    `json:"max_attempts"`
-	RetryReason string `json:"retry_reason,omitempty"`
+	ID                 string  `json:"id"`
+	RepoID             string  `json:"repo_id"`
+	Description        string  `json:"description"`
+	Status             string  `json:"status"`
+	Attempt            int     `json:"attempt"`
+	MaxAttempts        int     `json:"max_attempts"`
+	RetryReason        string  `json:"retry_reason,omitempty"`
+	AcceptanceCriteria string  `json:"acceptance_criteria,omitempty"`
+	RetryContext       string  `json:"retry_context,omitempty"`
+	AgentStatus        string  `json:"agent_status,omitempty"`
+	CostUSD            float64 `json:"cost_usd"`
+	MaxCostUSD         float64 `json:"max_cost_usd,omitempty"`
 }
 
 type apiRepo struct {
@@ -341,10 +346,12 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	// Create log streamer for real-time log streaming
 	streamer := newLogStreamer(ctx, w, task.ID)
 
-	// Track PR info if we see the marker
+	// Track PR info and agent markers
 	var prURL string
 	var prNumber int
-	var prMu sync.Mutex
+	var agentStatus string
+	var costUSD float64
+	var markerMu sync.Mutex
 
 	// Log callback - called from Docker log streaming goroutine
 	onLog := func(line string) {
@@ -359,11 +366,32 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 				Number int    `json:"number"`
 			}
 			if err := json.Unmarshal([]byte(jsonStr), &prInfo); err == nil {
-				prMu.Lock()
+				markerMu.Lock()
 				prURL = prInfo.URL
 				prNumber = prInfo.Number
-				prMu.Unlock()
+				markerMu.Unlock()
 				taskLogger.Info("captured PR", "url", prURL, "number", prNumber)
+			}
+		}
+
+		// Parse agent status marker
+		if strings.HasPrefix(line, "VERVE_STATUS:") {
+			statusJSON := strings.TrimPrefix(line, "VERVE_STATUS:")
+			markerMu.Lock()
+			agentStatus = statusJSON
+			markerMu.Unlock()
+			taskLogger.Info("captured agent status")
+		}
+
+		// Parse cost marker
+		if strings.HasPrefix(line, "VERVE_COST:") {
+			costStr := strings.TrimPrefix(line, "VERVE_COST:")
+			var cost float64
+			if _, err := fmt.Sscanf(costStr, "%f", &cost); err == nil {
+				markerMu.Lock()
+				costUSD = cost
+				markerMu.Unlock()
+				taskLogger.Info("captured cost", "cost_usd", cost)
 			}
 		}
 	}
@@ -372,21 +400,24 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	repoFullName := w.repoNames[task.RepoID]
 	if repoFullName == "" {
 		taskLogger.Error("unknown repo ID for task", "repo_id", task.RepoID)
-		w.completeTask(ctx, task.ID, false, fmt.Sprintf("unknown repo ID: %s", task.RepoID), "", 0)
+		w.completeTask(ctx, task.ID, false, fmt.Sprintf("unknown repo ID: %s", task.RepoID), "", 0, "", 0)
 		return
 	}
 
 	// Create agent config from worker config
 	agentCfg := AgentConfig{
-		TaskID:          task.ID,
-		TaskDescription: task.Description,
-		GitHubToken:     w.config.GitHubToken,
-		GitHubRepo:      repoFullName,
-		AnthropicAPIKey: w.config.AnthropicAPIKey,
-		ClaudeModel:     w.config.ClaudeModel,
-		DryRun:          w.config.DryRun,
-		Attempt:         task.Attempt,
-		RetryReason:     task.RetryReason,
+		TaskID:             task.ID,
+		TaskDescription:    task.Description,
+		GitHubToken:        w.config.GitHubToken,
+		GitHubRepo:         repoFullName,
+		AnthropicAPIKey:    w.config.AnthropicAPIKey,
+		ClaudeModel:        w.config.ClaudeModel,
+		DryRun:             w.config.DryRun,
+		Attempt:            task.Attempt,
+		RetryReason:        task.RetryReason,
+		AcceptanceCriteria: task.AcceptanceCriteria,
+		RetryContext:       task.RetryContext,
+		PreviousStatus:     task.AgentStatus,
 	}
 
 	// Run the agent with streaming logs
@@ -395,22 +426,24 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	// Stop the streamer and flush remaining logs
 	streamer.Stop()
 
-	// Get captured PR info
-	prMu.Lock()
+	// Get captured marker values
+	markerMu.Lock()
 	capturedPRURL := prURL
 	capturedPRNumber := prNumber
-	prMu.Unlock()
+	capturedAgentStatus := agentStatus
+	capturedCostUSD := costUSD
+	markerMu.Unlock()
 
-	// Report completion with PR info
+	// Report completion with PR info, agent status, and cost
 	if result.Error != nil {
 		taskLogger.Error("task failed", "error", result.Error)
-		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0)
+		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, capturedAgentStatus, capturedCostUSD)
 	} else if result.Success {
 		taskLogger.Info("task completed successfully")
-		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber)
+		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedAgentStatus, capturedCostUSD)
 	} else {
 		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		w.completeTask(ctx, task.ID, false, fmt.Sprintf("exit code %d", result.ExitCode), "", 0)
+		w.completeTask(ctx, task.ID, false, fmt.Sprintf("exit code %d", result.ExitCode), "", 0, capturedAgentStatus, capturedCostUSD)
 	}
 }
 
@@ -435,7 +468,7 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, logs []string) err
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int, agentStatus string, costUSD float64) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
@@ -443,6 +476,12 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	if prURL != "" {
 		payload["pull_request_url"] = prURL
 		payload["pr_number"] = prNumber
+	}
+	if agentStatus != "" {
+		payload["agent_status"] = agentStatus
+	}
+	if costUSD > 0 {
+		payload["cost_usd"] = costUSD
 	}
 	body, _ := json.Marshal(payload)
 

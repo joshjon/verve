@@ -43,16 +43,26 @@ func NewTaskRepository(db DB) *TaskRepository {
 }
 
 func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
+	var acceptanceCriteria *string
+	if t.AcceptanceCriteria != "" {
+		acceptanceCriteria = &t.AcceptanceCriteria
+	}
+	var maxCostUSD *float64
+	if t.MaxCostUSD > 0 {
+		maxCostUSD = &t.MaxCostUSD
+	}
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
-		ID:          t.ID.String(),
-		RepoID:      t.RepoID,
-		Description: t.Description,
-		Status:      string(t.Status),
-		DependsOn:   marshalJSONStrings(t.DependsOn),
-		Attempt:     int64(t.Attempt),
-		MaxAttempts: int64(t.MaxAttempts),
-		CreatedAt:   t.CreatedAt,
-		UpdatedAt:   t.UpdatedAt,
+		ID:                 t.ID.String(),
+		RepoID:             t.RepoID,
+		Description:        t.Description,
+		Status:             string(t.Status),
+		DependsOn:          marshalJSONStrings(t.DependsOn),
+		Attempt:            int64(t.Attempt),
+		MaxAttempts:        int64(t.MaxAttempts),
+		AcceptanceCriteria: acceptanceCriteria,
+		MaxCostUsd:         maxCostUSD,
+		CreatedAt:          t.CreatedAt,
+		UpdatedAt:          t.UpdatedAt,
 	})
 	return tagTaskErr(err)
 }
@@ -95,7 +105,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	if len(repoIDs) == 0 {
 		return nil, nil
 	}
-	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, created_at, updated_at FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
+	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
 	args := make([]any, len(repoIDs))
 	for i, id := range repoIDs {
 		args[i] = id
@@ -108,7 +118,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	var tasks []*task.Task
 	for rows.Next() {
 		var t sqlc.Task
-		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.AcceptanceCriteria, &t.AgentStatus, &t.RetryContext, &t.ConsecutiveFailures, &t.CostUsd, &t.MaxCostUsd, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, unmarshalTask(&t))
@@ -225,10 +235,38 @@ func (r *TaskRepository) ClaimTask(ctx context.Context, id task.TaskID) (bool, e
 
 func (r *TaskRepository) RetryTask(ctx context.Context, id task.TaskID, reason string) (bool, error) {
 	rows, err := r.db.RetryTask(ctx, sqlc.RetryTaskParams{
-		ID:          id.String(),
 		RetryReason: &reason,
+		ID:          id.String(),
 	})
 	return rows > 0, tagTaskErr(err)
+}
+
+func (r *TaskRepository) SetAgentStatus(ctx context.Context, id task.TaskID, status string) error {
+	return tagTaskErr(r.db.SetAgentStatus(ctx, sqlc.SetAgentStatusParams{
+		AgentStatus: &status,
+		ID:          id.String(),
+	}))
+}
+
+func (r *TaskRepository) SetRetryContext(ctx context.Context, id task.TaskID, retryCtx string) error {
+	return tagTaskErr(r.db.SetRetryContext(ctx, sqlc.SetRetryContextParams{
+		RetryContext: &retryCtx,
+		ID:           id.String(),
+	}))
+}
+
+func (r *TaskRepository) AddCost(ctx context.Context, id task.TaskID, costUSD float64) error {
+	return tagTaskErr(r.db.AddTaskCost(ctx, sqlc.AddTaskCostParams{
+		CostUsd: costUSD,
+		ID:      id.String(),
+	}))
+}
+
+func (r *TaskRepository) SetConsecutiveFailures(ctx context.Context, id task.TaskID, count int) error {
+	return tagTaskErr(r.db.SetConsecutiveFailures(ctx, sqlc.SetConsecutiveFailuresParams{
+		ConsecutiveFailures: int64(count),
+		ID:                  id.String(),
+	}))
 }
 
 func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {

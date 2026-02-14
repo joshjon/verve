@@ -13,6 +13,12 @@ export interface Task {
 	attempt: number;
 	max_attempts: number;
 	retry_reason?: string;
+	acceptance_criteria?: string;
+	agent_status?: string;
+	retry_context?: string;
+	consecutive_failures: number;
+	cost_usd: number;
+	max_cost_usd?: number;
 	created_at: string;
 	updated_at: string;
 }

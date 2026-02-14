@@ -2,7 +2,7 @@
 	import type { Task } from '$lib/models/task';
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
-	import { GitPullRequest, Link2, ChevronRight, RefreshCw } from 'lucide-svelte';
+	import { GitPullRequest, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle } from 'lucide-svelte';
 	import { stripMarkdown } from '$lib/utils';
 
 	let { task }: { task: Task } = $props();
@@ -44,10 +44,27 @@
 				#{task.attempt}
 			</span>
 		{/if}
+		{#if task.consecutive_failures >= 2}
+			<span
+				class="text-[10px] text-red-600 dark:text-red-400 flex items-center gap-0.5"
+				title="{task.consecutive_failures} consecutive failures"
+			>
+				<AlertTriangle class="w-3 h-3" />
+			</span>
+		{/if}
 		{#if hasDependencies}
 			<span class="text-[10px] text-muted-foreground flex items-center gap-0.5" title="Has dependencies">
 				<Link2 class="w-3 h-3" />
 				{task.depends_on?.length}
+			</span>
+		{/if}
+		{#if task.cost_usd > 0}
+			<span
+				class="text-[10px] text-muted-foreground flex items-center gap-0.5"
+				title="Cost: ${task.cost_usd.toFixed(2)}"
+			>
+				<DollarSign class="w-3 h-3" />
+				{task.cost_usd.toFixed(2)}
 			</span>
 		{/if}
 	</div>

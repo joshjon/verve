@@ -35,8 +35,12 @@ type TaskRepository interface {
 	ReadTaskStatus(ctx context.Context, id TaskID) (Status, error)
 	ClaimTask(ctx context.Context, id TaskID) (bool, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
-	// RetryTask atomically transitions a task from review→pending, increments
+	// RetryTask atomically transitions a task from review → pending, increments
 	// attempt, and records the retry reason. Returns false if the task was not
 	// in review status (already retried or status changed).
 	RetryTask(ctx context.Context, id TaskID, reason string) (bool, error)
+	SetAgentStatus(ctx context.Context, id TaskID, status string) error
+	SetRetryContext(ctx context.Context, id TaskID, retryCtx string) error
+	AddCost(ctx context.Context, id TaskID, costUSD float64) error
+	SetConsecutiveFailures(ctx context.Context, id TaskID, count int) error
 }

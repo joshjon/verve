@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
-	import { FileText, Link2, Search, X, Loader2, Sparkles } from 'lucide-svelte';
+	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -17,6 +17,9 @@
 	let error = $state<string | null>(null);
 	let selectedDeps = $state<string[]>([]);
 	let searchQuery = $state('');
+	let acceptanceCriteria = $state('');
+	let maxCostUsd = $state<number | undefined>(undefined);
+	let showAdvanced = $state(false);
 
 	// Filter available tasks (exclude closed/failed and already selected)
 	const availableTasks = $derived(
@@ -40,9 +43,18 @@
 		try {
 			const repoId = repoStore.selectedRepoId;
 			if (!repoId) throw new Error('No repository selected');
-			await client.createTaskInRepo(repoId, description, selectedDeps.length > 0 ? selectedDeps : undefined);
+			await client.createTaskInRepo(
+				repoId,
+				description,
+				selectedDeps.length > 0 ? selectedDeps : undefined,
+				acceptanceCriteria || undefined,
+				maxCostUsd
+			);
 			description = '';
 			selectedDeps = [];
+			acceptanceCriteria = '';
+			maxCostUsd = undefined;
+			showAdvanced = false;
 			open = false;
 			onCreated();
 		} catch (err) {
@@ -56,6 +68,9 @@
 		open = false;
 		description = '';
 		selectedDeps = [];
+		acceptanceCriteria = '';
+		maxCostUsd = undefined;
+		showAdvanced = false;
 		error = null;
 		searchQuery = '';
 	}
@@ -96,6 +111,21 @@
 						autofocus
 						class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
 						placeholder="e.g., Add a function that calculates the Fibonacci sequence and include unit tests..."
+						disabled={loading}
+					></textarea>
+				</div>
+
+				<div>
+					<label for="acceptance-criteria" class="text-sm font-medium mb-2 flex items-center gap-2">
+						<Target class="w-4 h-4 text-muted-foreground" />
+						Acceptance Criteria
+						<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+					</label>
+					<textarea
+						id="acceptance-criteria"
+						bind:value={acceptanceCriteria}
+						class="w-full border rounded-lg p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow text-sm"
+						placeholder="e.g., All tests pass, No linting errors, Function handles edge cases..."
 						disabled={loading}
 					></textarea>
 				</div>
@@ -165,6 +195,43 @@
 							</div>
 						{/if}
 					</div>
+				</div>
+
+				<div>
+					<button
+						type="button"
+						class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+						onclick={() => (showAdvanced = !showAdvanced)}
+					>
+						{#if showAdvanced}
+							<ChevronDown class="w-4 h-4" />
+						{:else}
+							<ChevronRight class="w-4 h-4" />
+						{/if}
+						Advanced Options
+					</button>
+
+					{#if showAdvanced}
+						<div class="mt-3 space-y-4 pl-1">
+							<div>
+								<label for="max-cost" class="text-sm font-medium mb-2 flex items-center gap-2">
+									<DollarSign class="w-4 h-4 text-muted-foreground" />
+									Max Cost (USD)
+									<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+								</label>
+								<input
+									id="max-cost"
+									type="number"
+									step="0.01"
+									min="0"
+									bind:value={maxCostUsd}
+									class="w-full border rounded-lg p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow text-sm"
+									placeholder="e.g., 5.00"
+									disabled={loading}
+								/>
+							</div>
+						</div>
+					{/if}
 				</div>
 
 				{#if error}

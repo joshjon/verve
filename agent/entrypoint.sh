@@ -136,22 +136,54 @@ PROMPT="${TASK_DESCRIPTION}"
 if [ "${ATTEMPT:-1}" -gt 1 ]; then
     echo "[agent] Building retry-aware prompt..."
 
-    RETRY_CONTEXT="IMPORTANT: This is retry attempt ${ATTEMPT}. The previous attempt created a PR but it needs fixes.
+    PROMPT="IMPORTANT: This is retry attempt ${ATTEMPT}. The previous attempt created a PR but it needs fixes.
 Reason for retry: ${RETRY_REASON}
 "
 
-    if echo "$RETRY_REASON" | grep -qi "CI checks failed"; then
-        RETRY_CONTEXT="${RETRY_CONTEXT}
-Please examine the existing code changes on this branch, review the CI failure details, and fix the issues. Do NOT create a new PR - just fix the code and commit to this branch."
-    elif echo "$RETRY_REASON" | grep -qi "merge conflict"; then
-        RETRY_CONTEXT="${RETRY_CONTEXT}
+    if echo "$RETRY_REASON" | grep -qi "ci_failure"; then
+        PROMPT="${PROMPT}
+Please examine the existing code changes on this branch, review the CI failure details below, and fix the issues. Do NOT create a new PR - just fix the code and commit to this branch."
+    elif echo "$RETRY_REASON" | grep -qi "merge_conflict"; then
+        PROMPT="${PROMPT}
 The branch had merge conflicts with main. A rebase was attempted. Please resolve any remaining conflicts, ensure the code works correctly with the latest main branch, and commit. Do NOT create a new PR."
     fi
 
-    PROMPT="${RETRY_CONTEXT}
+    # Include detailed CI failure logs if available
+    if [ -n "$RETRY_CONTEXT" ]; then
+        PROMPT="${PROMPT}
+
+=== CI Failure Output ===
+${RETRY_CONTEXT}
+=== End CI Output ==="
+    fi
+
+    # Include previous iteration's status/notes if available
+    if [ -n "$PREVIOUS_STATUS" ]; then
+        PROMPT="${PROMPT}
+
+=== Previous Iteration Notes ===
+${PREVIOUS_STATUS}
+=== End Notes ==="
+    fi
+
+    PROMPT="${PROMPT}
 
 Original task: ${TASK_DESCRIPTION}"
 fi
+
+# Add acceptance criteria if provided
+if [ -n "$ACCEPTANCE_CRITERIA" ]; then
+    PROMPT="${PROMPT}
+
+ACCEPTANCE CRITERIA (report which are met in your VERVE_STATUS output):
+${ACCEPTANCE_CRITERIA}"
+fi
+
+# Add status output instruction
+PROMPT="${PROMPT}
+
+IMPORTANT: Before you finish, output a status line in this exact format on its own line:
+VERVE_STATUS:{\"files_modified\":[],\"tests_status\":\"pass|fail|skip\",\"confidence\":\"high|medium|low\",\"blockers\":[],\"criteria_met\":[],\"notes\":\"Any context for future retry attempts\"}"
 
 # Run Claude Code
 echo "[agent] Starting Claude Code session..."
@@ -206,6 +238,11 @@ claude --output-format stream-json --verbose --dangerously-skip-permissions --mo
                 RESULT_TEXT=$(echo "$line" | jq -r '.result // empty' 2>/dev/null)
                 if [ -n "$RESULT_TEXT" ] && [ "$RESULT_TEXT" != "null" ]; then
                     echo "[result] $RESULT_TEXT"
+                fi
+                # Extract cost from result event
+                COST=$(echo "$line" | jq -r '.total_cost_usd // empty' 2>/dev/null)
+                if [ -n "$COST" ] && [ "$COST" != "null" ] && [ "$COST" != "0" ]; then
+                    echo "VERVE_COST:${COST}"
                 fi
                 ;;
         esac

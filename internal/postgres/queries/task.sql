@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, repo_id, description, status, depends_on, attempt, max_attempts, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+INSERT INTO task (id, repo_id, description, status, depends_on, attempt, max_attempts, acceptance_criteria, max_cost_usd, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = $1;
@@ -55,5 +55,17 @@ WHERE id = $1 AND status = 'pending';
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = $1);
 
 -- name: RetryTask :execrows
-UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = $2, updated_at = NOW()
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = $2, agent_status = NULL, updated_at = NOW()
 WHERE id = $1 AND status = 'review';
+
+-- name: SetAgentStatus :exec
+UPDATE task SET agent_status = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: SetRetryContext :exec
+UPDATE task SET retry_context = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: AddTaskCost :exec
+UPDATE task SET cost_usd = cost_usd + $2, updated_at = NOW() WHERE id = $1;
+
+-- name: SetConsecutiveFailures :exec
+UPDATE task SET consecutive_failures = $2, updated_at = NOW() WHERE id = $1;

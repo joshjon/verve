@@ -58,11 +58,20 @@ export class VerveClient {
 		return res.json();
 	}
 
-	async createTaskInRepo(repoId: string, description: string, dependsOn?: string[]): Promise<Task> {
+	async createTaskInRepo(
+		repoId: string,
+		description: string,
+		dependsOn?: string[],
+		acceptanceCriteria?: string,
+		maxCostUsd?: number
+	): Promise<Task> {
+		const body: Record<string, unknown> = { description, depends_on: dependsOn };
+		if (acceptanceCriteria) body.acceptance_criteria = acceptanceCriteria;
+		if (maxCostUsd && maxCostUsd > 0) body.max_cost_usd = maxCostUsd;
 		const res = await fetch(`${this.baseUrl}/repos/${repoId}/tasks`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ description, depends_on: dependsOn })
+			body: JSON.stringify(body)
 		});
 		if (!res.ok) {
 			throw new Error('Failed to create task');

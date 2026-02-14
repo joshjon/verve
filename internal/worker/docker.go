@@ -67,15 +67,18 @@ type RunResult struct {
 
 // AgentConfig holds the configuration for running an agent
 type AgentConfig struct {
-	TaskID          string
-	TaskDescription string
-	GitHubToken     string
-	GitHubRepo      string
-	AnthropicAPIKey string
-	ClaudeModel     string
-	DryRun          bool
-	Attempt         int
-	RetryReason     string
+	TaskID             string
+	TaskDescription    string
+	GitHubToken        string
+	GitHubRepo         string
+	AnthropicAPIKey    string
+	ClaudeModel        string
+	DryRun             bool
+	Attempt            int
+	RetryReason        string
+	AcceptanceCriteria string
+	RetryContext       string
+	PreviousStatus     string
 }
 
 // LogCallback is called for each log line from the container
@@ -101,6 +104,15 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			fmt.Sprintf("ATTEMPT=%d", cfg.Attempt),
 			"RETRY_REASON="+cfg.RetryReason,
 		)
+		if cfg.RetryContext != "" {
+			env = append(env, "RETRY_CONTEXT="+cfg.RetryContext)
+		}
+		if cfg.PreviousStatus != "" {
+			env = append(env, "PREVIOUS_STATUS="+cfg.PreviousStatus)
+		}
+	}
+	if cfg.AcceptanceCriteria != "" {
+		env = append(env, "ACCEPTANCE_CRITERIA="+cfg.AcceptanceCriteria)
 	}
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{

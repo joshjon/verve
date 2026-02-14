@@ -17,19 +17,25 @@ type Repo struct {
 }
 
 type Task struct {
-	ID             string
-	RepoID         string
-	Description    string
-	Status         string
-	PullRequestUrl *string
-	PrNumber       *int64
-	DependsOn      string
-	CloseReason    *string
-	Attempt        int64
-	MaxAttempts    int64
-	RetryReason    *string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                  string
+	RepoID              string
+	Description         string
+	Status              string
+	PullRequestUrl      *string
+	PrNumber            *int64
+	DependsOn           string
+	CloseReason         *string
+	Attempt             int64
+	MaxAttempts         int64
+	RetryReason         *string
+	AcceptanceCriteria  *string
+	AgentStatus         *string
+	RetryContext        *string
+	ConsecutiveFailures int64
+	CostUsd             float64
+	MaxCostUsd          *float64
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type TaskLog struct {

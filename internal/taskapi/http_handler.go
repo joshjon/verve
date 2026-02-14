@@ -144,7 +144,7 @@ func (h *HTTPHandler) CreateTask(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse("description required"))
 	}
 
-	t := task.NewTask(repoID.String(), req.Description, req.DependsOn)
+	t := task.NewTask(repoID.String(), req.Description, req.DependsOn, req.AcceptanceCriteria, req.MaxCostUSD)
 	if err := h.store.CreateTask(c.Request().Context(), t); err != nil {
 		return jsonError(c, err)
 	}
@@ -232,6 +232,18 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
+
+	// Store agent status and cost before updating task status
+	if req.AgentStatus != "" {
+		if err := h.store.SetAgentStatus(ctx, id, req.AgentStatus); err != nil {
+			return jsonError(c, err)
+		}
+	}
+	if req.CostUSD > 0 {
+		if err := h.store.AddCost(ctx, id, req.CostUSD); err != nil {
+			return jsonError(c, err)
+		}
+	}
 
 	if !req.Success {
 		if err := h.store.UpdateTaskStatus(ctx, id, task.StatusFailed); err != nil {

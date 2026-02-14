@@ -90,19 +90,25 @@ type Repo struct {
 }
 
 type Task struct {
-	ID             string             `json:"id"`
-	RepoID         string             `json:"repo_id"`
-	Description    string             `json:"description"`
-	Status         TaskStatus         `json:"status"`
-	PullRequestUrl *string            `json:"pull_request_url"`
-	PrNumber       *int32             `json:"pr_number"`
-	DependsOn      []string           `json:"depends_on"`
-	CloseReason    *string            `json:"close_reason"`
-	Attempt        int32              `json:"attempt"`
-	MaxAttempts    int32              `json:"max_attempts"`
-	RetryReason    *string            `json:"retry_reason"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID                  string             `json:"id"`
+	RepoID              string             `json:"repo_id"`
+	Description         string             `json:"description"`
+	Status              TaskStatus         `json:"status"`
+	PullRequestUrl      *string            `json:"pull_request_url"`
+	PrNumber            *int32             `json:"pr_number"`
+	DependsOn           []string           `json:"depends_on"`
+	CloseReason         *string            `json:"close_reason"`
+	Attempt             int32              `json:"attempt"`
+	MaxAttempts         int32              `json:"max_attempts"`
+	RetryReason         *string            `json:"retry_reason"`
+	AcceptanceCriteria  *string            `json:"acceptance_criteria"`
+	AgentStatus         *string            `json:"agent_status"`
+	RetryContext        *string            `json:"retry_context"`
+	ConsecutiveFailures int32              `json:"consecutive_failures"`
+	CostUsd             float64            `json:"cost_usd"`
+	MaxCostUsd          *float64           `json:"max_cost_usd"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type TaskLog struct {

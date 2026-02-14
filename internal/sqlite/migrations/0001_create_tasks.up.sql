@@ -19,6 +19,12 @@ CREATE TABLE task (
     attempt          INTEGER NOT NULL DEFAULT 1,
     max_attempts     INTEGER NOT NULL DEFAULT 5,
     retry_reason     TEXT,
+    acceptance_criteria  TEXT,
+    agent_status         TEXT,
+    retry_context        TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    cost_usd             REAL NOT NULL DEFAULT 0,
+    max_cost_usd         REAL,
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

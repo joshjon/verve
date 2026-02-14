@@ -31,6 +31,20 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if in.RetryReason != nil {
 		t.RetryReason = *in.RetryReason
 	}
+	if in.AcceptanceCriteria != nil {
+		t.AcceptanceCriteria = *in.AcceptanceCriteria
+	}
+	if in.AgentStatus != nil {
+		t.AgentStatus = *in.AgentStatus
+	}
+	if in.RetryContext != nil {
+		t.RetryContext = *in.RetryContext
+	}
+	t.ConsecutiveFailures = int(in.ConsecutiveFailures)
+	t.CostUSD = in.CostUsd
+	if in.MaxCostUsd != nil {
+		t.MaxCostUSD = *in.MaxCostUsd
+	}
 	if in.CreatedAt.Valid {
 		t.CreatedAt = in.CreatedAt.Time
 	}

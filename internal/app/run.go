@@ -193,7 +193,8 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, gh *github
 					}
 					if mergeability.HasConflicts {
 						logger.Info("PR has merge conflicts, retrying", "task_id", t.ID, "attempt", t.Attempt)
-						if err := s.task.RetryTask(ctx, t.ID, "Merge conflicts detected"); err != nil {
+						reason := "merge_conflict: PR has conflicts with base branch"
+						if err := s.task.RetryTask(ctx, t.ID, "merge_conflict", reason); err != nil {
 							logger.Error("failed to retry task", "task_id", t.ID, "error", err)
 						}
 						continue
@@ -207,8 +208,19 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, gh *github
 					}
 					if checkResult.Status == github.CheckStatusFailure {
 						logger.Info("PR checks failed, retrying", "task_id", t.ID, "attempt", t.Attempt, "summary", checkResult.Summary)
-						reason := fmt.Sprintf("CI checks failed: %s", checkResult.Summary)
-						if err := s.task.RetryTask(ctx, t.ID, reason); err != nil {
+
+						// Fetch actual CI failure logs for targeted retry
+						failureLogs, logErr := gh.GetFailedCheckLogs(ctx, r.Owner, r.Name, t.PRNumber)
+						if logErr != nil {
+							logger.Warn("failed to fetch CI logs", "task_id", t.ID, "error", logErr)
+						} else if failureLogs != "" {
+							if err := s.task.SetRetryContext(ctx, t.ID, failureLogs); err != nil {
+								logger.Warn("failed to set retry context", "task_id", t.ID, "error", err)
+							}
+						}
+
+						reason := fmt.Sprintf("ci_failure: %s", checkResult.Summary)
+						if err := s.task.RetryTask(ctx, t.ID, "ci_failure", reason); err != nil {
 							logger.Error("failed to retry task", "task_id", t.ID, "error", err)
 						}
 						continue

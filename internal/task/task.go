@@ -16,37 +16,45 @@ const (
 
 // Task represents a unit of work dispatched to an AI coding agent.
 type Task struct {
-	ID             TaskID    `json:"id"`
-	RepoID         string    `json:"repo_id"`
-	Description    string    `json:"description"`
-	Status         Status    `json:"status"`
-	Logs           []string  `json:"logs"`
-	PullRequestURL string    `json:"pull_request_url,omitempty"`
-	PRNumber       int       `json:"pr_number,omitempty"`
-	DependsOn      []string  `json:"depends_on,omitempty"`
-	CloseReason    string    `json:"close_reason,omitempty"`
-	Attempt        int       `json:"attempt"`
-	MaxAttempts    int       `json:"max_attempts"`
-	RetryReason    string    `json:"retry_reason,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                  TaskID    `json:"id"`
+	RepoID              string    `json:"repo_id"`
+	Description         string    `json:"description"`
+	Status              Status    `json:"status"`
+	Logs                []string  `json:"logs"`
+	PullRequestURL      string    `json:"pull_request_url,omitempty"`
+	PRNumber            int       `json:"pr_number,omitempty"`
+	DependsOn           []string  `json:"depends_on,omitempty"`
+	CloseReason         string    `json:"close_reason,omitempty"`
+	Attempt             int       `json:"attempt"`
+	MaxAttempts         int       `json:"max_attempts"`
+	RetryReason         string    `json:"retry_reason,omitempty"`
+	AcceptanceCriteria  string    `json:"acceptance_criteria,omitempty"`
+	AgentStatus         string    `json:"agent_status,omitempty"`
+	RetryContext        string    `json:"retry_context,omitempty"`
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	CostUSD             float64   `json:"cost_usd"`
+	MaxCostUSD          float64   `json:"max_cost_usd,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // NewTask creates a new Task with a generated TaskID and pending status.
-func NewTask(repoID, description string, dependsOn []string) *Task {
+func NewTask(repoID, description string, dependsOn []string, acceptanceCriteria string, maxCostUSD float64) *Task {
 	now := time.Now()
 	if dependsOn == nil {
 		dependsOn = []string{}
 	}
 	return &Task{
-		ID:          NewTaskID(),
-		RepoID:      repoID,
-		Description: description,
-		Status:      StatusPending,
-		DependsOn:   dependsOn,
-		Attempt:     1,
-		MaxAttempts:  5,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                 NewTaskID(),
+		RepoID:             repoID,
+		Description:        description,
+		Status:             StatusPending,
+		DependsOn:          dependsOn,
+		Attempt:            1,
+		MaxAttempts:        5,
+		AcceptanceCriteria: acceptanceCriteria,
+		MaxCostUSD:         maxCostUSD,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 }
