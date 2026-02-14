@@ -246,6 +246,11 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 	}
 
 	if !req.Success {
+		if req.PrereqFailed != "" {
+			if err := h.store.SetCloseReason(ctx, id, req.PrereqFailed); err != nil {
+				return jsonError(c, err)
+			}
+		}
 		if err := h.store.UpdateTaskStatus(ctx, id, task.StatusFailed); err != nil {
 			return jsonError(c, err)
 		}

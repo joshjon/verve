@@ -157,6 +157,15 @@ func (s *Store) AddCost(ctx context.Context, id TaskID, costUSD float64) error {
 	return s.repo.AddCost(ctx, id, costUSD)
 }
 
+// SetCloseReason sets the close/failure reason on a task without changing its status.
+func (s *Store) SetCloseReason(ctx context.Context, id TaskID, reason string) error {
+	if err := s.repo.SetCloseReason(ctx, id, reason); err != nil {
+		return err
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // ClaimPendingTask finds a pending task with all dependencies met and claims it
 // by setting its status to running. When repoIDs is non-empty, only tasks
 // belonging to those repos are considered. The read-check-claim flow is wrapped

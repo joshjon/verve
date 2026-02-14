@@ -30,6 +30,7 @@ type Querier interface {
 	ReadTaskStatus(ctx context.Context, id string) (string, error)
 	RetryTask(ctx context.Context, arg RetryTaskParams) (int64, error)
 	SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) error
+	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error
 	SetConsecutiveFailures(ctx context.Context, arg SetConsecutiveFailuresParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error

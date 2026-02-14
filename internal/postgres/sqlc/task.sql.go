@@ -476,6 +476,20 @@ func (q *Queries) SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) 
 	return err
 }
 
+const setCloseReason = `-- name: SetCloseReason :exec
+UPDATE task SET close_reason = $2, updated_at = NOW() WHERE id = $1
+`
+
+type SetCloseReasonParams struct {
+	ID          string  `json:"id"`
+	CloseReason *string `json:"close_reason"`
+}
+
+func (q *Queries) SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error {
+	_, err := q.db.Exec(ctx, setCloseReason, arg.ID, arg.CloseReason)
+	return err
+}
+
 const setConsecutiveFailures = `-- name: SetConsecutiveFailures :exec
 UPDATE task SET consecutive_failures = $2, updated_at = NOW() WHERE id = $1
 `

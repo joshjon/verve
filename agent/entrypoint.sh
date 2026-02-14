@@ -58,6 +58,159 @@ else
     git checkout -b "${BRANCH}"
 fi
 
+# Check prerequisites before running Claude Code
+echo "[agent] Checking project prerequisites..."
+
+check_prereqs() {
+    local missing=()
+    local detected=()
+    local desc_lower
+    desc_lower=$(echo "$TASK_DESCRIPTION" | tr '[:upper:]' '[:lower:]')
+
+    # Go — detect from files or task description
+    if [ -f "go.mod" ] || [ -f "go.sum" ] || echo "$desc_lower" | grep -qE '\bgolang\b|\bgo (app|api|server|service|module|project|program|binary|cli)\b'; then
+        detected+=("go")
+        if ! command -v go &>/dev/null; then
+            local reason="go.mod found but go is not installed"
+            if [ ! -f "go.mod" ] && [ ! -f "go.sum" ]; then
+                reason="Task description references Go but go is not installed"
+            fi
+            missing+=("{\"tool\":\"go\",\"reason\":\"${reason}\",\"install\":\"Install Go or use a Go-based agent image\"}")
+        fi
+    fi
+
+    # Python — detect from files or task description
+    if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || [ -f "setup.py" ] || [ -f "Pipfile" ] || [ -f "poetry.lock" ] || echo "$desc_lower" | grep -qE '\bpython\b|\bdjango\b|\bflask\b|\bfastapi\b|\bpip\b'; then
+        detected+=("python")
+        if ! command -v python3 &>/dev/null && ! command -v python &>/dev/null; then
+            local reason="Python project detected but python3/python not available"
+            if [ ! -f "requirements.txt" ] && [ ! -f "pyproject.toml" ] && [ ! -f "setup.py" ] && [ ! -f "Pipfile" ] && [ ! -f "poetry.lock" ]; then
+                reason="Task description references Python but python3/python not available"
+            fi
+            missing+=("{\"tool\":\"python\",\"reason\":\"${reason}\",\"install\":\"Install Python or use a Python-based agent image\"}")
+        fi
+    fi
+
+    # Rust — detect from files or task description
+    if [ -f "Cargo.toml" ] || echo "$desc_lower" | grep -qE '\brust\b|\bcargo\b'; then
+        detected+=("rust")
+        if ! command -v cargo &>/dev/null; then
+            local reason="Cargo.toml found but cargo is not installed"
+            if [ ! -f "Cargo.toml" ]; then
+                reason="Task description references Rust but cargo is not installed"
+            fi
+            missing+=("{\"tool\":\"cargo\",\"reason\":\"${reason}\",\"install\":\"Install Rust or use a Rust-based agent image\"}")
+        fi
+    fi
+
+    # Java/Kotlin (Gradle) — detect from files or task description
+    if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ] || echo "$desc_lower" | grep -qE '\bgradle\b|\bkotlin\b'; then
+        detected+=("gradle")
+        if ! command -v gradle &>/dev/null && [ ! -f "gradlew" ]; then
+            missing+=('{"tool":"gradle","reason":"Gradle build file found but gradle not available and no gradlew wrapper","install":"Install Gradle or include gradlew in the repo"}')
+        fi
+    fi
+
+    # Java (Maven) — detect from files or task description
+    if [ -f "pom.xml" ] || echo "$desc_lower" | grep -qE '\bmaven\b|\bjava\b|\bspring\b'; then
+        detected+=("maven")
+        if ! command -v mvn &>/dev/null && [ ! -f "mvnw" ] && ! command -v java &>/dev/null; then
+            local reason="pom.xml found but mvn/java not available and no mvnw wrapper"
+            if [ ! -f "pom.xml" ]; then
+                reason="Task description references Java but java/mvn not available"
+            fi
+            missing+=("{\"tool\":\"java\",\"reason\":\"${reason}\",\"install\":\"Install Java/Maven or use a Java-based agent image\"}")
+        fi
+    fi
+
+    # Ruby — detect from files or task description
+    if [ -f "Gemfile" ] || echo "$desc_lower" | grep -qE '\bruby\b|\brails\b'; then
+        detected+=("ruby")
+        if ! command -v ruby &>/dev/null; then
+            local reason="Gemfile found but ruby is not installed"
+            if [ ! -f "Gemfile" ]; then
+                reason="Task description references Ruby but ruby is not installed"
+            fi
+            missing+=("{\"tool\":\"ruby\",\"reason\":\"${reason}\",\"install\":\"Install Ruby or use a Ruby-based agent image\"}")
+        fi
+    fi
+
+    # PHP — detect from files or task description
+    if [ -f "composer.json" ] || echo "$desc_lower" | grep -qE '\bphp\b|\blaravel\b|\bsymfony\b'; then
+        detected+=("php")
+        if ! command -v php &>/dev/null; then
+            local reason="composer.json found but php is not installed"
+            if [ ! -f "composer.json" ]; then
+                reason="Task description references PHP but php is not installed"
+            fi
+            missing+=("{\"tool\":\"php\",\"reason\":\"${reason}\",\"install\":\"Install PHP or use a PHP-based agent image\"}")
+        fi
+    fi
+
+    # .NET — detect from files or task description
+    if compgen -G "*.csproj" >/dev/null 2>&1 || compgen -G "*.fsproj" >/dev/null 2>&1 || compgen -G "*.sln" >/dev/null 2>&1 || echo "$desc_lower" | grep -qE '\b\.net\b|\bdotnet\b|\bcsharp\b|\bc#\b'; then
+        detected+=("dotnet")
+        if ! command -v dotnet &>/dev/null; then
+            missing+=('{"tool":"dotnet","reason":".NET project detected but dotnet CLI not available","install":"Install .NET SDK or use a .NET-based agent image"}')
+        fi
+    fi
+
+    # Swift — detect from files or task description
+    if [ -f "Package.swift" ] || echo "$desc_lower" | grep -qE '\bswift\b|\bswiftui\b'; then
+        detected+=("swift")
+        if ! command -v swift &>/dev/null; then
+            local reason="Package.swift found but swift is not installed"
+            if [ ! -f "Package.swift" ]; then
+                reason="Task description references Swift but swift is not installed"
+            fi
+            missing+=("{\"tool\":\"swift\",\"reason\":\"${reason}\",\"install\":\"Install Swift or use a Swift-based agent image\"}")
+        fi
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        # Build JSON array of missing tools
+        local missing_json="["
+        local first=true
+        for item in "${missing[@]}"; do
+            if [ "$first" = true ]; then
+                first=false
+            else
+                missing_json+=","
+            fi
+            missing_json+="$item"
+        done
+        missing_json+="]"
+
+        # Build detected array
+        local detected_json
+        detected_json=$(printf '"%s",' "${detected[@]}")
+        detected_json="[${detected_json%,}]"
+
+        echo ""
+        echo "[agent] PREREQUISITE CHECK FAILED"
+        echo "[agent] Detected project types: ${detected[*]}"
+        echo "[agent] Missing tools:"
+        for item in "${missing[@]}"; do
+            local tool
+            tool=$(echo "$item" | jq -r '.tool')
+            local reason
+            reason=$(echo "$item" | jq -r '.reason')
+            echo "[agent]   - ${tool}: ${reason}"
+        done
+        echo ""
+        echo "VERVE_PREREQ_FAILED:{\"detected\":${detected_json},\"missing\":${missing_json}}"
+        exit 1
+    fi
+
+    if [ ${#detected[@]} -gt 0 ]; then
+        echo "[agent] Prerequisite check passed for: ${detected[*]}"
+    else
+        echo "[agent] No specific runtime requirements detected"
+    fi
+}
+
+check_prereqs
+
 if [ "$DRY_RUN" = "true" ]; then
     # Dry run mode - skip Claude, make a dummy change
     echo "[agent] DRY RUN mode - skipping Claude Code"

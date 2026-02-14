@@ -351,6 +351,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	var prNumber int
 	var agentStatus string
 	var costUSD float64
+	var prereqFailed string
 	var markerMu sync.Mutex
 
 	// Log callback - called from Docker log streaming goroutine
@@ -383,6 +384,15 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 			taskLogger.Info("captured agent status")
 		}
 
+		// Parse prereq failure marker
+		if strings.HasPrefix(line, "VERVE_PREREQ_FAILED:") {
+			jsonStr := strings.TrimPrefix(line, "VERVE_PREREQ_FAILED:")
+			markerMu.Lock()
+			prereqFailed = jsonStr
+			markerMu.Unlock()
+			taskLogger.Warn("prerequisite check failed", "details", jsonStr)
+		}
+
 		// Parse cost marker
 		if strings.HasPrefix(line, "VERVE_COST:") {
 			costStr := strings.TrimPrefix(line, "VERVE_COST:")
@@ -400,7 +410,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	repoFullName := w.repoNames[task.RepoID]
 	if repoFullName == "" {
 		taskLogger.Error("unknown repo ID for task", "repo_id", task.RepoID)
-		w.completeTask(ctx, task.ID, false, fmt.Sprintf("unknown repo ID: %s", task.RepoID), "", 0, "", 0)
+		w.completeTask(ctx, task.ID, false, fmt.Sprintf("unknown repo ID: %s", task.RepoID), "", 0, "", 0, "")
 		return
 	}
 
@@ -432,18 +442,23 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 	capturedPRNumber := prNumber
 	capturedAgentStatus := agentStatus
 	capturedCostUSD := costUSD
+	capturedPrereqFailed := prereqFailed
 	markerMu.Unlock()
 
 	// Report completion with PR info, agent status, and cost
 	if result.Error != nil {
 		taskLogger.Error("task failed", "error", result.Error)
-		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, capturedAgentStatus, capturedCostUSD)
+		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
 	} else if result.Success {
 		taskLogger.Info("task completed successfully")
-		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedAgentStatus, capturedCostUSD)
+		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedAgentStatus, capturedCostUSD, "")
 	} else {
+		errMsg := fmt.Sprintf("exit code %d", result.ExitCode)
+		if capturedPrereqFailed != "" {
+			errMsg = "prerequisite check failed"
+		}
 		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		w.completeTask(ctx, task.ID, false, fmt.Sprintf("exit code %d", result.ExitCode), "", 0, capturedAgentStatus, capturedCostUSD)
+		w.completeTask(ctx, task.ID, false, errMsg, "", 0, capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
 	}
 }
 
@@ -468,7 +483,7 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, logs []string) err
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int, agentStatus string, costUSD float64) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int, agentStatus string, costUSD float64, prereqFailed string) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
@@ -482,6 +497,9 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	}
 	if costUSD > 0 {
 		payload["cost_usd"] = costUSD
+	}
+	if prereqFailed != "" {
+		payload["prereq_failed"] = prereqFailed
 	}
 	body, _ := json.Marshal(payload)
 

@@ -269,6 +269,13 @@ func (r *TaskRepository) SetConsecutiveFailures(ctx context.Context, id task.Tas
 	}))
 }
 
+func (r *TaskRepository) SetCloseReason(ctx context.Context, id task.TaskID, reason string) error {
+	return tagTaskErr(r.db.SetCloseReason(ctx, sqlc.SetCloseReasonParams{
+		CloseReason: &reason,
+		ID:          id.String(),
+	}))
+}
+
 func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {
 	return r.txer.WithTx(r, txn)
 }

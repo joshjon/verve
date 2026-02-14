@@ -43,4 +43,5 @@ type TaskRepository interface {
 	SetRetryContext(ctx context.Context, id TaskID, retryCtx string) error
 	AddCost(ctx context.Context, id TaskID, costUSD float64) error
 	SetConsecutiveFailures(ctx context.Context, id TaskID, count int) error
+	SetCloseReason(ctx context.Context, id TaskID, reason string) error
 }

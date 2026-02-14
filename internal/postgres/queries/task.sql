@@ -69,3 +69,6 @@ UPDATE task SET cost_usd = cost_usd + $2, updated_at = NOW() WHERE id = $1;
 
 -- name: SetConsecutiveFailures :exec
 UPDATE task SET consecutive_failures = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: SetCloseReason :exec
+UPDATE task SET close_reason = $2, updated_at = NOW() WHERE id = $1;

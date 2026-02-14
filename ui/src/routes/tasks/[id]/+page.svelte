@@ -85,6 +85,28 @@
 		}
 	});
 
+	interface PrereqFailure {
+		detected: string[];
+		missing: {
+			tool: string;
+			reason: string;
+			install: string;
+		}[];
+	}
+
+	const parsedPrereqFailure = $derived.by(() => {
+		if (!task?.close_reason || task.status !== 'failed') return null;
+		try {
+			const parsed = JSON.parse(task.close_reason);
+			if (parsed.missing && Array.isArray(parsed.missing)) {
+				return parsed as PrereqFailure;
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	});
+
 	function formatCost(cost: number): string {
 		return `$${cost.toFixed(2)}`;
 	}
@@ -434,8 +456,36 @@
 				</Card.Root>
 			{/if}
 
+			<!-- Prerequisite Failure -->
+			{#if parsedPrereqFailure}
+				<Card.Root class="border-red-500/30 bg-red-500/5">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<AlertTriangle class="w-4 h-4 text-red-500" />
+							Missing Prerequisites
+							<Badge class="bg-red-500 text-white text-xs">
+								{parsedPrereqFailure.missing.length} missing
+							</Badge>
+						</Card.Title>
+					</Card.Header>
+					<Card.Content class="space-y-3">
+						<p class="text-sm text-muted-foreground">
+							The agent detected project types that require tools not installed in the worker image.
+							Update your agent Docker image to include the missing tools, then retry the task.
+						</p>
+						{#each parsedPrereqFailure.missing as item}
+							<div class="rounded-lg border bg-background p-3 space-y-1">
+								<div class="flex items-center gap-2">
+									<Badge variant="destructive" class="text-xs">{item.tool}</Badge>
+								</div>
+								<p class="text-sm text-muted-foreground">{item.reason}</p>
+								<p class="text-xs text-muted-foreground font-mono">{item.install}</p>
+							</div>
+						{/each}
+					</Card.Content>
+				</Card.Root>
 			<!-- Close Reason -->
-			{#if task.close_reason}
+			{:else if task.close_reason}
 				<Card.Root class="border-gray-500/30">
 					<Card.Header class="pb-3">
 						<Card.Title class="text-base flex items-center gap-2">

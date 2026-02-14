@@ -66,3 +66,6 @@ UPDATE task SET cost_usd = cost_usd + ?, updated_at = strftime('%Y-%m-%dT%H:%M:%
 
 -- name: SetConsecutiveFailures :exec
 UPDATE task SET consecutive_failures = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;
+
+-- name: SetCloseReason :exec
+UPDATE task SET close_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;

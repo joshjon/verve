@@ -26,6 +26,7 @@ type CompleteRequest struct {
 	PRNumber       int     `json:"pr_number,omitempty"`
 	AgentStatus    string  `json:"agent_status,omitempty"`
 	CostUSD        float64 `json:"cost_usd,omitempty"`
+	PrereqFailed   string  `json:"prereq_failed,omitempty"`
 }
 
 // CloseRequest is the request body for closing a task.
