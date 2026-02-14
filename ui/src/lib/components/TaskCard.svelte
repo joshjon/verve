@@ -2,7 +2,7 @@
 	import type { Task } from '$lib/models/task';
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
-	import { GitPullRequest, Link2, ChevronRight } from 'lucide-svelte';
+	import { GitPullRequest, Link2, ChevronRight, RefreshCw } from 'lucide-svelte';
 	import { stripMarkdown } from '$lib/utils';
 
 	let { task }: { task: Task } = $props();
@@ -35,6 +35,15 @@
 		<span class="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
 			{task.id}
 		</span>
+		{#if task.attempt > 1}
+			<span
+				class="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5"
+				title="Retry attempt {task.attempt} of {task.max_attempts}"
+			>
+				<RefreshCw class="w-3 h-3" />
+				#{task.attempt}
+			</span>
+		{/if}
 		{#if hasDependencies}
 			<span class="text-[10px] text-muted-foreground flex items-center gap-0.5" title="Has dependencies">
 				<Link2 class="w-3 h-3" />

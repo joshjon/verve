@@ -31,6 +31,9 @@ type Task struct {
 	RepoID      string `json:"repo_id"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
+	Attempt     int    `json:"attempt"`
+	MaxAttempts int    `json:"max_attempts"`
+	RetryReason string `json:"retry_reason,omitempty"`
 }
 
 type apiRepo struct {
@@ -382,6 +385,8 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 		AnthropicAPIKey: w.config.AnthropicAPIKey,
 		ClaudeModel:     w.config.ClaudeModel,
 		DryRun:          w.config.DryRun,
+		Attempt:         task.Attempt,
+		RetryReason:     task.RetryReason,
 	}
 
 	// Run the agent with streaming logs

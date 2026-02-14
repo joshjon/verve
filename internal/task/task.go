@@ -25,6 +25,9 @@ type Task struct {
 	PRNumber       int       `json:"pr_number,omitempty"`
 	DependsOn      []string  `json:"depends_on,omitempty"`
 	CloseReason    string    `json:"close_reason,omitempty"`
+	Attempt        int       `json:"attempt"`
+	MaxAttempts    int       `json:"max_attempts"`
+	RetryReason    string    `json:"retry_reason,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -41,6 +44,8 @@ func NewTask(repoID, description string, dependsOn []string) *Task {
 		Description: description,
 		Status:      StatusPending,
 		DependsOn:   dependsOn,
+		Attempt:     1,
+		MaxAttempts:  5,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}

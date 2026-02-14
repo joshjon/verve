@@ -319,6 +319,23 @@
 				</Card.Root>
 			{/if}
 
+			<!-- Retry Info -->
+			{#if task.attempt > 1}
+				<Card.Root class="border-amber-500/30 bg-amber-500/5">
+					<Card.Header class="pb-3">
+						<Card.Title class="text-base flex items-center gap-2">
+							<RefreshCw class="w-4 h-4 text-amber-500" />
+							Retry Attempt {task.attempt} of {task.max_attempts}
+						</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						{#if task.retry_reason}
+							<p class="text-sm text-muted-foreground">{task.retry_reason}</p>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+			{/if}
+
 			<!-- Description -->
 			<Card.Root>
 				<Card.Header class="pb-3">

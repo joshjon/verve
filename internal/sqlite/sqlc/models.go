@@ -25,6 +25,9 @@ type Task struct {
 	PrNumber       *int64
 	DependsOn      string
 	CloseReason    *string
+	Attempt        int64
+	MaxAttempts    int64
+	RetryReason    *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

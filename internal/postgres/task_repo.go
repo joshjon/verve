@@ -49,6 +49,8 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		Description: t.Description,
 		Status:      sqlc.TaskStatus(t.Status),
 		DependsOn:   t.DependsOn,
+		Attempt:     int32(t.Attempt),
+		MaxAttempts: int32(t.MaxAttempts),
 		CreatedAt:   pgTimestamptz(t.CreatedAt),
 		UpdatedAt:   pgTimestamptz(t.UpdatedAt),
 	})
@@ -196,6 +198,14 @@ func (r *TaskRepository) ReadTaskStatus(ctx context.Context, id task.TaskID) (ta
 func (r *TaskRepository) ClaimTask(ctx context.Context, id task.TaskID) (bool, error) {
 	rows, err := r.db.ClaimTask(ctx, id.String())
 	return rows > 0, err
+}
+
+func (r *TaskRepository) RetryTask(ctx context.Context, id task.TaskID, reason string) (bool, error) {
+	rows, err := r.db.RetryTask(ctx, sqlc.RetryTaskParams{
+		ID:          id.String(),
+		RetryReason: &reason,
+	})
+	return rows > 0, tagTaskErr(err)
 }
 
 func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {

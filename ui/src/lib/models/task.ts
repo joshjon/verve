@@ -10,6 +10,9 @@ export interface Task {
 	pr_number?: number;
 	depends_on?: string[];
 	close_reason?: string;
+	attempt: number;
+	max_attempts: number;
+	retry_reason?: string;
 	created_at: string;
 	updated_at: string;
 }

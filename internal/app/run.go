@@ -166,20 +166,54 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, gh *github
 					continue
 				}
 				for _, t := range tasks {
-					if t.PRNumber > 0 {
-						merged, err := gh.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
-						if err != nil {
-							logger.Error("failed to check PR status", "task_id", t.ID, "error", err)
-							continue
-						}
-						if merged {
-							if err := s.task.UpdateTaskStatus(ctx, t.ID, task.StatusMerged); err != nil {
-								logger.Error("failed to update task status", "task_id", t.ID, "error", err)
-							} else {
-								logger.Info("task PR merged", "task_id", t.ID)
-							}
-						}
+					if t.PRNumber <= 0 {
+						continue
 					}
+
+					// 1. Check if merged (terminal positive).
+					merged, err := gh.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
+					if err != nil {
+						logger.Error("failed to check PR merged", "task_id", t.ID, "error", err)
+						continue
+					}
+					if merged {
+						if err := s.task.UpdateTaskStatus(ctx, t.ID, task.StatusMerged); err != nil {
+							logger.Error("failed to update task status", "task_id", t.ID, "error", err)
+						} else {
+							logger.Info("task PR merged", "task_id", t.ID)
+						}
+						continue
+					}
+
+					// 2. Check for merge conflicts.
+					mergeability, err := gh.GetPRMergeability(ctx, r.Owner, r.Name, t.PRNumber)
+					if err != nil {
+						logger.Error("failed to check mergeability", "task_id", t.ID, "error", err)
+						continue
+					}
+					if mergeability.HasConflicts {
+						logger.Info("PR has merge conflicts, retrying", "task_id", t.ID, "attempt", t.Attempt)
+						if err := s.task.RetryTask(ctx, t.ID, "Merge conflicts detected"); err != nil {
+							logger.Error("failed to retry task", "task_id", t.ID, "error", err)
+						}
+						continue
+					}
+
+					// 3. Check CI status.
+					checkResult, err := gh.GetPRCheckStatus(ctx, r.Owner, r.Name, t.PRNumber)
+					if err != nil {
+						logger.Error("failed to check CI status", "task_id", t.ID, "error", err)
+						continue
+					}
+					if checkResult.Status == github.CheckStatusFailure {
+						logger.Info("PR checks failed, retrying", "task_id", t.ID, "attempt", t.Attempt, "summary", checkResult.Summary)
+						reason := fmt.Sprintf("CI checks failed: %s", checkResult.Summary)
+						if err := s.task.RetryTask(ctx, t.ID, reason); err != nil {
+							logger.Error("failed to retry task", "task_id", t.ID, "error", err)
+						}
+						continue
+					}
+					// If pending, do nothing — wait for checks to complete.
 				}
 			}
 		}

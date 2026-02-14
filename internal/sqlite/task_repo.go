@@ -49,6 +49,8 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		Description: t.Description,
 		Status:      string(t.Status),
 		DependsOn:   marshalJSONStrings(t.DependsOn),
+		Attempt:     int64(t.Attempt),
+		MaxAttempts: int64(t.MaxAttempts),
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
 	})
@@ -93,7 +95,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	if len(repoIDs) == 0 {
 		return nil, nil
 	}
-	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, created_at, updated_at FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
+	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, created_at, updated_at FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
 	args := make([]any, len(repoIDs))
 	for i, id := range repoIDs {
 		args[i] = id
@@ -106,7 +108,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	var tasks []*task.Task
 	for rows.Next() {
 		var t sqlc.Task
-		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, unmarshalTask(&t))
@@ -219,6 +221,14 @@ func (r *TaskRepository) ReadTaskStatus(ctx context.Context, id task.TaskID) (ta
 func (r *TaskRepository) ClaimTask(ctx context.Context, id task.TaskID) (bool, error) {
 	rows, err := r.db.ClaimTask(ctx, id.String())
 	return rows > 0, err
+}
+
+func (r *TaskRepository) RetryTask(ctx context.Context, id task.TaskID, reason string) (bool, error) {
+	rows, err := r.db.RetryTask(ctx, sqlc.RetryTaskParams{
+		ID:          id.String(),
+		RetryReason: &reason,
+	})
+	return rows > 0, tagTaskErr(err)
 }
 
 func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {

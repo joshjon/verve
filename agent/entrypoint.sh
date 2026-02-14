@@ -5,6 +5,10 @@ echo "=== Verve Agent Starting ==="
 echo "Task ID: ${TASK_ID}"
 echo "Repository: ${GITHUB_REPO}"
 echo "Description: ${TASK_DESCRIPTION}"
+if [ "${ATTEMPT:-1}" -gt 1 ]; then
+    echo "Attempt: ${ATTEMPT} (retry)"
+    echo "Retry Reason: ${RETRY_REASON}"
+fi
 echo ""
 
 # Validate required environment variables
@@ -35,10 +39,24 @@ echo "[agent] Cloning repository: ${GITHUB_REPO}..."
 git clone "https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /workspace/repo
 cd /workspace/repo
 
-# Create task branch
+# Branch handling: retry uses existing branch, first attempt creates new
 BRANCH="verve/task-${TASK_ID}"
-echo "[agent] Creating branch: ${BRANCH}"
-git checkout -b "${BRANCH}"
+if [ "${ATTEMPT:-1}" -gt 1 ]; then
+    echo "[agent] Retry attempt ${ATTEMPT}: checking out existing branch ${BRANCH}"
+    git fetch origin "${BRANCH}"
+    git checkout "${BRANCH}"
+
+    # For merge conflicts, attempt rebase on main
+    if echo "$RETRY_REASON" | grep -qi "merge conflict"; then
+        echo "[agent] Rebasing on main to resolve merge conflicts..."
+        git fetch origin main
+        # Don't fail if rebase has conflicts - Claude will resolve them
+        git rebase origin/main || true
+    fi
+else
+    echo "[agent] Creating branch: ${BRANCH}"
+    git checkout -b "${BRANCH}"
+fi
 
 if [ "$DRY_RUN" = "true" ]; then
     # Dry run mode - skip Claude, make a dummy change
@@ -50,6 +68,7 @@ if [ "$DRY_RUN" = "true" ]; then
 
 - **Task ID:** ${TASK_ID}
 - **Description:** ${TASK_DESCRIPTION}
+- **Attempt:** ${ATTEMPT:-1}
 - **Timestamp:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 DRYEOF
 
@@ -63,14 +82,20 @@ DRYEOF
 Implemented by Verve AI Agent (dry run)
 Task ID: ${TASK_ID}"
 
-    echo "[agent] Pushing branch to origin..."
-    git push -u origin "${BRANCH}"
+    if [ "${ATTEMPT:-1}" -gt 1 ]; then
+        echo "[agent] Pushing fixes to existing branch..."
+        git push --force-with-lease origin "${BRANCH}"
+    else
+        echo "[agent] Pushing branch to origin..."
+        git push -u origin "${BRANCH}"
+    fi
     echo "[agent] Branch pushed successfully: ${BRANCH}"
 
-    # Create PR with simple description
-    echo "[agent] Creating pull request..."
-    PR_TITLE="[Dry Run] ${TASK_DESCRIPTION}"
-    PR_BODY="## Dry Run
+    # Only create PR on first attempt
+    if [ "${ATTEMPT:-1}" -le 1 ]; then
+        echo "[agent] Creating pull request..."
+        PR_TITLE="[Dry Run] ${TASK_DESCRIPTION}"
+        PR_BODY="## Dry Run
 
 This PR was created in dry-run mode (no Claude API calls).
 
@@ -80,26 +105,52 @@ This PR was created in dry-run mode (no Claude API calls).
 ---
 *Implemented by Verve AI Agent (dry run)*"
 
-    PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
-    PR_EXIT_CODE=$?
+        PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
+        PR_EXIT_CODE=$?
 
-    if [ ${PR_EXIT_CODE} -eq 0 ]; then
-        PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
-        if [ -n "${PR_URL}" ]; then
-            PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
-            echo "[agent] Pull request created: ${PR_URL}"
-            echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
+        if [ ${PR_EXIT_CODE} -eq 0 ]; then
+            PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
+            if [ -n "${PR_URL}" ]; then
+                PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
+                echo "[agent] Pull request created: ${PR_URL}"
+                echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
+            else
+                echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
+            fi
         else
-            echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
+            echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
         fi
     else
-        echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
+        echo "[agent] Retry: pushed fixes to existing PR branch"
     fi
 
     echo ""
     echo "=== Task Completed Successfully (Dry Run) ==="
     echo "Branch: ${BRANCH}"
     exit 0
+fi
+
+# Build the prompt with retry context
+PROMPT="${TASK_DESCRIPTION}"
+
+if [ "${ATTEMPT:-1}" -gt 1 ]; then
+    echo "[agent] Building retry-aware prompt..."
+
+    RETRY_CONTEXT="IMPORTANT: This is retry attempt ${ATTEMPT}. The previous attempt created a PR but it needs fixes.
+Reason for retry: ${RETRY_REASON}
+"
+
+    if echo "$RETRY_REASON" | grep -qi "CI checks failed"; then
+        RETRY_CONTEXT="${RETRY_CONTEXT}
+Please examine the existing code changes on this branch, review the CI failure details, and fix the issues. Do NOT create a new PR - just fix the code and commit to this branch."
+    elif echo "$RETRY_REASON" | grep -qi "merge conflict"; then
+        RETRY_CONTEXT="${RETRY_CONTEXT}
+The branch had merge conflicts with main. A rebase was attempted. Please resolve any remaining conflicts, ensure the code works correctly with the latest main branch, and commit. Do NOT create a new PR."
+    fi
+
+    PROMPT="${RETRY_CONTEXT}
+
+Original task: ${TASK_DESCRIPTION}"
 fi
 
 # Run Claude Code
@@ -117,7 +168,7 @@ echo "[agent] Using model: ${CLAUDE_MODEL}"
 
 # Use stream-json for real-time output, parse with jq
 # Events include: assistant (text/thinking), tool_use, tool_result, result
-claude --output-format stream-json --verbose --dangerously-skip-permissions --model "${CLAUDE_MODEL}" "${TASK_DESCRIPTION}" 2>&1 | while IFS= read -r line; do
+claude --output-format stream-json --verbose --dangerously-skip-permissions --model "${CLAUDE_MODEL}" "${PROMPT}" 2>&1 | while IFS= read -r line; do
     # Skip empty lines
     [ -z "$line" ] && continue
 
@@ -180,18 +231,25 @@ else
 Implemented by Verve AI Agent
 Task ID: ${TASK_ID}"
 
-    echo "[agent] Pushing branch to origin..."
-    git push -u origin "${BRANCH}"
+    if [ "${ATTEMPT:-1}" -gt 1 ]; then
+        echo "[agent] Pushing fixes to existing branch..."
+        git push --force-with-lease origin "${BRANCH}"
+    else
+        echo "[agent] Pushing branch to origin..."
+        git push -u origin "${BRANCH}"
+    fi
     echo "[agent] Branch pushed successfully: ${BRANCH}"
 
-    # Create Pull Request (gh CLI uses GITHUB_TOKEN env var automatically)
-    echo "[agent] Creating pull request..."
+    # Only create PR on first attempt
+    if [ "${ATTEMPT:-1}" -le 1 ]; then
+        # Create Pull Request (gh CLI uses GITHUB_TOKEN env var automatically)
+        echo "[agent] Creating pull request..."
 
-    # Get diff summary for PR description context
-    DIFF_SUMMARY=$(git diff origin/main...HEAD --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+        # Get diff summary for PR description context
+        DIFF_SUMMARY=$(git diff origin/main...HEAD --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
 
-    # Generate PR title and description using Claude
-    PR_PROMPT="Generate a pull request title and description for the following task and changes.
+        # Generate PR title and description using Claude
+        PR_PROMPT="Generate a pull request title and description for the following task and changes.
 
 Task: ${TASK_DESCRIPTION}
 
@@ -201,73 +259,76 @@ ${DIFF_SUMMARY}
 Respond with ONLY valid JSON in this exact format (no markdown, no code blocks, no extra text):
 {\"title\": \"Short descriptive title (max 72 chars)\", \"description\": \"## Summary\\n\\nBrief description of changes.\\n\\n## Changes\\n\\n- Bullet points of what was done\"}"
 
-    echo "[agent] Generating PR description with Claude..."
-    PR_RAW=$(claude --print --model "${CLAUDE_MODEL}" "${PR_PROMPT}" 2>/dev/null || echo "")
+        echo "[agent] Generating PR description with Claude..."
+        PR_RAW=$(claude --print --model "${CLAUDE_MODEL}" "${PR_PROMPT}" 2>/dev/null || echo "")
 
-    # Extract JSON from response (may be wrapped in markdown code blocks)
-    # First try to extract JSON from code blocks, then try raw response
-    PR_JSON=""
-    if [ -n "${PR_RAW}" ]; then
-        # Try to extract JSON from ```json ... ``` or ``` ... ``` blocks
-        PR_JSON=$(echo "${PR_RAW}" | sed -n '/^```/,/^```$/p' | sed '1d;$d' | tr -d '\n' || echo "")
-        # If that didn't work, try to find raw JSON object
-        if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
-            PR_JSON=$(echo "${PR_RAW}" | grep -o '{[^}]*}' | head -1 || echo "")
-        fi
-        # Last resort: use raw output if it's valid JSON
-        if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
-            if echo "${PR_RAW}" | jq -e . >/dev/null 2>&1; then
-                PR_JSON="${PR_RAW}"
+        # Extract JSON from response (may be wrapped in markdown code blocks)
+        # First try to extract JSON from code blocks, then try raw response
+        PR_JSON=""
+        if [ -n "${PR_RAW}" ]; then
+            # Try to extract JSON from ```json ... ``` or ``` ... ``` blocks
+            PR_JSON=$(echo "${PR_RAW}" | sed -n '/^```/,/^```$/p' | sed '1d;$d' | tr -d '\n' || echo "")
+            # If that didn't work, try to find raw JSON object
+            if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+                PR_JSON=$(echo "${PR_RAW}" | grep -o '{[^}]*}' | head -1 || echo "")
+            fi
+            # Last resort: use raw output if it's valid JSON
+            if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+                if echo "${PR_RAW}" | jq -e . >/dev/null 2>&1; then
+                    PR_JSON="${PR_RAW}"
+                fi
             fi
         fi
-    fi
 
-    # Extract title and description, with fallbacks
-    PR_TITLE=""
-    PR_BODY=""
-    if [ -n "${PR_JSON}" ] && echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
-        PR_TITLE=$(echo "${PR_JSON}" | jq -r '.title // empty' 2>/dev/null || echo "")
-        PR_BODY=$(echo "${PR_JSON}" | jq -r '.description // empty' 2>/dev/null || echo "")
-    fi
+        # Extract title and description, with fallbacks
+        PR_TITLE=""
+        PR_BODY=""
+        if [ -n "${PR_JSON}" ] && echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+            PR_TITLE=$(echo "${PR_JSON}" | jq -r '.title // empty' 2>/dev/null || echo "")
+            PR_BODY=$(echo "${PR_JSON}" | jq -r '.description // empty' 2>/dev/null || echo "")
+        fi
 
-    # Fallback if Claude/jq failed
-    if [ -z "${PR_TITLE}" ]; then
-        PR_TITLE="${TASK_DESCRIPTION}"
-    fi
-    if [ -z "${PR_BODY}" ]; then
-        PR_BODY="## Summary
+        # Fallback if Claude/jq failed
+        if [ -z "${PR_TITLE}" ]; then
+            PR_TITLE="${TASK_DESCRIPTION}"
+        fi
+        if [ -z "${PR_BODY}" ]; then
+            PR_BODY="## Summary
 
 Automated implementation of: ${TASK_DESCRIPTION}
 
 ## Changes
 
 ${DIFF_SUMMARY}"
-    fi
+        fi
 
-    # Append task metadata to PR body
-    PR_BODY="${PR_BODY}
+        # Append task metadata to PR body
+        PR_BODY="${PR_BODY}
 
 ---
 *Implemented by Verve AI Agent*
 **Task ID:** \`${TASK_ID}\`"
 
-    # Create the PR
-    PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
-    PR_EXIT_CODE=$?
+        # Create the PR
+        PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
+        PR_EXIT_CODE=$?
 
-    if [ ${PR_EXIT_CODE} -eq 0 ]; then
-        # Extract the PR URL from output
-        PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
-        if [ -n "${PR_URL}" ]; then
-            PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
-            echo "[agent] Pull request created: ${PR_URL}"
-            # Output structured marker for worker to parse
-            echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
+        if [ ${PR_EXIT_CODE} -eq 0 ]; then
+            # Extract the PR URL from output
+            PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
+            if [ -n "${PR_URL}" ]; then
+                PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
+                echo "[agent] Pull request created: ${PR_URL}"
+                # Output structured marker for worker to parse
+                echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
+            else
+                echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
+            fi
         else
-            echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
+            echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
         fi
     else
-        echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
+        echo "[agent] Retry: pushed fixes to existing PR branch"
     fi
 fi
 

@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, repo_id, description, status, depends_on, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO task (id, repo_id, description, status, depends_on, attempt, max_attempts, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = ?;
@@ -50,3 +50,7 @@ WHERE id = ? AND status = 'pending';
 
 -- name: HasTasksForRepo :one
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = ?);
+
+-- name: RetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'review';

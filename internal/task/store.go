@@ -89,6 +89,30 @@ func (s *Store) HasTasksForRepo(ctx context.Context, repoID string) (bool, error
 	return s.repo.HasTasksForRepo(ctx, repoID)
 }
 
+// RetryTask transitions a task from review back to pending for another attempt.
+// If the task has already exhausted max_attempts, it is failed instead.
+func (s *Store) RetryTask(ctx context.Context, id TaskID, reason string) error {
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if t.Attempt >= t.MaxAttempts {
+		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	ok, err := s.repo.RetryTask(ctx, id, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // task was not in review status
+	}
+
+	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // ClaimPendingTask finds a pending task with all dependencies met and claims it
 // by setting its status to running. When repoIDs is non-empty, only tasks
 // belonging to those repos are considered. The read-check-claim flow is wrapped

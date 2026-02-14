@@ -98,6 +98,9 @@ type Task struct {
 	PrNumber       *int32             `json:"pr_number"`
 	DependsOn      []string           `json:"depends_on"`
 	CloseReason    *string            `json:"close_reason"`
+	Attempt        int32              `json:"attempt"`
+	MaxAttempts    int32              `json:"max_attempts"`
+	RetryReason    *string            `json:"retry_reason"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }

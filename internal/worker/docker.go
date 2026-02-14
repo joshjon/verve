@@ -74,6 +74,8 @@ type AgentConfig struct {
 	AnthropicAPIKey string
 	ClaudeModel     string
 	DryRun          bool
+	Attempt         int
+	RetryReason     string
 }
 
 // LogCallback is called for each log line from the container
@@ -93,6 +95,12 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	}
 	if cfg.DryRun {
 		env = append(env, "DRY_RUN=true")
+	}
+	if cfg.Attempt > 1 {
+		env = append(env,
+			fmt.Sprintf("ATTEMPT=%d", cfg.Attempt),
+			"RETRY_REASON="+cfg.RetryReason,
+		)
 	}
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{

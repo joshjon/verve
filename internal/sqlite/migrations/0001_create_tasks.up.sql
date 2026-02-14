@@ -16,6 +16,9 @@ CREATE TABLE task (
     pr_number        INTEGER,
     depends_on       TEXT NOT NULL DEFAULT '[]',
     close_reason     TEXT,
+    attempt          INTEGER NOT NULL DEFAULT 1,
+    max_attempts     INTEGER NOT NULL DEFAULT 5,
+    retry_reason     TEXT,
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

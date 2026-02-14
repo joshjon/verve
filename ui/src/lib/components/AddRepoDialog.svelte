@@ -25,6 +25,16 @@
 		)
 	);
 
+	// Load repos when dialog opens (via prop change or user interaction).
+	$effect(() => {
+		if (open) {
+			loadAvailableRepos();
+		} else {
+			searchQuery = '';
+			error = null;
+		}
+	});
+
 	async function loadAvailableRepos() {
 		if (availableRepos.length > 0) return;
 		loadingRepos = true;
@@ -50,19 +60,9 @@
 			adding = null;
 		}
 	}
-
-	function handleOpen(isOpen: boolean) {
-		open = isOpen;
-		if (isOpen) {
-			loadAvailableRepos();
-		} else {
-			searchQuery = '';
-			error = null;
-		}
-	}
 </script>
 
-<Dialog.Root {open} onOpenChange={handleOpen}>
+<Dialog.Root bind:open>
 	<Dialog.Content class="sm:max-w-[500px]">
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2">
