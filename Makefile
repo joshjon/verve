@@ -1,4 +1,6 @@
-.PHONY: all build build-server build-worker build-agent build-agent-no-cache run-server run-server-pg run-worker test-task clean tidy generate up down logs ui-install ui-dev ui-build
+.PHONY: all build build-server build-worker build-agent build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate up down logs ui-install ui-dev ui-build ui-build-go
+
+AGENT_IMAGE = ghcr.io/joshjon/verve-agent
 
 # Build all components
 all: build-agent build
@@ -18,6 +20,21 @@ build-agent:
 
 build-agent-no-cache:
 	docker build --no-cache -t verve-agent:latest ./agent
+
+# Push agent image to GitHub Container Registry
+# Usage:
+#   make push-agent              # pushes :latest
+#   make push-agent TAG=v0.1.0   # pushes :v0.1.0 and :latest
+push-agent: build-agent
+ifdef TAG
+	docker tag verve-agent:latest $(AGENT_IMAGE):$(TAG)
+	docker tag verve-agent:latest $(AGENT_IMAGE):latest
+	docker push $(AGENT_IMAGE):$(TAG)
+	docker push $(AGENT_IMAGE):latest
+else
+	docker tag verve-agent:latest $(AGENT_IMAGE):latest
+	docker push $(AGENT_IMAGE):latest
+endif
 
 # Generate sqlc code
 generate:

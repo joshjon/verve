@@ -2,6 +2,7 @@ FROM node:20-slim
 
 LABEL org.opencontainers.image.title="Verve Agent"
 LABEL org.opencontainers.image.description="Base agent image for Verve AI task orchestrator"
+LABEL org.opencontainers.image.source="https://github.com/joshjon/verve"
 LABEL org.opencontainers.image.vendor="Verve"
 LABEL verve.extensible="true"
 
