@@ -22,8 +22,8 @@ if [ -z "$GITHUB_REPO" ]; then
     exit 1
 fi
 
-if [ "$DRY_RUN" != "true" ] && [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "[error] ANTHROPIC_API_KEY is not set"
+if [ "$DRY_RUN" != "true" ] && [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+    echo "[error] ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN must be set"
     exit 1
 fi
 

@@ -20,22 +20,29 @@ func main() {
 
 	// Load configuration from environment
 	cfg := worker.Config{
-		APIURL:             getEnvOrDefault("API_URL", "http://localhost:7400"),
-		AnthropicAPIKey:    os.Getenv("ANTHROPIC_API_KEY"),
-		ClaudeModel:        getEnvOrDefault("CLAUDE_MODEL", "haiku"),
-		AgentImage:         getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
-		MaxConcurrentTasks: getEnvOrDefaultInt(logger, "MAX_CONCURRENT_TASKS", 3),
-		DryRun:             os.Getenv("DRY_RUN") == "true",
+		APIURL:               getEnvOrDefault("API_URL", "http://localhost:7400"),
+		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
+		ClaudeCodeOAuthToken: os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
+		ClaudeModel:          getEnvOrDefault("CLAUDE_MODEL", "haiku"),
+		AgentImage:           getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
+		MaxConcurrentTasks:   getEnvOrDefaultInt(logger, "MAX_CONCURRENT_TASKS", 3),
+		DryRun:               os.Getenv("DRY_RUN") == "true",
 	}
 
-	// Validate required configuration
-	if !cfg.DryRun && cfg.AnthropicAPIKey == "" {
-		logger.Error("ANTHROPIC_API_KEY environment variable is required (or set DRY_RUN=true)")
+	// Validate required configuration — need at least one auth method
+	if !cfg.DryRun && cfg.AnthropicAPIKey == "" && cfg.ClaudeCodeOAuthToken == "" {
+		logger.Error("ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN is required (or set DRY_RUN=true)")
 		os.Exit(1)
+	}
+
+	authMethod := "api_key"
+	if cfg.ClaudeCodeOAuthToken != "" {
+		authMethod = "oauth"
 	}
 
 	logger.Info("worker configured",
 		"api_url", cfg.APIURL,
+		"auth", authMethod,
 		"model", cfg.ClaudeModel,
 		"image", cfg.AgentImage,
 		"max_concurrent", cfg.MaxConcurrentTasks,

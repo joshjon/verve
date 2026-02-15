@@ -25,7 +25,7 @@
 ## Agent Execution
 
 - **Docker isolation**: Each task runs in an ephemeral container, automatically cleaned up
-- **Claude Code integration**: Stream-JSON output mode with model selection (haiku, sonnet, opus)
+- **Claude Code integration**: Stream-JSON output mode with model selection (haiku, sonnet, opus); supports both API key (`ANTHROPIC_API_KEY`) and OAuth token (`CLAUDE_CODE_OAUTH_TOKEN`) for subscription-based auth
 - **Branch management**: Auto-creates `verve/task-{id}` branches; reuses on retry with rebase
 - **PR creation**: Automatic PR with Claude-generated title/description via `gh` CLI
 - **Dry run mode**: Skip Claude API calls for testing; creates dummy changes with dry-run label

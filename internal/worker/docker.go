@@ -67,18 +67,19 @@ type RunResult struct {
 
 // AgentConfig holds the configuration for running an agent
 type AgentConfig struct {
-	TaskID             string
-	TaskDescription    string
-	GitHubToken        string
-	GitHubRepo         string
-	AnthropicAPIKey    string
-	ClaudeModel        string
-	DryRun             bool
-	Attempt            int
-	RetryReason        string
-	AcceptanceCriteria string
-	RetryContext       string
-	PreviousStatus     string
+	TaskID               string
+	TaskDescription      string
+	GitHubToken          string
+	GitHubRepo           string
+	AnthropicAPIKey      string
+	ClaudeCodeOAuthToken string // OAuth token (subscription-based, alternative to API key)
+	ClaudeModel          string
+	DryRun               bool
+	Attempt              int
+	RetryReason          string
+	AcceptanceCriteria   string
+	RetryContext         string
+	PreviousStatus       string
 }
 
 // LogCallback is called for each log line from the container
@@ -93,8 +94,13 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		"TASK_DESCRIPTION=" + cfg.TaskDescription,
 		"GITHUB_TOKEN=" + cfg.GitHubToken,
 		"GITHUB_REPO=" + cfg.GitHubRepo,
-		"ANTHROPIC_API_KEY=" + cfg.AnthropicAPIKey,
 		"CLAUDE_MODEL=" + cfg.ClaudeModel,
+	}
+	// Pass whichever auth method is configured (OAuth token takes precedence)
+	if cfg.ClaudeCodeOAuthToken != "" {
+		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+cfg.ClaudeCodeOAuthToken)
+	} else {
+		env = append(env, "ANTHROPIC_API_KEY="+cfg.AnthropicAPIKey)
 	}
 	if cfg.DryRun {
 		env = append(env, "DRY_RUN=true")

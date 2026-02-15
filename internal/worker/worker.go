@@ -16,12 +16,13 @@ import (
 
 // Config holds the worker configuration
 type Config struct {
-	APIURL             string
-	AnthropicAPIKey    string
-	ClaudeModel        string // Model to use (haiku, sonnet, opus) - defaults to haiku
-	AgentImage         string // Docker image for agent - defaults to verve-agent:latest
-	MaxConcurrentTasks int    // Maximum concurrent tasks (default: 1)
-	DryRun             bool   // Skip Claude and make a dummy change instead
+	APIURL               string
+	AnthropicAPIKey      string // API key auth (pay-per-use)
+	ClaudeCodeOAuthToken string // OAuth token auth (subscription-based, alternative to API key)
+	ClaudeModel          string // Model to use (haiku, sonnet, opus) - defaults to haiku
+	AgentImage           string // Docker image for agent - defaults to verve-agent:latest
+	MaxConcurrentTasks   int    // Maximum concurrent tasks (default: 1)
+	DryRun               bool   // Skip Claude and make a dummy change instead
 }
 
 type Task struct {
@@ -356,18 +357,19 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 
 	// Create agent config from worker config + server-provided credentials
 	agentCfg := AgentConfig{
-		TaskID:             task.ID,
-		TaskDescription:    task.Description,
-		GitHubToken:        githubToken,
-		GitHubRepo:         repoFullName,
-		AnthropicAPIKey:    w.config.AnthropicAPIKey,
-		ClaudeModel:        w.config.ClaudeModel,
-		DryRun:             w.config.DryRun,
-		Attempt:            task.Attempt,
-		RetryReason:        task.RetryReason,
-		AcceptanceCriteria: task.AcceptanceCriteria,
-		RetryContext:       task.RetryContext,
-		PreviousStatus:     task.AgentStatus,
+		TaskID:               task.ID,
+		TaskDescription:      task.Description,
+		GitHubToken:          githubToken,
+		GitHubRepo:           repoFullName,
+		AnthropicAPIKey:      w.config.AnthropicAPIKey,
+		ClaudeCodeOAuthToken: w.config.ClaudeCodeOAuthToken,
+		ClaudeModel:          w.config.ClaudeModel,
+		DryRun:               w.config.DryRun,
+		Attempt:              task.Attempt,
+		RetryReason:          task.RetryReason,
+		AcceptanceCriteria:   task.AcceptanceCriteria,
+		RetryContext:         task.RetryContext,
+		PreviousStatus:       task.AgentStatus,
 	}
 
 	// Run the agent with streaming logs
