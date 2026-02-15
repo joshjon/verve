@@ -286,10 +286,11 @@
 	}
 </script>
 
-<div class="p-6 max-w-4xl mx-auto">
-	<Button variant="ghost" onclick={() => goto('/')} class="mb-6 gap-2 -ml-2">
+<div class="p-4 sm:p-6 max-w-4xl mx-auto">
+	<Button variant="ghost" onclick={() => goto('/')} class="mb-4 sm:mb-6 gap-2 -ml-2">
 		<ArrowLeft class="w-4 h-4" />
-		Back to Dashboard
+		<span class="hidden sm:inline">Back to Dashboard</span>
+		<span class="sm:hidden">Back</span>
 	</Button>
 
 	{#if loading}
@@ -306,27 +307,34 @@
 		</div>
 	{:else if task}
 		<div class="space-y-6">
-			<!-- Header -->
-			<div class="flex items-start justify-between gap-4">
-				<div class="flex-1">
-					<div class="flex items-center gap-3 mb-2">
-						<span class="font-mono text-sm text-muted-foreground bg-muted px-2 py-1 rounded">
-							{task.id}
-						</span>
-						<Badge class="{currentStatusConfig?.bgClass} text-white gap-1">
-							<StatusIcon class="w-3 h-3" />
-							{currentStatusConfig?.label}
-						</Badge>
-					</div>
-					<div class="flex items-center gap-4 text-sm text-muted-foreground">
-						<span class="flex items-center gap-1">
-							<Calendar class="w-4 h-4" />
-							Created {formatRelativeTime(task.created_at)}
-						</span>
-					</div>
-				</div>
-				<div class="flex items-center gap-2">
-					{#if canClose}
+			<!-- Metadata -->
+			<div class="flex items-center gap-2 sm:gap-3 flex-wrap pb-4 sm:pb-5 border-b">
+				<span class="font-mono text-xs sm:text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded truncate max-w-[150px] sm:max-w-none">
+					{task.id}
+				</span>
+				<Badge class="{currentStatusConfig?.bgClass} text-white gap-1">
+					<StatusIcon class="w-3 h-3" />
+					{currentStatusConfig?.label}
+				</Badge>
+				<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
+					<Calendar class="w-3.5 h-3.5" />
+					{formatRelativeTime(task.created_at)}
+				</span>
+				<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
+					<Clock class="w-3.5 h-3.5" />
+					{formatRelativeTime(task.updated_at)}
+				</span>
+				{#if task.cost_usd > 0}
+					<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
+						<DollarSign class="w-3.5 h-3.5" />
+						{formatCost(task.cost_usd)}
+						{#if task.max_cost_usd}
+							<span class="text-muted-foreground/60">/ {formatCost(task.max_cost_usd)}</span>
+						{/if}
+					</span>
+				{/if}
+				{#if canClose}
+					<div class="ml-auto">
 						{#if showCloseForm}
 							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">
 								<X class="w-4 h-4" />
@@ -335,11 +343,12 @@
 						{:else}
 							<Button size="sm" variant="outline" onclick={() => (showCloseForm = true)} class="gap-1">
 								<XCircle class="w-4 h-4" />
-								Close Task
+								<span class="hidden sm:inline">Close Task</span>
+								<span class="sm:hidden">Close</span>
 							</Button>
 						{/if}
-					{/if}
-				</div>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Close Form -->
@@ -663,7 +672,7 @@
 					<div
 						bind:this={logsContainer}
 						onscroll={handleLogsScroll}
-						class="h-[400px] w-full rounded-lg border bg-zinc-950 p-4 overflow-y-auto"
+						class="h-[250px] sm:h-[400px] w-full rounded-lg border bg-zinc-950 p-3 sm:p-4 overflow-y-auto"
 					>
 						{#if logs.length > 0}
 							<pre class="text-green-400 text-xs font-mono whitespace-pre-wrap leading-relaxed">{logs.join('\n')}</pre>
@@ -677,22 +686,6 @@
 				</Card.Content>
 			</Card.Root>
 
-			<!-- Footer -->
-			<div class="flex items-center justify-between text-sm text-muted-foreground pt-2">
-				<span class="flex items-center gap-1">
-					<Clock class="w-4 h-4" />
-					Last updated: {formatDate(task.updated_at)}
-				</span>
-				{#if task.cost_usd > 0}
-					<span class="flex items-center gap-1">
-						<DollarSign class="w-4 h-4" />
-						Cost: {formatCost(task.cost_usd)}
-						{#if task.max_cost_usd}
-							<span class="text-muted-foreground">/ {formatCost(task.max_cost_usd)}</span>
-						{/if}
-					</span>
-				{/if}
-			</div>
 		</div>
 	{/if}
 </div>

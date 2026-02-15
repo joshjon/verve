@@ -1,8 +1,9 @@
 # dotenvx - NEVER read private keys
 .env.keys
 
-# Unencrypted .env files (encrypted .env.production and .env.dev are OK to read)
 .env
+.env.prod
+.env.dev
 .env.local
 .env.*.local
 .env.local.*

@@ -7,6 +7,8 @@ local/
 dist/
 
 .env
+.env.prod
+.env.dev
 
 # Go server UI assets
 !internal/frontend/dist/

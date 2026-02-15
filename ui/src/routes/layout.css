@@ -5,7 +5,7 @@
 
 /*
  * Verve UI Theme
- * Primary color: Blue
+ * Primary color: Purple
  * Neutral colors: Zinc
  */
 
@@ -24,8 +24,8 @@
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.141 0.005 285.823);
 
-	/* Primary - Blue */
-	--primary: oklch(0.55 0.15 250);
+	/* Primary - Purple */
+	--primary: oklch(0.55 0.15 290);
 	--primary-foreground: oklch(0.99 0 0);
 
 	/* Secondary - Zinc */
@@ -36,8 +36,8 @@
 	--muted: oklch(0.967 0.001 286.375);
 	--muted-foreground: oklch(0.552 0.016 285.938);
 
-	/* Accent - Subtle blue tint */
-	--accent: oklch(0.96 0.02 250);
+	/* Accent - Subtle purple tint */
+	--accent: oklch(0.96 0.02 290);
 	--accent-foreground: oklch(0.21 0.006 285.885);
 
 	/* Destructive */
@@ -46,15 +46,7 @@
 	/* Borders & Inputs */
 	--border: oklch(0.91 0.004 286.32);
 	--input: oklch(0.91 0.004 286.32);
-	--ring: oklch(0.7 0.15 250);
-
-	/* Status Colors */
-	--status-pending: oklch(0.75 0.15 85);
-	--status-running: oklch(0.6 0.15 250);
-	--status-review: oklch(0.6 0.15 300);
-	--status-merged: oklch(0.6 0.15 145);
-	--status-completed: oklch(0.6 0.02 250);
-	--status-failed: oklch(0.55 0.18 25);
+	--ring: oklch(0.7 0.15 290);
 }
 
 .dark {
@@ -70,8 +62,8 @@
 	--popover: oklch(0.205 0.006 285.885);
 	--popover-foreground: oklch(0.985 0 0);
 
-	/* Primary - Blue */
-	--primary: oklch(0.6 0.15 250);
+	/* Primary - Purple */
+	--primary: oklch(0.65 0.15 290);
 	--primary-foreground: oklch(0.99 0 0);
 
 	/* Secondary */
@@ -83,7 +75,7 @@
 	--muted-foreground: oklch(0.705 0.015 286.067);
 
 	/* Accent */
-	--accent: oklch(0.28 0.03 250);
+	--accent: oklch(0.28 0.03 290);
 	--accent-foreground: oklch(0.985 0 0);
 
 	/* Destructive */
@@ -92,7 +84,7 @@
 	/* Borders & Inputs */
 	--border: oklch(0.31 0.006 286.033);
 	--input: oklch(0.31 0.006 286.033);
-	--ring: oklch(0.74 0.15 250);
+	--ring: oklch(0.74 0.15 290);
 }
 
 @theme inline {

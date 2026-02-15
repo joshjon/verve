@@ -32,14 +32,14 @@
 {#if repoStore.repos.length > 0}
 	<Popover.Root bind:open>
 		<Popover.Trigger>
-			<Button variant="outline" class="gap-2 min-w-40 justify-between">
-				<div class="flex items-center gap-2">
-					<GitBranch class="w-4 h-4 text-muted-foreground" />
-					<span class="truncate max-w-48">
+			<Button variant="outline" class="gap-2 min-w-0 sm:min-w-40 justify-between max-w-[200px] sm:max-w-none">
+				<div class="flex items-center gap-2 min-w-0">
+					<GitBranch class="w-4 h-4 text-muted-foreground shrink-0" />
+					<span class="truncate max-w-[120px] sm:max-w-48">
 						{repoStore.selectedRepo?.full_name ?? 'Select repo'}
 					</span>
 				</div>
-				<ChevronDown class="w-4 h-4 text-muted-foreground" />
+				<ChevronDown class="w-4 h-4 text-muted-foreground shrink-0" />
 			</Button>
 		</Popover.Trigger>
 		<Popover.Content class="w-72 p-0" align="start">

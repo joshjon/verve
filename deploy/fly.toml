@@ -1,0 +1,27 @@
+app = "verve-prod"
+primary_region = "iad"
+
+[build]
+dockerfile = "../Dockerfile"
+build-target = "server"
+
+[env]
+UI = "true"
+
+# No [http_service] — app is private-only, accessible via Fly WireGuard
+# at verve.internal:7400
+
+[[vm]]
+size = "shared-cpu-2x"
+memory = "512mb"
+
+# Health check (top-level, does not create a public endpoint)
+[[checks]]
+name = "health"
+port = 7400
+type = "http"
+interval = "30s"
+timeout = "5s"
+grace_period = "10s"
+method = "GET"
+path = "/healthz"

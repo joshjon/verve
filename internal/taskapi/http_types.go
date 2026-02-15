@@ -44,3 +44,13 @@ type PollTaskResponse struct {
 	GitHubToken  string     `json:"github_token"`
 	RepoFullName string     `json:"repo_full_name"`
 }
+
+// SaveGitHubTokenRequest is the request body for saving a GitHub token.
+type SaveGitHubTokenRequest struct {
+	Token string `json:"token"`
+}
+
+// GitHubTokenStatusResponse indicates whether a GitHub token is configured.
+type GitHubTokenStatusResponse struct {
+	Configured bool `json:"configured"`
+}

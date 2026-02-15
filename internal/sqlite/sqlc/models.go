@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+type GithubToken struct {
+	ID             string
+	EncryptedToken string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type Repo struct {
 	ID        string
 	Owner     string

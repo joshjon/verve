@@ -15,6 +15,7 @@ type Querier interface {
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	CreateTask(ctx context.Context, arg CreateTaskParams) error
+	DeleteGitHubToken(ctx context.Context) error
 	DeleteRepo(ctx context.Context, id string) error
 	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
@@ -24,6 +25,7 @@ type Querier interface {
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
 	ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error)
+	ReadGitHubToken(ctx context.Context) (string, error)
 	ReadRepo(ctx context.Context, id string) (*Repo, error)
 	ReadRepoByFullName(ctx context.Context, fullName string) (*Repo, error)
 	ReadTask(ctx context.Context, id string) (*Task, error)
@@ -37,6 +39,7 @@ type Querier interface {
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	TaskExists(ctx context.Context, id string) (bool, error)
 	UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error
+	UpsertGitHubToken(ctx context.Context, arg UpsertGitHubTokenParams) error
 }
 
 var _ Querier = (*Queries)(nil)

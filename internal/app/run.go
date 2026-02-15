@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"verve/internal/frontend"
 	"verve/internal/github"
+	"verve/internal/githubtoken"
 	"verve/internal/postgres"
 	pgmigrations "verve/internal/postgres/migrations"
 	"verve/internal/repo"
@@ -23,33 +25,49 @@ import (
 )
 
 type stores struct {
-	task *task.Store
-	repo *repo.Store
+	task        *task.Store
+	repo        *repo.Store
+	githubToken *githubtoken.Service
 }
 
-// Run starts the API server. If cfg.DatabaseURL is empty, it falls back to
+// Run starts the API server. If Postgres is not configured, it falls back to
 // an in-memory SQLite database with a warning.
 func Run(ctx context.Context, logger log.Logger, cfg Config) error {
-	s, cleanup, err := initStores(ctx, logger, cfg)
+	var encryptionKey []byte
+	if cfg.EncryptionKey != "" {
+		var err error
+		encryptionKey, err = hex.DecodeString(cfg.EncryptionKey)
+		if err != nil {
+			return fmt.Errorf("decode ENCRYPTION_KEY (expected hex): %w", err)
+		}
+	}
+
+	s, cleanup, err := initStores(ctx, logger, cfg, encryptionKey)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	gh := github.NewClient(cfg.GitHub.Token)
-
-	return serve(ctx, logger, cfg, s, gh)
-}
-
-func initStores(ctx context.Context, logger log.Logger, cfg Config) (stores, func(), error) {
-	if cfg.DatabaseURL == "" {
-		logger.Warn("DATABASE_URL not set, using in-memory SQLite (data will not persist)")
-		return initSQLite(ctx)
+	if s.githubToken != nil {
+		if err := s.githubToken.Load(ctx); err != nil {
+			logger.Error("failed to load GitHub token from database", "error", err)
+		} else if s.githubToken.HasToken() {
+			logger.Info("GitHub token loaded from database")
+		}
 	}
-	return initPostgres(ctx, logger, cfg.Postgres)
+
+	return serve(ctx, logger, cfg, s)
 }
 
-func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig) (stores, func(), error) {
+func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKey []byte) (stores, func(), error) {
+	if !cfg.Postgres.IsSet() {
+		logger.Warn("Postgres not configured, using in-memory SQLite (data will not persist)")
+		return initSQLite(ctx, encryptionKey)
+	}
+	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey)
+}
+
+func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte) (stores, func(), error) {
 	pool, err := pgdb.Dial(ctx, cfg.User, cfg.Password, cfg.HostPort, cfg.Database)
 	if err != nil {
 		return stores{}, nil, fmt.Errorf("dial postgres: %w", err)
@@ -70,10 +88,16 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig) (s
 	repoRepo := postgres.NewRepoRepository(pool)
 	repoStore := repo.NewStore(repoRepo, taskStore)
 
-	return stores{task: taskStore, repo: repoStore}, func() { pool.Close() }, nil
+	var ghTokenService *githubtoken.Service
+	if encryptionKey != nil {
+		ghTokenRepo := postgres.NewGitHubTokenRepository(pool)
+		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey)
+	}
+
+	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context) (stores, func(), error) {
+func initSQLite(ctx context.Context, encryptionKey []byte) (stores, func(), error) {
 	db, err := sqlitedb.Open(ctx, sqlitedb.WithInMemory())
 	if err != nil {
 		return stores{}, nil, fmt.Errorf("open sqlite: %w", err)
@@ -91,10 +115,16 @@ func initSQLite(ctx context.Context) (stores, func(), error) {
 	repoRepo := sqlite.NewRepoRepository(db)
 	repoStore := repo.NewStore(repoRepo, taskStore)
 
-	return stores{task: taskStore, repo: repoStore}, func() { db.Close() }, nil
+	var ghTokenService *githubtoken.Service
+	if encryptionKey != nil {
+		ghTokenRepo := sqlite.NewGitHubTokenRepository(db)
+		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey)
+	}
+
+	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService}, func() { db.Close() }, nil
 }
 
-func serve(ctx context.Context, logger log.Logger, cfg Config, s stores, gh *github.Client) error {
+func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	opts := []server.Option{
 		server.WithLogger(logger),
 		server.WithRequestTimeout(server.DefaultRequestTimeout, "/api/v1/events", "/api/v1/tasks/:id/logs"),
@@ -117,13 +147,10 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores, gh *git
 		srv.Add(echo.GET, "/*", uiHandler)
 	}
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, gh, cfg.GitHub.Token))
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken))
 
 	// Background PR sync.
-	if gh != nil {
-		go backgroundSync(ctx, logger, s, gh, 30*time.Second)
-		logger.Info("background PR sync started", "interval", "30s")
-	}
+	go backgroundSync(ctx, logger, s, 30*time.Second)
 
 	return Serve(ctx, logger, srv)
 }
@@ -155,7 +182,7 @@ func Serve(ctx context.Context, logger log.Logger, srv *server.Server) error {
 	}
 }
 
-func backgroundSync(ctx context.Context, logger log.Logger, s stores, gh *github.Client, interval time.Duration) {
+func backgroundSync(ctx context.Context, logger log.Logger, s stores, interval time.Duration) {
 	logger = logger.With("component", "pr_sync")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -165,6 +192,14 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, gh *github
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if s.githubToken == nil {
+				continue
+			}
+			gh := s.githubToken.GetClient()
+			if gh == nil {
+				continue
+			}
+
 			repos, err := s.repo.ListRepos(ctx)
 			if err != nil {
 				logger.Error("failed to list repos", "error", err)

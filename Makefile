@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-worker build-agent build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate up down logs ui-install ui-dev ui-build ui-build-go
+.PHONY: all build build-server build-worker build-agent build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate up down logs ui-install ui-dev ui-build ui-build-go deploy
 
 AGENT_IMAGE = ghcr.io/joshjon/verve-agent
 
@@ -48,7 +48,7 @@ run-server-pg: build-server
 	docker compose up -d postgres
 	@echo "Waiting for postgres..."
 	@sleep 2
-	DATABASE_URL=postgres POSTGRES_USER=verve POSTGRES_PASSWORD=verve POSTGRES_HOST_PORT=localhost:5432 POSTGRES_DATABASE=verve ./bin/server
+	POSTGRES_USER=verve POSTGRES_PASSWORD=verve POSTGRES_HOST_PORT=localhost:5432 POSTGRES_DATABASE=verve ./bin/server
 
 run-worker: build-worker
 	./bin/worker
@@ -57,7 +57,7 @@ run-worker: build-worker
 up:
 	docker compose up -d
 
-up-build:
+up-build: ui-build-go
 	docker compose up -d --build
 
 down:
@@ -101,4 +101,8 @@ ui-build:
 	cd ui && pnpm build
 
 ui-build-go:
-	cd ui && BUILD_PATH="../internal/frontend/dist" VITE_API_ADDRESS="" pnpm build
+	cd ui && BUILD_PATH="../internal/frontend/dist" VITE_API_URL="" pnpm build
+
+# Deploy to Fly.io (builds UI into Go binary, then deploys)
+deploy: ui-build-go
+	fly deploy --config deploy/fly.toml --local-only

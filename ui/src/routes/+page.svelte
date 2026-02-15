@@ -6,7 +6,17 @@
 	import TaskColumn from '$lib/components/TaskColumn.svelte';
 	import CreateTaskDialog from '$lib/components/CreateTaskDialog.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { Plus, RefreshCw, CheckCircle2, AlertCircle, GitBranch } from 'lucide-svelte';
+	import {
+		Plus,
+		RefreshCw,
+		CheckCircle2,
+		AlertCircle,
+		GitBranch,
+		Clock,
+		Play,
+		Eye,
+		XCircle
+	} from 'lucide-svelte';
 
 	let openCreate = $state(false);
 	let syncing = $state(false);
@@ -87,14 +97,19 @@
 		taskStore.tasks.filter((t) => ['pending', 'running', 'review'].includes(t.status)).length
 	);
 	const hasRepo = $derived(!!repoStore.selectedRepoId);
+
+	const doneTasks = $derived([
+		...taskStore.tasksByStatus.merged,
+		...taskStore.tasksByStatus.closed
+	]);
 </script>
 
-<div class="p-6 h-full flex flex-col">
+<div class="p-4 sm:p-6 h-full flex flex-col">
 	{#if hasRepo}
-		<header class="flex justify-between items-center mb-6">
+		<header class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6">
 			<div>
 				<div class="flex items-center gap-3">
-					<h1 class="text-2xl font-bold">Dashboard</h1>
+					<h1 class="text-xl sm:text-2xl font-bold">Dashboard</h1>
 					{#if totalTasks > 0}
 						<div class="flex items-center gap-2">
 							<span
@@ -104,7 +119,7 @@
 							</span>
 							{#if activeTasks > 0}
 								<span
-									class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
+									class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
 								>
 									{activeTasks} active
 								</span>
@@ -112,7 +127,7 @@
 						</div>
 					{/if}
 				</div>
-				<p class="text-muted-foreground text-sm mt-1">
+				<p class="text-muted-foreground text-sm mt-1 hidden sm:block">
 					Manage and monitor your AI-powered tasks
 				</p>
 			</div>
@@ -127,11 +142,7 @@
 				{/if}
 				<Button variant="outline" onclick={syncPRs} disabled={syncing} class="gap-2">
 					<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
-					{syncing ? 'Syncing...' : 'Sync PRs'}
-				</Button>
-				<Button onclick={() => (openCreate = true)} class="gap-2">
-					<Plus class="w-4 h-4" />
-					New Task
+					<span class="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync PRs'}</span>
 				</Button>
 			</div>
 		</header>
@@ -145,10 +156,55 @@
 			</div>
 		{/if}
 
-		<div class="grid grid-cols-6 gap-4 flex-1 min-h-0">
-			{#each taskStore.statuses as status}
-				<TaskColumn {status} tasks={taskStore.tasksByStatus[status]} />
-			{/each}
+		{#snippet pendingAction()}
+			<Button
+				size="sm"
+				variant="outline"
+				onclick={() => (openCreate = true)}
+				class="h-6 px-2 gap-1 text-xs"
+			>
+				<Plus class="w-3 h-3" />
+				New
+			</Button>
+		{/snippet}
+
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 flex-1 min-h-0">
+			<TaskColumn
+				label="Pending"
+				icon={Clock}
+				headerBg="bg-amber-500/10"
+				iconClass="text-amber-600 dark:text-amber-400"
+				tasks={taskStore.tasksByStatus.pending}
+				headerAction={pendingAction}
+			/>
+			<TaskColumn
+				label="Running"
+				icon={Play}
+				headerBg="bg-blue-500/10"
+				iconClass="text-blue-600 dark:text-blue-400"
+				tasks={taskStore.tasksByStatus.running}
+			/>
+			<TaskColumn
+				label="In Review"
+				icon={Eye}
+				headerBg="bg-purple-500/10"
+				iconClass="text-purple-600 dark:text-purple-400"
+				tasks={taskStore.tasksByStatus.review}
+			/>
+			<TaskColumn
+				label="Done"
+				icon={CheckCircle2}
+				headerBg="bg-green-500/10"
+				iconClass="text-green-600 dark:text-green-400"
+				tasks={doneTasks}
+			/>
+			<TaskColumn
+				label="Failed"
+				icon={XCircle}
+				headerBg="bg-red-500/10"
+				iconClass="text-red-600 dark:text-red-400"
+				tasks={taskStore.tasksByStatus.failed}
+			/>
 		</div>
 	{:else}
 		<div class="flex-1 flex flex-col items-center justify-center text-center">

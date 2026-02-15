@@ -16,7 +16,7 @@ var dist embed.FS
 
 // Dist returns a read-only file system of the UI static files.
 func Dist() (fs.FS, error) {
-	basePath := "dist/"
+	basePath := "dist"
 
 	f, err := dist.Open(basePath + "/" + indexPage)
 	if err != nil {

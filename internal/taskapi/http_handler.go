@@ -11,21 +11,21 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"verve/internal/github"
+	"verve/internal/githubtoken"
 	"verve/internal/repo"
 	"verve/internal/task"
 )
 
 // HTTPHandler handles task and repo HTTP requests.
 type HTTPHandler struct {
-	store       *task.Store
-	repoStore   *repo.Store
-	github      *github.Client
-	githubToken string
+	store              *task.Store
+	repoStore          *repo.Store
+	githubTokenService *githubtoken.Service
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubClient *github.Client, githubToken string) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, github: githubClient, githubToken: githubToken}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubTokenService *githubtoken.Service) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, githubTokenService: githubTokenService}
 }
 
 // Register adds the endpoints to the provided Echo router group.
@@ -53,6 +53,51 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
+
+	// Settings
+	g.PUT("/settings/github-token", h.SaveGitHubToken)
+	g.GET("/settings/github-token", h.GetGitHubTokenStatus)
+	g.DELETE("/settings/github-token", h.DeleteGitHubToken)
+}
+
+// --- Settings Handlers ---
+
+// SaveGitHubToken handles PUT /settings/github-token
+func (h *HTTPHandler) SaveGitHubToken(c echo.Context) error {
+	if h.githubTokenService == nil {
+		return c.JSON(http.StatusServiceUnavailable, errorResponse("encryption key not configured"))
+	}
+
+	var req SaveGitHubTokenRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.Token == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("token required"))
+	}
+
+	if err := h.githubTokenService.SaveToken(c.Request().Context(), req.Token); err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("failed to save token: "+err.Error()))
+	}
+	return c.JSON(http.StatusOK, statusOK())
+}
+
+// GetGitHubTokenStatus handles GET /settings/github-token
+func (h *HTTPHandler) GetGitHubTokenStatus(c echo.Context) error {
+	configured := h.githubTokenService != nil && h.githubTokenService.HasToken()
+	return c.JSON(http.StatusOK, GitHubTokenStatusResponse{Configured: configured})
+}
+
+// DeleteGitHubToken handles DELETE /settings/github-token
+func (h *HTTPHandler) DeleteGitHubToken(c echo.Context) error {
+	if h.githubTokenService == nil {
+		return c.JSON(http.StatusServiceUnavailable, errorResponse("encryption key not configured"))
+	}
+
+	if err := h.githubTokenService.DeleteToken(c.Request().Context()); err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("failed to delete token: "+err.Error()))
+	}
+	return c.JSON(http.StatusOK, statusOK())
 }
 
 // --- Repo Handlers ---
@@ -102,11 +147,12 @@ func (h *HTTPHandler) RemoveRepo(c echo.Context) error {
 
 // ListAvailableRepos handles GET /repos/available
 func (h *HTTPHandler) ListAvailableRepos(c echo.Context) error {
-	if h.github == nil {
+	gh := h.githubClient()
+	if gh == nil {
 		return c.JSON(http.StatusServiceUnavailable, errorResponse("GitHub token not configured"))
 	}
 
-	repos, err := h.github.ListAccessibleRepos(c.Request().Context())
+	repos, err := gh.ListAccessibleRepos(c.Request().Context())
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, errorResponse("failed to list GitHub repos: "+err.Error()))
 	}
@@ -190,9 +236,14 @@ func (h *HTTPHandler) PollTask(c echo.Context) error {
 				return jsonError(c, readErr)
 			}
 
+			var token string
+			if h.githubTokenService != nil {
+				token = h.githubTokenService.GetToken()
+			}
+
 			return c.JSON(http.StatusOK, PollTaskResponse{
 				Task:         t,
-				GitHubToken:  h.githubToken,
+				GitHubToken:  token,
 				RepoFullName: r.FullName,
 			})
 		}
@@ -292,7 +343,8 @@ func (h *HTTPHandler) SyncTaskStatus(c echo.Context) error {
 		return jsonError(c, err)
 	}
 
-	if t.Status == task.StatusReview && h.github != nil && t.PRNumber > 0 {
+	gh := h.githubClient()
+	if t.Status == task.StatusReview && gh != nil && t.PRNumber > 0 {
 		// Look up repo to get owner/name for the GitHub API call.
 		repoID, parseErr := repo.ParseRepoID(t.RepoID)
 		if parseErr != nil {
@@ -303,7 +355,7 @@ func (h *HTTPHandler) SyncTaskStatus(c echo.Context) error {
 			return jsonError(c, readErr)
 		}
 
-		merged, ghErr := h.github.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
+		merged, ghErr := gh.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
 		if ghErr != nil {
 			return c.JSON(http.StatusInternalServerError, errorResponse("failed to check PR status: "+ghErr.Error()))
 		}
@@ -328,7 +380,8 @@ func (h *HTTPHandler) SyncRepoTasks(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
 	}
 
-	if h.github == nil {
+	gh := h.githubClient()
+	if gh == nil {
 		return c.JSON(http.StatusOK, map[string]int{"synced": 0, "merged": 0})
 	}
 
@@ -349,7 +402,7 @@ func (h *HTTPHandler) SyncRepoTasks(c echo.Context) error {
 	for _, t := range tasks {
 		if t.PRNumber > 0 {
 			synced++
-			isMerged, err := h.github.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
+			isMerged, err := gh.IsPRMerged(ctx, r.Owner, r.Name, t.PRNumber)
 			if err != nil {
 				continue
 			}
@@ -490,6 +543,14 @@ func (h *HTTPHandler) Events(c echo.Context) error {
 			return nil
 		}
 	}
+}
+
+// githubClient returns the current GitHub client, or nil if no token is configured.
+func (h *HTTPHandler) githubClient() *github.Client {
+	if h.githubTokenService == nil {
+		return nil
+	}
+	return h.githubTokenService.GetClient()
 }
 
 func writeSSE(w *echo.Response, event string, data any) error {

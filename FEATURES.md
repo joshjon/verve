@@ -111,5 +111,6 @@
 
 - **User code stays on-premise**: Only task descriptions flow in; logs and PR notifications flow out
 - **Docker container isolation**: Each agent runs in its own ephemeral container
-- **Centralized credential management**: GitHub token configured only on the server; workers receive it per-task over HTTPS
+- **Encrypted token storage**: GitHub tokens encrypted at rest using AES-256-GCM; managed via API (`PUT /settings/github-token`) instead of environment variables
+- **Centralized credential management**: GitHub token stored encrypted in the database; workers receive it per-task over HTTPS
 - **Worker authentication**: Per-user API keys for worker-to-server communication

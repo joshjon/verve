@@ -81,6 +81,13 @@ func AllTaskStatusValues() []TaskStatus {
 	}
 }
 
+type GithubToken struct {
+	ID             string             `json:"id"`
+	EncryptedToken string             `json:"encrypted_token"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Repo struct {
 	ID        string             `json:"id"`
 	Owner     string             `json:"owner"`

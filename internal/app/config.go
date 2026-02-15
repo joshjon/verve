@@ -2,12 +2,11 @@ package app
 
 // Config holds the API server configuration.
 type Config struct {
-	Port        int
-	UI          bool
-	DatabaseURL string // PostgreSQL connection URL; if empty, uses in-memory SQLite
-	Postgres    PostgresConfig
-	GitHub      GitHubConfig
-	CorsOrigins []string
+	Port          int
+	UI            bool
+	Postgres      PostgresConfig // If empty, uses in-memory SQLite
+	EncryptionKey string         // Hex-encoded 32-byte key for encrypting secrets at rest
+	CorsOrigins   []string
 }
 
 // PostgresConfig holds PostgreSQL connection parameters.
@@ -18,7 +17,7 @@ type PostgresConfig struct {
 	Database string
 }
 
-// GitHubConfig holds GitHub API parameters for PR sync.
-type GitHubConfig struct {
-	Token string
+// IsSet returns true if Postgres connection parameters are configured.
+func (c PostgresConfig) IsSet() bool {
+	return c.HostPort != ""
 }

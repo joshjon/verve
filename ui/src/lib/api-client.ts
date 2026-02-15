@@ -121,6 +121,36 @@ export class VerveClient {
 		return res.json();
 	}
 
+	// --- Settings APIs ---
+
+	async getGitHubTokenStatus(): Promise<{ configured: boolean }> {
+		const res = await fetch(`${this.baseUrl}/settings/github-token`);
+		if (!res.ok) {
+			throw new Error('Failed to check GitHub token status');
+		}
+		return res.json();
+	}
+
+	async saveGitHubToken(token: string): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/settings/github-token`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ token })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to save GitHub token');
+		}
+	}
+
+	async deleteGitHubToken(): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/settings/github-token`, {
+			method: 'DELETE'
+		});
+		if (!res.ok) {
+			throw new Error('Failed to delete GitHub token');
+		}
+	}
+
 	// --- SSE URLs ---
 
 	eventsURL(repoId?: string): string {
