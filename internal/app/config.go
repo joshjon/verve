@@ -3,6 +3,7 @@ package app
 // Config holds the API server configuration.
 type Config struct {
 	Port        int
+	UI          bool
 	DatabaseURL string // PostgreSQL connection URL; if empty, uses in-memory SQLite
 	Postgres    PostgresConfig
 	GitHub      GitHubConfig

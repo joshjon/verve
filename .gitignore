@@ -7,3 +7,6 @@ local/
 dist/
 
 .env
+
+# Go server UI assets
+!internal/frontend/dist/

@@ -20,6 +20,7 @@ func main() {
 	cfg := app.Config{
 		Port:        7400,
 		DatabaseURL: os.Getenv("DATABASE_URL"),
+		UI:          os.Getenv("UI") == "true",
 		Postgres: app.PostgresConfig{
 			User:     os.Getenv("POSTGRES_USER"),
 			Password: os.Getenv("POSTGRES_PASSWORD"),

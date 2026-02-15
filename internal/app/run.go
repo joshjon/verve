@@ -9,7 +9,9 @@ import (
 	"github.com/joshjon/kit/pgdb"
 	"github.com/joshjon/kit/server"
 	"github.com/joshjon/kit/sqlitedb"
+	"github.com/labstack/echo/v4"
 
+	"verve/internal/frontend"
 	"verve/internal/github"
 	"verve/internal/postgres"
 	pgmigrations "verve/internal/postgres/migrations"
@@ -104,6 +106,15 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores, gh *git
 	srv, err := server.NewServer(cfg.Port, opts...)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
+	}
+
+	// Register UI
+	if cfg.UI {
+		uiHandler, err := frontend.DistHandler()
+		if err != nil {
+			return err
+		}
+		srv.Add(echo.GET, "/*", uiHandler)
 	}
 
 	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, gh, cfg.GitHub.Token))

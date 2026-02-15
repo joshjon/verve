@@ -82,3 +82,6 @@ ui-dev:
 
 ui-build:
 	cd ui && pnpm build
+
+ui-build-go:
+	cd ui && BUILD_PATH="../internal/frontend/dist" VITE_API_ADDRESS="" pnpm build
