@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/joshjon/kit/errtag"
@@ -18,14 +17,15 @@ import (
 
 // HTTPHandler handles task and repo HTTP requests.
 type HTTPHandler struct {
-	store     *task.Store
-	repoStore *repo.Store
-	github    *github.Client
+	store       *task.Store
+	repoStore   *repo.Store
+	github      *github.Client
+	githubToken string
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubClient *github.Client) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, github: githubClient}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubClient *github.Client, githubToken string) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, github: githubClient, githubToken: githubToken}
 }
 
 // Register adds the endpoints to the provided Echo router group.
@@ -167,23 +167,34 @@ func (h *HTTPHandler) GetTask(c echo.Context) error {
 
 // PollTask handles GET /tasks/poll
 // Long-polls for a pending task, claiming it atomically.
-// Accepts ?repos=id1,id2 to filter by repo IDs.
+// Returns a PollTaskResponse with the task, GitHub token, and repo full name.
 func (h *HTTPHandler) PollTask(c echo.Context) error {
 	timeout := 30 * time.Second
 	deadline := time.Now().Add(timeout)
 
-	var repoIDs []string
-	if reposParam := c.QueryParam("repos"); reposParam != "" {
-		repoIDs = strings.Split(reposParam, ",")
-	}
+	ctx := c.Request().Context()
 
 	for {
-		t, err := h.store.ClaimPendingTask(c.Request().Context(), repoIDs)
+		t, err := h.store.ClaimPendingTask(ctx, nil)
 		if err != nil {
 			return jsonError(c, err)
 		}
 		if t != nil {
-			return c.JSON(http.StatusOK, t)
+			// Look up repo to get full name for the worker
+			repoID, parseErr := repo.ParseRepoID(t.RepoID)
+			if parseErr != nil {
+				return c.JSON(http.StatusInternalServerError, errorResponse("invalid repo ID on task"))
+			}
+			r, readErr := h.repoStore.ReadRepo(ctx, repoID)
+			if readErr != nil {
+				return jsonError(c, readErr)
+			}
+
+			return c.JSON(http.StatusOK, PollTaskResponse{
+				Task:         t,
+				GitHubToken:  h.githubToken,
+				RepoFullName: r.FullName,
+			})
 		}
 
 		remaining := time.Until(deadline)
@@ -195,7 +206,7 @@ func (h *HTTPHandler) PollTask(c echo.Context) error {
 		case <-h.store.WaitForPending():
 		case <-time.After(remaining):
 			return c.NoContent(http.StatusNoContent)
-		case <-c.Request().Context().Done():
+		case <-ctx.Done():
 			return c.NoContent(http.StatusNoContent)
 		}
 	}

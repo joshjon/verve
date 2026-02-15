@@ -17,8 +17,6 @@ import (
 // Config holds the worker configuration
 type Config struct {
 	APIURL             string
-	GitHubToken        string
-	GitHubRepos        []string // "owner/repo" format, comma-separated from env
 	AnthropicAPIKey    string
 	ClaudeModel        string // Model to use (haiku, sonnet, opus) - defaults to haiku
 	AgentImage         string // Docker image for agent - defaults to verve-agent:latest
@@ -41,9 +39,11 @@ type Task struct {
 	MaxCostUSD         float64 `json:"max_cost_usd,omitempty"`
 }
 
-type apiRepo struct {
-	ID       string `json:"id"`
-	FullName string `json:"full_name"`
+// PollResponse wraps a claimed task with credentials and repo info from the server.
+type PollResponse struct {
+	Task         Task   `json:"task"`
+	GitHubToken  string `json:"github_token"`
+	RepoFullName string `json:"repo_full_name"`
 }
 
 type Worker struct {
@@ -52,10 +52,6 @@ type Worker struct {
 	client       *http.Client
 	logger       log.Logger
 	pollInterval time.Duration
-
-	// Repo mapping: repo ID -> full name (e.g. "owner/repo")
-	repoIDs   []string            // repo IDs to poll for
-	repoNames map[string]string   // repo ID -> full name
 
 	// Concurrency control
 	maxConcurrent int
@@ -93,19 +89,18 @@ func (w *Worker) Close() error {
 }
 
 func (w *Worker) Run(ctx context.Context) error {
-	w.logger.Info("worker starting", "max_concurrent", w.maxConcurrent, "repos", w.config.GitHubRepos)
+	w.logger.Info("worker starting", "max_concurrent", w.maxConcurrent)
+
+	// Warn if API URL is not HTTPS (tokens will be sent in plaintext)
+	if !strings.HasPrefix(w.config.APIURL, "https://") {
+		w.logger.Warn("API URL is not HTTPS — GitHub tokens will be sent in plaintext, use HTTPS in production", "api_url", w.config.APIURL)
+	}
 
 	// Ensure agent image exists
 	if err := w.docker.EnsureImage(ctx); err != nil {
 		return err
 	}
 	w.logger.Info("agent image verified", "image", w.docker.AgentImage())
-
-	// Fetch repos from API and build ID mapping
-	if err := w.initRepoMapping(ctx); err != nil {
-		return fmt.Errorf("init repo mapping: %w", err)
-	}
-	w.logger.Info("repo mapping initialized", "repo_ids", w.repoIDs)
 
 	for {
 		select {
@@ -127,7 +122,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
-		task, err := w.pollForTask(ctx)
+		poll, err := w.pollForTask(ctx)
 		if err != nil {
 			// Release slot on error
 			<-w.semaphore
@@ -136,7 +131,7 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
-		if task == nil {
+		if poll == nil {
 			// No task available, release slot and continue polling
 			<-w.semaphore
 			continue
@@ -149,16 +144,17 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.activeMu.Unlock()
 
 		w.logger.Info("claimed task",
-			"task_id", task.ID,
+			"task_id", poll.Task.ID,
+			"repo", poll.RepoFullName,
 			"active", activeCount,
 			"max_concurrent", w.maxConcurrent,
-			"description", task.Description,
+			"description", poll.Task.Description,
 		)
 
 		// Execute task - use goroutine only if concurrent execution is enabled
 		if w.maxConcurrent > 1 {
 			w.wg.Add(1)
-			go func(t *Task) {
+			go func(p *PollResponse) {
 				defer w.wg.Done()
 				defer func() {
 					<-w.semaphore // Release semaphore slot
@@ -166,11 +162,11 @@ func (w *Worker) Run(ctx context.Context) error {
 					w.activeTasks--
 					w.activeMu.Unlock()
 				}()
-				w.executeTask(ctx, t)
-			}(task)
+				w.executeTask(ctx, &p.Task, p.GitHubToken, p.RepoFullName)
+			}(poll)
 		} else {
 			// Sequential execution - simpler, more compatible with restricted networks
-			w.executeTask(ctx, task)
+			w.executeTask(ctx, &poll.Task, poll.GitHubToken, poll.RepoFullName)
 			<-w.semaphore
 			w.activeMu.Lock()
 			w.activeTasks--
@@ -179,56 +175,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) initRepoMapping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", w.config.APIURL+"/api/v1/repos", nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := w.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to list repos: status %d: %s", resp.StatusCode, body)
-	}
-
-	var repos []apiRepo
-	if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
-		return err
-	}
-
-	// Build full name -> ID lookup
-	nameToID := make(map[string]string, len(repos))
-	idToName := make(map[string]string, len(repos))
-	for _, r := range repos {
-		nameToID[r.FullName] = r.ID
-		idToName[r.ID] = r.FullName
-	}
-
-	// Map configured repo full names to their IDs
-	var repoIDs []string
-	for _, fullName := range w.config.GitHubRepos {
-		id, ok := nameToID[fullName]
-		if !ok {
-			return fmt.Errorf("configured repo %q not found on server — add it via the API first", fullName)
-		}
-		repoIDs = append(repoIDs, id)
-	}
-
-	w.repoIDs = repoIDs
-	w.repoNames = idToName
-	return nil
-}
-
-func (w *Worker) pollForTask(ctx context.Context) (*Task, error) {
+func (w *Worker) pollForTask(ctx context.Context) (*PollResponse, error) {
 	pollURL := w.config.APIURL + "/api/v1/tasks/poll"
-	if len(w.repoIDs) > 0 {
-		pollURL += "?repos=" + strings.Join(w.repoIDs, ",")
-	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", pollURL, nil)
 	if err != nil {
@@ -250,12 +198,12 @@ func (w *Worker) pollForTask(ctx context.Context) (*Task, error) {
 		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
 	}
 
-	var task Task
-	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
+	var poll PollResponse
+	if err := json.NewDecoder(resp.Body).Decode(&poll); err != nil {
 		return nil, err
 	}
 
-	return &task, nil
+	return &poll, nil
 }
 
 // logStreamer buffers log lines and periodically sends them to the API server
@@ -340,7 +288,7 @@ func (ls *logStreamer) flush() {
 	}
 }
 
-func (w *Worker) executeTask(ctx context.Context, task *Task) {
+func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoFullName string) {
 	taskLogger := w.logger.With("task_id", task.ID)
 
 	// Create log streamer for real-time log streaming
@@ -406,19 +354,11 @@ func (w *Worker) executeTask(ctx context.Context, task *Task) {
 		}
 	}
 
-	// Look up repo full name from task's RepoID
-	repoFullName := w.repoNames[task.RepoID]
-	if repoFullName == "" {
-		taskLogger.Error("unknown repo ID for task", "repo_id", task.RepoID)
-		w.completeTask(ctx, task.ID, false, fmt.Sprintf("unknown repo ID: %s", task.RepoID), "", 0, "", 0, "")
-		return
-	}
-
-	// Create agent config from worker config
+	// Create agent config from worker config + server-provided credentials
 	agentCfg := AgentConfig{
 		TaskID:             task.ID,
 		TaskDescription:    task.Description,
-		GitHubToken:        w.config.GitHubToken,
+		GitHubToken:        githubToken,
 		GitHubRepo:         repoFullName,
 		AnthropicAPIKey:    w.config.AnthropicAPIKey,
 		ClaudeModel:        w.config.ClaudeModel,

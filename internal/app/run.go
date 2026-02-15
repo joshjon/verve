@@ -106,7 +106,7 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores, gh *git
 		return fmt.Errorf("create server: %w", err)
 	}
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, gh))
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, gh, cfg.GitHub.Token))
 
 	// Background PR sync.
 	if gh != nil {

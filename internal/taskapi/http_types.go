@@ -1,5 +1,7 @@
 package taskapi
 
+import "verve/internal/task"
+
 // AddRepoRequest is the request body for adding a repo.
 type AddRepoRequest struct {
 	FullName string `json:"full_name"`
@@ -32,4 +34,13 @@ type CompleteRequest struct {
 // CloseRequest is the request body for closing a task.
 type CloseRequest struct {
 	Reason string `json:"reason,omitempty"`
+}
+
+// PollTaskResponse wraps a claimed task with the credentials and repo info
+// needed by the worker to execute it. The GitHub token is included so that
+// workers don't need their own token configuration.
+type PollTaskResponse struct {
+	Task         *task.Task `json:"task"`
+	GitHubToken  string     `json:"github_token"`
+	RepoFullName string     `json:"repo_full_name"`
 }

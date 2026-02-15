@@ -56,8 +56,6 @@ services:
         condition: service_healthy
     environment:
       API_URL: http://server:7400
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      GITHUB_REPOS: ${GITHUB_REPOS:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-haiku}
       AGENT_IMAGE: ${AGENT_IMAGE:-verve-agent:latest}

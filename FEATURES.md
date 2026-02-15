@@ -42,10 +42,11 @@
 ## Worker
 
 - **Long-poll task claiming**: Atomic status transitions prevent duplicate claims
+- **Server-managed credentials**: Workers receive GitHub token and repo info from the API server per-task — no local token or repo configuration needed
+- **HTTPS transport security**: Tokens sent over HTTPS (TLS); worker warns on startup if API URL is plain HTTP
 - **Configurable concurrency**: `MAX_CONCURRENT_TASKS` with semaphore-based control (default: 3)
 - **Sequential mode**: Single-task execution for network-restricted environments
 - **Graceful shutdown**: Waits for active tasks to complete before stopping
-- **Repo-scoped polling**: Workers only poll for their configured `GITHUB_REPOS`
 - **Marker protocol**: Parses structured markers from agent output (`VERVE_PR_CREATED`, `VERVE_STATUS`, `VERVE_COST`, `VERVE_PREREQ_FAILED`)
 
 ## Log Streaming
@@ -68,7 +69,7 @@
 
 - **Repo-scoped tasks**: Each task belongs to a specific repository
 - **Repo selector UI**: Dashboard filters by selected repository
-- **Worker repo filtering**: Workers configured with specific repos via `GITHUB_REPOS`
+- **Server-provided repo info**: Workers receive repo details from the server when claiming tasks
 - **Repo-filtered events**: SSE subscriptions scoped to selected repository
 
 ## API
@@ -110,5 +111,5 @@
 
 - **User code stays on-premise**: Only task descriptions flow in; logs and PR notifications flow out
 - **Docker container isolation**: Each agent runs in its own ephemeral container
-- **Credential isolation**: GitHub tokens injected via environment variables, never stored server-side
+- **Centralized credential management**: GitHub token configured only on the server; workers receive it per-task over HTTPS
 - **Worker authentication**: Per-user API keys for worker-to-server communication
