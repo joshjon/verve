@@ -119,6 +119,27 @@ func (q *Queries) DeleteTaskLogs(ctx context.Context, taskID string) error {
 	return err
 }
 
+const feedbackRetryTask = `-- name: FeedbackRetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  retry_reason = $2, agent_status = NULL,
+  consecutive_failures = 0,
+  updated_at = NOW()
+WHERE id = $1 AND status = 'review'
+`
+
+type FeedbackRetryTaskParams struct {
+	ID          string  `json:"id"`
+	RetryReason *string `json:"retry_reason"`
+}
+
+func (q *Queries) FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error) {
+	result, err := q.db.Exec(ctx, feedbackRetryTask, arg.ID, arg.RetryReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const hasTasksForRepo = `-- name: HasTasksForRepo :one
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = $1)
 `

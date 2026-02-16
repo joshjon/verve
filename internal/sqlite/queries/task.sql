@@ -84,5 +84,12 @@ UPDATE task SET status = 'pending', attempt = attempt + 1,
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'failed';
 
+-- name: FeedbackRetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  retry_reason = ?, agent_status = NULL,
+  consecutive_failures = 0,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'review';
+
 -- name: DeleteTaskLogs :exec
 DELETE FROM task_log WHERE task_id = ?;

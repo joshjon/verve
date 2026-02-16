@@ -87,5 +87,12 @@ UPDATE task SET status = 'pending', attempt = attempt + 1,
   updated_at = NOW()
 WHERE id = $1 AND status = 'failed';
 
+-- name: FeedbackRetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  retry_reason = $2, agent_status = NULL,
+  consecutive_failures = 0,
+  updated_at = NOW()
+WHERE id = $1 AND status = 'review';
+
 -- name: DeleteTaskLogs :exec
 DELETE FROM task_log WHERE task_id = $1;

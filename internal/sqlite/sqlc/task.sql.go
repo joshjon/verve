@@ -118,6 +118,27 @@ func (q *Queries) DeleteTaskLogs(ctx context.Context, taskID string) error {
 	return err
 }
 
+const feedbackRetryTask = `-- name: FeedbackRetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  retry_reason = ?, agent_status = NULL,
+  consecutive_failures = 0,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'review'
+`
+
+type FeedbackRetryTaskParams struct {
+	RetryReason *string
+	ID          string
+}
+
+func (q *Queries) FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, feedbackRetryTask, arg.RetryReason, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const hasTasksForRepo = `-- name: HasTasksForRepo :one
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = ?)
 `

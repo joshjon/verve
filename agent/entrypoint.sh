@@ -368,6 +368,9 @@ Please examine the existing code changes on this branch, review the CI failure d
     elif echo "$RETRY_REASON" | grep -qi "merge_conflict"; then
         PROMPT="${PROMPT}
 The branch had merge conflicts with ${DEFAULT_BRANCH}. A rebase was attempted. Please resolve any remaining conflicts, ensure the code works correctly with the latest ${DEFAULT_BRANCH} branch, and commit. Do NOT create a new PR."
+    else
+        PROMPT="${PROMPT}
+The user has reviewed your previous changes and provided feedback. Please examine the existing code on this branch, address the feedback above, and push the improved changes. Do NOT create a new PR - just fix the code and commit to this branch."
     fi
 
     # Include detailed CI failure logs if available

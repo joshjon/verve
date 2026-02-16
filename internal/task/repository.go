@@ -47,5 +47,9 @@ type TaskRepository interface {
 	SetBranchName(ctx context.Context, id TaskID, branchName string) error
 	ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error)
 	ManualRetryTask(ctx context.Context, id TaskID, instructions string) (bool, error)
+	// FeedbackRetryTask transitions a task from review → pending, increments
+	// attempt, and records the user's feedback. Unlike ManualRetryTask, it
+	// preserves the existing PR/branch so the agent pushes fixes to the same branch.
+	FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) (bool, error)
 	DeleteTaskLogs(ctx context.Context, id TaskID) error
 }

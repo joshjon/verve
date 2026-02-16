@@ -153,6 +153,18 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async feedbackTask(id: string, feedback: string): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/feedback`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ feedback })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to submit feedback');
+		}
+		return res.json();
+	}
+
 	// --- Settings APIs ---
 
 	async getGitHubTokenStatus(): Promise<{ configured: boolean; fine_grained?: boolean }> {
