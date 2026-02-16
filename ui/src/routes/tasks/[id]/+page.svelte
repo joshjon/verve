@@ -25,7 +25,6 @@
 		Sparkles,
 		RefreshCw,
 		X,
-		Calendar,
 		Loader2,
 		Target,
 		DollarSign,
@@ -440,7 +439,9 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleString();
+		const d = new Date(dateStr);
+		return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+			' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 	}
 
 	function formatRelativeTime(dateStr: string): string {
@@ -492,25 +493,14 @@
 					<StatusIcon class="w-3 h-3" />
 					{currentStatusConfig?.label}
 				</Badge>
-				{#if task.model}
-					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded capitalize">{task.model}</span>
-				{/if}
-				<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
-					<Calendar class="w-3.5 h-3.5" />
-					{formatRelativeTime(task.created_at)}
-				</span>
-				<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
-					<Clock class="w-3.5 h-3.5" />
-					{formatRelativeTime(task.updated_at)}
-				</span>
 				{#if task.duration_ms}
-					<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
+					<span class="text-xs text-muted-foreground flex items-center gap-1.5">
 						<Timer class="w-3.5 h-3.5" />
 						{formatDuration(task.duration_ms)}
 					</span>
 				{/if}
 				{#if task.cost_usd > 0}
-					<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
+					<span class="text-xs text-muted-foreground flex items-center gap-1.5">
 						<DollarSign class="w-3.5 h-3.5" />
 						{formatCost(task.cost_usd)}
 						{#if task.max_cost_usd}
@@ -518,8 +508,15 @@
 						{/if}
 					</span>
 				{/if}
-				{#if canClose}
-					<div class="ml-auto">
+
+				<div class="ml-auto flex items-center gap-2 flex-wrap">
+					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+						<span class="text-muted-foreground/60">Created</span> {formatDate(task.created_at)}
+					</span>
+					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+						<span class="text-muted-foreground/60">Updated</span> {formatDate(task.updated_at)}
+					</span>
+					{#if canClose}
 						{#if showCloseForm}
 							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">
 								<X class="w-4 h-4" />
@@ -532,8 +529,8 @@
 								<span class="sm:hidden">Close</span>
 							</Button>
 						{/if}
-					</div>
-				{/if}
+					{/if}
+				</div>
 			</div>
 
 			<!-- Close Form (full width, above columns) -->
@@ -954,6 +951,9 @@
 				<div class="flex items-center gap-2 px-5 py-3 border-b">
 					<Sparkles class="w-4 h-4 text-muted-foreground" />
 					<span class="font-semibold text-sm">Agent</span>
+					{#if task.model}
+						<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded capitalize">{task.model}</span>
+					{/if}
 					{#if task.status === 'running'}
 						<span class="flex items-center gap-1 text-xs text-blue-500">
 							<span class="relative flex h-2 w-2">
