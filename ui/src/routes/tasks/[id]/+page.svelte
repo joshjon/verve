@@ -724,6 +724,47 @@
 									</div>
 								{/if}
 							</div>
+							<!-- Request Agent Changes -->
+							{#if canProvideFeedback}
+								<div class="px-5 py-3 border-t">
+									{#if showFeedbackForm}
+										<div class="space-y-3">
+											<label for="feedback-text" class="text-sm font-medium block">
+												Describe what you'd like changed
+											</label>
+											<textarea
+												id="feedback-text"
+												bind:value={feedbackText}
+												class="w-full border rounded-lg p-3 min-h-[100px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+												placeholder="e.g. &quot;Add error handling to the new endpoint&quot; or &quot;Use a map instead of a slice for lookups&quot;..."
+												disabled={sendingFeedback}
+											></textarea>
+											<div class="flex justify-end gap-2">
+												<Button variant="outline" size="sm" onclick={() => (showFeedbackForm = false)} disabled={sendingFeedback}>
+													Cancel
+												</Button>
+												<Button size="sm" onclick={handleFeedback} disabled={sendingFeedback || !feedbackText.trim()} class="gap-2 bg-purple-600 hover:bg-purple-700 text-white">
+													{#if sendingFeedback}
+														<Loader2 class="w-4 h-4 animate-spin" />
+														Sending...
+													{:else}
+														<Send class="w-4 h-4" />
+														Send to Agent
+													{/if}
+												</Button>
+											</div>
+										</div>
+									{:else}
+										<div class="flex items-center gap-3">
+											<Button size="sm" variant="outline" onclick={() => (showFeedbackForm = true)} class="gap-2 border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10">
+												<MessageSquare class="w-4 h-4" />
+												Request Agent Changes
+											</Button>
+											<span class="text-xs text-muted-foreground">The agent will update this branch and PR based on your instructions.</span>
+										</div>
+									{/if}
+								</div>
+							{/if}
 						{/if}
 					</div>
 				{/if}
@@ -770,6 +811,46 @@
 							</div>
 							{#if task.status === 'review'}
 								<p class="text-sm text-muted-foreground">No PR linked yet. Create one from this branch and sync to detect it.</p>
+							{/if}
+							{#if canProvideFeedback}
+								<div class="pt-3 border-t mt-3">
+									{#if showFeedbackForm}
+										<div class="space-y-3">
+											<label for="feedback-text-branch" class="text-sm font-medium block">
+												Describe what you'd like changed
+											</label>
+											<textarea
+												id="feedback-text-branch"
+												bind:value={feedbackText}
+												class="w-full border rounded-lg p-3 min-h-[100px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+												placeholder="e.g. &quot;Add error handling to the new endpoint&quot; or &quot;Use a map instead of a slice for lookups&quot;..."
+												disabled={sendingFeedback}
+											></textarea>
+											<div class="flex justify-end gap-2">
+												<Button variant="outline" size="sm" onclick={() => (showFeedbackForm = false)} disabled={sendingFeedback}>
+													Cancel
+												</Button>
+												<Button size="sm" onclick={handleFeedback} disabled={sendingFeedback || !feedbackText.trim()} class="gap-2 bg-purple-600 hover:bg-purple-700 text-white">
+													{#if sendingFeedback}
+														<Loader2 class="w-4 h-4 animate-spin" />
+														Sending...
+													{:else}
+														<Send class="w-4 h-4" />
+														Send to Agent
+													{/if}
+												</Button>
+											</div>
+										</div>
+									{:else}
+										<div class="flex items-center gap-3">
+											<Button size="sm" variant="outline" onclick={() => (showFeedbackForm = true)} class="gap-2 border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10">
+												<MessageSquare class="w-4 h-4" />
+												Request Agent Changes
+											</Button>
+											<span class="text-xs text-muted-foreground">The agent will update this branch based on your instructions.</span>
+										</div>
+									{/if}
+								</div>
 							{/if}
 						</Card.Content>
 					</Card.Root>
@@ -892,57 +973,7 @@
 							{/if}
 						</div>
 					{/if}
-					{#if canProvideFeedback}
-						<div class="ml-auto">
-							{#if showFeedbackForm}
-								<Button size="sm" variant="ghost" onclick={() => (showFeedbackForm = false)} class="gap-1">
-									<X class="w-4 h-4" />
-									Cancel
-								</Button>
-							{:else}
-								<Button size="sm" variant="outline" onclick={() => (showFeedbackForm = true)} class="gap-1 border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10">
-									<MessageSquare class="w-4 h-4" />
-									<span class="hidden sm:inline">Request Changes</span>
-									<span class="sm:hidden">Changes</span>
-								</Button>
-							{/if}
-						</div>
-					{/if}
 				</div>
-
-				<!-- Feedback Form -->
-			{#if showFeedbackForm}
-				<div class="px-5 py-4 border-b bg-purple-500/5">
-					<div class="space-y-4">
-						<div>
-							<label for="feedback-text" class="text-sm font-medium mb-2 block">
-								Describe what you'd like changed — the agent will iterate on the existing branch and update the PR.
-							</label>
-							<textarea
-								id="feedback-text"
-								bind:value={feedbackText}
-								class="w-full border rounded-lg p-3 min-h-[100px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-purple-500/40"
-								placeholder="e.g. &quot;Add error handling to the new endpoint&quot; or &quot;Use a map instead of a slice for lookups&quot;..."
-								disabled={sendingFeedback}
-							></textarea>
-						</div>
-						<div class="flex justify-end gap-2">
-							<Button variant="outline" onclick={() => (showFeedbackForm = false)} disabled={sendingFeedback}>
-								Cancel
-							</Button>
-							<Button onclick={handleFeedback} disabled={sendingFeedback || !feedbackText.trim()} class="gap-2 bg-purple-600 hover:bg-purple-700 text-white">
-								{#if sendingFeedback}
-									<Loader2 class="w-4 h-4 animate-spin" />
-									Sending...
-								{:else}
-									<Send class="w-4 h-4" />
-									Send to Agent
-								{/if}
-							</Button>
-						</div>
-					</div>
-				</div>
-			{/if}
 
 			<!-- Agent Insights -->
 				{#if parsedAgentStatus || task.attempt > 1}
