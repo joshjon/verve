@@ -902,8 +902,8 @@
 							{:else}
 								<Button size="sm" variant="outline" onclick={() => (showFeedbackForm = true)} class="gap-1 border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10">
 									<MessageSquare class="w-4 h-4" />
-									<span class="hidden sm:inline">Provide Feedback</span>
-									<span class="sm:hidden">Feedback</span>
+									<span class="hidden sm:inline">Request Changes</span>
+									<span class="sm:hidden">Changes</span>
 								</Button>
 							{/if}
 						</div>
@@ -916,13 +916,13 @@
 					<div class="space-y-4">
 						<div>
 							<label for="feedback-text" class="text-sm font-medium mb-2 block">
-								What changes would you like the agent to make?
+								Describe what you'd like changed — the agent will iterate on the existing branch and update the PR.
 							</label>
 							<textarea
 								id="feedback-text"
 								bind:value={feedbackText}
 								class="w-full border rounded-lg p-3 min-h-[100px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-purple-500/40"
-								placeholder="Describe what needs to be changed or improved in the current implementation..."
+								placeholder="e.g. &quot;Add error handling to the new endpoint&quot; or &quot;Use a map instead of a slice for lookups&quot;..."
 								disabled={sendingFeedback}
 							></textarea>
 						</div>
@@ -936,7 +936,7 @@
 									Sending...
 								{:else}
 									<Send class="w-4 h-4" />
-									Send Feedback
+									Send to Agent
 								{/if}
 							</Button>
 						</div>
