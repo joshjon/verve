@@ -1,172 +1,79 @@
-# Distributed AI Agent Orchestrator — Design Overview
-
-## What is this?
-
-A platform that allows us to dispatch AI coding agents to work on tasks within a user's own infrastructure. The system is split into two halves: a **central cloud platform** we control (task management, UI, logging) and a **worker component** that runs inside the user's environment (task execution, code changes, PRs). The user deploys a single Docker container that long-polls for work, spins up isolated agent sessions, streams logs back to us, and raises pull requests when done.
-
-The key design goal is that the user's source code and secrets never leave their network. We send task descriptions *in*; we get logs and PR notifications *out*. The actual code manipulation happens entirely on their side.
-
-The project will be implemented as a single mono repo.
-
----
+# Design
 
 ## Architecture
 
+The system is split into two halves:
+
+- **Internal cloud** (API server, database, web UI) — manages tasks, stores logs, serves the dashboard
+- **Worker** (user deploys) — long-polls for tasks, spawns agent containers, streams logs, creates PRs
+
+User source code and secrets never leave their network. Task descriptions flow in, logs and PR notifications flow out.
+
 ```
-┌─────────────────────────────────────────────────┐
-│                 Internal Cloud                   │
-│                                                  │
-│   ┌──────────┐    ┌───────────┐    ┌──────────┐ │
-│   │ Postgres │◄──►│ API Server│◄──►│    UI    │ │
-│   │   (DB)   │    │           │    │          │ │
-│   └──────────┘    └─────┬─────┘    └──────────┘ │
-│                         │                        │
-└─────────────────────────┼────────────────────────┘
-                          │  HTTPS (outbound from worker)
-                          │
-┌─────────────────────────┼────────────────────────┐
-│   User Environment  │                        │
-│                         │                        │
-│              ┌──────────▼──────────┐             │
-│              │ Orchestrator Worker │             │
-│              │  (Docker container) │             │
-│              └──────┬───────┬──────┘             │
-│                     │       │                    │
-│            ┌────────▼──┐ ┌──▼────────┐           │
-│            │  Agent 1  │ │  Agent 2  │  ...      │
-│            │(ephemeral)│ │(ephemeral)│           │
-│            └───────────┘ └───────────┘           │
-│                                                  │
-│          User's repos, secrets, CI           │
-└──────────────────────────────────────────────────┘
+Internal Cloud                          User Environment
+┌───────────────────────────┐          ┌───────────────────────────┐
+│ Postgres ◄─► API Server   │◄─ HTTPS ─│ Worker                    │
+│              ◄─► Web UI   │          │   └─► Agent containers    │
+└───────────────────────────┘          └───────────────────────────┘
 ```
 
----
+## Task Lifecycle
 
-## Internal Cloud
+```
+pending → running → review → merged
+                           → closed
+                  → failed
+```
 
-### Database (Postgres)
+1. User creates a task in the UI with a description and target repository
+2. Task enters the queue as `pending`
+3. Worker claims it via long-poll — status becomes `running`
+4. Agent works inside an isolated Docker container; logs stream back in real-time
+5. Agent pushes a branch and opens a PR — status becomes `review`
+6. PR status is monitored (CI, merge state). CI failures trigger automatic retries
+7. Once merged, status becomes `merged`
 
-Stores the core domain model:
+## Worker
 
-- **Projects** — a user project linked to a repository.
-- **Tasks** — units of work within a project (e.g. "Add input validation to the signup form"). Each task has a status lifecycle: `pending → queued → running → completed | failed`.
-- **Task logs** — append-only log lines streamed from the worker, stored for real-time viewing in the UI.
-- **PR metadata** — branch name, PR URL, review status, linked task.
+The worker is a Go binary distributed as a Docker container. It runs a polling loop:
 
-### API Server
+1. Long-poll `GET /tasks/poll` to claim the next pending task
+2. Spawn an ephemeral Docker container with the agent image
+3. Stream container logs to the API server in batches (every 2s or 50 lines)
+4. Parse structured markers from agent output (`VERVE_PR_CREATED`, `VERVE_STATUS`, `VERVE_COST`)
+5. Report task completion, clean up the container, loop
 
-A REST (or gRPC) service that acts as the interface between the UI, the database, and the remote workers.
+Workers receive GitHub tokens and repo details from the API server per-task — no local credential configuration needed.
 
-Key responsibilities:
+## Agent
 
-- **Task queue** — exposes a long-poll endpoint (e.g. `GET /tasks/poll?worker_id=...`) that workers call to claim the next available task. This is conceptually similar to how a Temporal worker polls for activity tasks. The server marks the task as `running` and assigns it to the requesting worker.
-- **Log ingestion** — accepts batched log uploads from workers (`POST /tasks/{id}/logs`). Logs are appended to the database and pushed to any connected UI clients via WebSockets or SSE.
-- **Task lifecycle** — endpoints to create, update, and complete tasks. The worker calls back to report success/failure, branch name, and PR URL.
-- **Notifications** — triggers notifications to the UI (and potentially Slack, email, etc.) when a task's PR is ready for review.
-- **Authentication** — workers authenticate using a per-user API key or short-lived token. The UI authenticates via standard session/OAuth.
+Each task runs in an isolated Docker container running Claude Code. The agent:
 
-### UI
+1. Clones the repository
+2. Reads the task description and acceptance criteria
+3. Makes code changes, runs tests
+4. Commits to a `verve/task-{id}` branch and pushes
+5. Opens a PR via the GitHub API
 
-A web application for the team operating the platform.
+The base image (`node:22-alpine` + Claude Code) can be extended with custom Dockerfiles for project-specific dependencies.
 
-Core views:
+## Database
 
-- **Task board** — create, prioritise, and assign tasks to projects. View task status at a glance.
-- **Live agent logs** — real-time streaming view of an agent's stdout as it works, useful for debugging and monitoring.
-- **PR review queue** — list of completed tasks with links to the raised PRs. Status indicators for review state (open, approved, merged).
-- **Notifications** — in-app and push notifications when an agent finishes a task and a PR is ready.
+- **PostgreSQL** in production, **SQLite** (in-memory) for development
+- Repository pattern with interchangeable implementations
+- SQL queries defined in `internal/{postgres,sqlite}/queries/`, generated via sqlc
+- Embedded migrations run automatically on startup
 
----
+## API
 
-## User-Side: Orchestrator Worker
+Base path: `/api/v1`
 
-### Deployment
-
-The worker is distributed as a **Docker image** that the user runs in their environment (Kubernetes, ECS, a VM — whatever they use). The image contains a single Go (or similar) binary as its entrypoint. The user provides configuration at deploy time:
-
-- API server URL and authentication token.
-- Git credentials (SSH key or token) for cloning repos and pushing branches.
-- Resource limits (max concurrent agents, memory/CPU caps).
-- Choice of isolation mode (see below).
-
-### Task Polling Loop
-
-The worker binary runs a continuous loop:
-
-1. **Long-poll** the API server's task queue endpoint. The connection stays open until a task is available or a timeout is reached (then it reconnects).
-2. **Claim** a task. The API server atomically assigns it to this worker.
-3. **Provision** an isolated environment for the agent (see isolation modes below).
-4. **Invoke** the AI agent process, passing it the task description, repo details, and any relevant context.
-5. **Stream logs** — the agent writes to stdout/a log file. The worker watches the log file using `fsnotify` (file system event notifications), batches new lines, and pushes them to the API server periodically (e.g. every 1–2 seconds or every N lines).
-6. **Wait for completion** — when the agent process exits, the worker inspects the result.
-7. **Push & PR** — if successful, the worker (or agent) pushes the working branch to the remote and opens a pull request via the platform's API (GitHub, GitLab, etc.).
-8. **Report back** — notify the API server with the task outcome (success/failure), branch name, and PR URL.
-9. **Clean up** — tear down the ephemeral environment.
-10. **Loop** — go back to step 1.
-
-### Agent Isolation Modes
-
-Two options for isolating each agent's workspace. The choice likely depends on the user's security posture and infrastructure.
-
-| | Docker-in-Docker (DinD) | Working Directory |
-|---|---|---|
-| **How it works** | The worker spawns a new Docker container for each task. The agent runs inside this inner container with its own filesystem, network, and process space. | The worker creates a new directory on the host filesystem, clones the repo into it, and runs the agent process directly. |
-| **Isolation** | Strong — full container boundary. Each agent is sandboxed from others and from the worker. | Weak — process-level only. Agents share the worker's kernel and could theoretically interfere with each other. |
-| **Requirements** | Docker socket access or a sidecar Docker daemon. Adds complexity (privileged mode or alternatives like sysbox). | Minimal — just filesystem access. Simpler to set up. |
-| **Cleanup** | Destroy the container. Clean and reliable. | Delete the working directory. Risk of leftover processes or temp files. |
-| **Best for** | Production / security-sensitive users. | Development, quick iteration, or trusted environments. |
-
-The DinD approach is the stronger default for production. The working directory mode is useful for simpler setups or during development of the platform itself.
-
-### The AI Agent
-
-Each task spawns an ephemeral agent process. The agent is expected to:
-
-1. Clone the relevant repository (or receive a pre-cloned working copy).
-2. Read and understand the task description.
-3. Make the required code changes — editing files, running tests, fixing lint errors, etc.
-4. Commit changes to a new branch.
-5. Exit with a success/failure code.
-
-The agent's stdout is its log stream — everything it prints is captured by the worker and relayed to the API server. This means the agent should be reasonably verbose about what it's doing (e.g. "Reading file X", "Running tests", "Test failed, retrying with fix...").
-
-The agent could be backed by any capable coding LLM (Claude, etc.) and wrapped in a framework that gives it tool access — shell commands, file read/write, git operations, and so on.
-
-### Log Streaming Detail
-
-The worker uses **fsnotify** (Go's filesystem notification library) to watch the agent's log file for changes. When new data is written:
-
-1. Read the new bytes from the last-known offset.
-2. Buffer them until a flush condition is met (time interval or byte threshold).
-3. POST the batch to the API server (`POST /tasks/{id}/logs`).
-4. The API server appends to the database and fans out to connected UI clients.
-
-This gives near-real-time log visibility without requiring the agent itself to know anything about the API server.
-
----
-
-## Task Lifecycle (End to End)
-
-1. **User creates a task** in the UI — provides a description, selects a project/repo, and optionally sets priority.
-2. **Task enters the queue** with status `pending`.
-3. **Worker picks it up** via long-poll → status becomes `running`.
-4. **Agent works** — logs stream to the UI in real time.
-5. **Agent finishes** — worker pushes branch and opens PR.
-6. **Worker reports completion** → status becomes `completed` (or `failed`).
-7. **User gets notified** — "PR ready for review" with a direct link.
-8. **User reviews and merges** the PR through their normal Git workflow.
-
----
-
-## Open Questions / Things to Decide
-
-- **Task schema** — what metadata does a task carry? Just a description, or structured fields like target files, acceptance criteria, test commands?
-- **Retry / failure handling** — if an agent fails mid-task, do we retry automatically? How many times? Do we resume or start fresh?
-- **Concurrency** — how many agents can a single worker run in parallel? Is this configurable per user?
-- **Agent framework** — what specific LLM and tooling framework powers the agent? Is this pluggable?
-- **Git workflow** — do we enforce a branch naming convention? Who owns the PR template? Do we auto-request reviewers?
-- **Security** — how do we handle secrets the agent might need (e.g. API keys for external services)? Are these injected into the agent's environment?
-- **Observability** — beyond logs, do we want metrics (agent duration, token usage, success rate)?
-- **Multi-repo tasks** — can a single task span changes across multiple repositories?
-- **User onboarding** — what's the minimal setup for a new user? Docker image pull + config file + API key?
+- `POST /tasks` — create task
+- `GET /tasks` — list tasks
+- `GET /tasks/{id}` — get task with logs
+- `GET /tasks/poll` — long-poll for pending tasks (worker)
+- `POST /tasks/{id}/logs` — append logs (worker)
+- `POST /tasks/{id}/complete` — report completion (worker)
+- `POST /tasks/{id}/close` — close task
+- `POST /tasks/{id}/sync` — sync PR status from GitHub
+- `GET /events` — SSE stream for real-time UI updates
