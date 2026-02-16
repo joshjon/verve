@@ -59,7 +59,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		if (!title.trim() || !description.trim()) return;
+		if (!title.trim()) return;
 
 		loading = true;
 		error = null;
@@ -169,6 +169,7 @@
 						<label for="description" class="text-sm font-medium mb-2 flex items-center gap-2">
 							<FileText class="w-4 h-4 text-muted-foreground" />
 							Description
+							<span class="text-xs text-muted-foreground font-normal">(optional)</span>
 						</label>
 						<textarea
 							id="description"
@@ -381,7 +382,7 @@
 				<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={loading || !title.trim() || !description.trim()} class="gap-2">
+				<Button type="submit" disabled={loading || !title.trim()} class="gap-2">
 					{#if loading}
 						<Loader2 class="w-4 h-4 animate-spin" />
 						Creating...

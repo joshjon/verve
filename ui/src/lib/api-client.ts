@@ -61,7 +61,7 @@ export class VerveClient {
 	async createTaskInRepo(
 		repoId: string,
 		title: string,
-		description: string,
+		description?: string,
 		dependsOn?: string[],
 		acceptanceCriteria?: string[],
 		maxCostUsd?: number,

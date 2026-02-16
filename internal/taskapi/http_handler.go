@@ -246,10 +246,6 @@ func (h *HTTPHandler) CreateTask(c echo.Context) error {
 	if len(req.Title) > 150 {
 		return c.JSON(http.StatusBadRequest, errorResponse("title must be 150 characters or less"))
 	}
-	if req.Description == "" {
-		return c.JSON(http.StatusBadRequest, errorResponse("description required"))
-	}
-
 	model := req.Model
 	if model == "" && h.settingService != nil {
 		model = h.settingService.Get(setting.KeyDefaultModel)
