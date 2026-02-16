@@ -51,6 +51,9 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if in.BranchName != nil {
 		t.BranchName = *in.BranchName
 	}
+	if in.StartedAt.Valid {
+		t.StartedAt = &in.StartedAt.Time
+	}
 	if in.CreatedAt.Valid {
 		t.CreatedAt = in.CreatedAt.Time
 	}
@@ -63,6 +66,7 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if t.AcceptanceCriteria == nil {
 		t.AcceptanceCriteria = []string{}
 	}
+	t.ComputeDuration()
 	return t
 }
 

@@ -54,6 +54,7 @@ type Task struct {
 	Title                  string
 	AcceptanceCriteriaList string
 	Model                  *string
+	StartedAt              *time.Time
 }
 
 type TaskLog struct {
