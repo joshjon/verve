@@ -220,7 +220,7 @@
 	const StatusIcon = $derived(currentStatusConfig?.icon ?? Clock);
 
 	// Render description as markdown
-	const renderedDescription = $derived(task ? marked(task.description) : '');
+	const renderedDescription = $derived(task && task.description.trim() ? marked(task.description) : '');
 
 	// Per-attempt log tracking
 	const logs = $derived(logsByAttempt[activeAttemptTab] ?? []);
@@ -575,9 +575,13 @@
 
 					<!-- Description -->
 					<div class="px-5 py-4 {(task.acceptance_criteria && task.acceptance_criteria.length > 0) || (task.depends_on && task.depends_on.length > 0) ? 'border-b' : ''}">
-						<div class="prose prose-sm dark:prose-invert max-w-none">
-							{@html renderedDescription}
-						</div>
+						{#if renderedDescription}
+							<div class="prose prose-sm dark:prose-invert max-w-none">
+								{@html renderedDescription}
+							</div>
+						{:else}
+							<p class="text-sm text-muted-foreground italic">No description provided</p>
+						{/if}
 					</div>
 
 					<!-- Acceptance Criteria -->
