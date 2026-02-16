@@ -36,10 +36,32 @@ type Task struct {
 	CostUSD             float64   `json:"cost_usd"`
 	MaxCostUSD          float64   `json:"max_cost_usd,omitempty"`
 	SkipPR              bool      `json:"skip_pr"`
-	Model               string    `json:"model,omitempty"`
-	BranchName          string    `json:"branch_name,omitempty"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	Model               string     `json:"model,omitempty"`
+	BranchName          string     `json:"branch_name,omitempty"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+	DurationMs          *int64     `json:"duration_ms,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+// ComputeDuration calculates the run duration from StartedAt to UpdatedAt
+// for tasks that have finished running (review, merged, closed, failed),
+// or from StartedAt to now for tasks that are currently running.
+func (t *Task) ComputeDuration() {
+	if t.StartedAt == nil {
+		return
+	}
+	var end time.Time
+	switch t.Status {
+	case StatusRunning:
+		end = time.Now()
+	case StatusReview, StatusMerged, StatusClosed, StatusFailed:
+		end = t.UpdatedAt
+	default:
+		return
+	}
+	ms := end.Sub(*t.StartedAt).Milliseconds()
+	t.DurationMs = &ms
 }
 
 // NewTask creates a new Task with a generated TaskID and pending status.

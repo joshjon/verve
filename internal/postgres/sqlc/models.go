@@ -126,6 +126,7 @@ type Task struct {
 	Title                  string             `json:"title"`
 	AcceptanceCriteriaList []string           `json:"acceptance_criteria_list"`
 	Model                  *string            `json:"model"`
+	StartedAt              pgtype.Timestamptz `json:"started_at"`
 }
 
 type TaskLog struct {

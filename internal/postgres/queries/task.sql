@@ -48,14 +48,14 @@ SELECT EXISTS(SELECT 1 FROM task WHERE id = $1);
 SELECT status FROM task WHERE id = $1;
 
 -- name: ClaimTask :execrows
-UPDATE task SET status = 'running', updated_at = NOW()
+UPDATE task SET status = 'running', started_at = NOW(), updated_at = NOW()
 WHERE id = $1 AND status = 'pending';
 
 -- name: HasTasksForRepo :one
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = $1);
 
 -- name: RetryTask :execrows
-UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = $2, agent_status = NULL, updated_at = NOW()
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = $2, agent_status = NULL, started_at = NULL, updated_at = NOW()
 WHERE id = $1 AND status = 'review';
 
 -- name: SetAgentStatus :exec
@@ -84,14 +84,14 @@ UPDATE task SET status = 'pending', attempt = attempt + 1,
   retry_reason = $2, retry_context = NULL, agent_status = NULL,
   close_reason = NULL, consecutive_failures = 0,
   pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
-  updated_at = NOW()
+  started_at = NULL, updated_at = NOW()
 WHERE id = $1 AND status = 'failed';
 
 -- name: FeedbackRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
   retry_reason = $2, agent_status = NULL,
   consecutive_failures = 0,
-  updated_at = NOW()
+  started_at = NULL, updated_at = NOW()
 WHERE id = $1 AND status = 'review';
 
 -- name: DeleteTaskLogs :exec
