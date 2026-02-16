@@ -311,12 +311,8 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 		return &CheckResult{Status: CheckStatusPending, CheckRunsSkipped: checkRunsSkipped, Checks: checks}, nil
 	}
 
-	// If check runs exist and all completed successfully, that's a real success.
-	// If no check runs and no statuses exist, GitHub Actions may not have registered
-	// runs yet — treat as pending to avoid falsely reporting success.
-	if !checkRunsSkipped && len(checkRuns) == 0 && len(commitStatus.Statuses) == 0 {
-		return &CheckResult{Status: CheckStatusPending, CheckRunsSkipped: checkRunsSkipped, Checks: checks}, nil
-	}
+	// If no check runs and no statuses exist, the repository has no CI configured.
+	// Treat as success since there are no checks to wait for.
 
 	return &CheckResult{Status: CheckStatusSuccess, CheckRunsSkipped: checkRunsSkipped, Checks: checks}, nil
 }
