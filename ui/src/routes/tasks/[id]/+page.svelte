@@ -37,7 +37,8 @@
 		Copy,
 		Check,
 		MessageSquare,
-		Send
+		Send,
+		Timer
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -427,6 +428,17 @@
 		}
 	}
 
+	function formatDuration(ms: number): string {
+		const seconds = Math.floor(ms / 1000);
+		if (seconds < 60) return `${seconds}s`;
+		const minutes = Math.floor(seconds / 60);
+		const remainSeconds = seconds % 60;
+		if (minutes < 60) return `${minutes}m ${remainSeconds}s`;
+		const hours = Math.floor(minutes / 60);
+		const remainMinutes = minutes % 60;
+		return `${hours}h ${remainMinutes}m`;
+	}
+
 	function formatDate(dateStr: string): string {
 		return new Date(dateStr).toLocaleString();
 	}
@@ -491,6 +503,12 @@
 					<Clock class="w-3.5 h-3.5" />
 					{formatRelativeTime(task.updated_at)}
 				</span>
+				{#if task.duration_ms}
+					<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
+						<Timer class="w-3.5 h-3.5" />
+						{formatDuration(task.duration_ms)}
+					</span>
+				{/if}
 				{#if task.cost_usd > 0}
 					<span class="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5">
 						<DollarSign class="w-3.5 h-3.5" />

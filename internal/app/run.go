@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/joshjon/kit/log"
@@ -326,8 +328,17 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, interval t
 							}
 						}
 
-						reason := fmt.Sprintf("ci_failure: %s", checkResult.Summary)
-						if err := s.task.RetryTask(ctx, t.ID, "ci_failure", reason); err != nil {
+						// Build category from failed check names so the circuit
+						// breaker only trips when the exact same checks keep failing.
+						category := "ci_failure"
+						if len(checkResult.FailedNames) > 0 {
+							names := make([]string, len(checkResult.FailedNames))
+							copy(names, checkResult.FailedNames)
+							sort.Strings(names)
+							category = "ci_failure:" + strings.Join(names, ",")
+						}
+						reason := fmt.Sprintf("%s: %s", category, checkResult.Summary)
+						if err := s.task.RetryTask(ctx, t.ID, category, reason); err != nil {
 							logger.Error("failed to retry task", "task_id", t.ID, "error", err)
 						}
 						continue

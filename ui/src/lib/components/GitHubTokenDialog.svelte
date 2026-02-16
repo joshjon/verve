@@ -340,6 +340,11 @@
 						</Dialog.Footer>
 					</form>
 				{/if}
+
+				<div class="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 mt-2">
+					<Shield class="w-3 h-3 flex-shrink-0" />
+					<span>Tokens are encrypted with AES-256 before being stored</span>
+				</div>
 			</div>
 
 			{#if error}
@@ -362,9 +367,10 @@
 
 		</div>
 
-		<div class="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60 border-t pt-3 -mx-6 px-6">
-			<Shield class="w-3 h-3 flex-shrink-0" />
-			<span>Secrets encrypted with AES-256 before being stored</span>
-		</div>
+		{#if !required || configured}
+			<Dialog.Footer class="mt-4">
+				<Button onclick={() => (open = false)}>Done</Button>
+			</Dialog.Footer>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>

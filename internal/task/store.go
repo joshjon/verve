@@ -91,9 +91,10 @@ func (s *Store) HasTasksForRepo(ctx context.Context, repoID string) (bool, error
 }
 
 // RetryTask transitions a task from review back to pending for another attempt.
-// category classifies the failure type (e.g. "ci_failure", "merge_conflict")
+// category classifies the failure type (e.g. "ci_failure:tests", "merge_conflict")
 // for circuit breaker detection. If the same category fails consecutively
-// >= 2 times, the task is failed immediately.
+// >= 2 times, the task is failed immediately. Categories include the specific
+// failed check names so that different CI failures don't trip the breaker.
 func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason string) error {
 	t, err := s.repo.ReadTask(ctx, id)
 	if err != nil {
@@ -109,7 +110,9 @@ func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason strin
 		return s.UpdateTaskStatus(ctx, id, StatusFailed)
 	}
 
-	// Circuit breaker: detect consecutive same-category failures
+	// Circuit breaker: detect consecutive same-category failures.
+	// The category must match exactly (e.g. "ci_failure:tests" only
+	// matches "ci_failure:tests", not "ci_failure:changelog").
 	consecutiveFailures := 1
 	if category != "" && strings.HasPrefix(t.RetryReason, category+":") {
 		consecutiveFailures = t.ConsecutiveFailures + 1

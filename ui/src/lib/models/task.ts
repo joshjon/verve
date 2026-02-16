@@ -23,6 +23,8 @@ export interface Task {
 	skip_pr: boolean;
 	model?: string;
 	branch_name?: string;
+	started_at?: string;
+	duration_ms?: number;
 	created_at: string;
 	updated_at: string;
 }
