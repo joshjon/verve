@@ -36,13 +36,13 @@
 			</span>
 		</div>
 	</div>
-	<div class="space-y-2 flex-1 overflow-y-auto p-2">
+	<div class="space-y-2 sm:flex-1 overflow-y-auto p-2">
 		{#each tasks as task (task.id)}
 			<TaskCard {task} />
 		{/each}
 		{#if tasks.length === 0}
-			<div class="flex flex-col items-center justify-center py-8 text-muted-foreground">
-				<HeaderIcon class="w-8 h-8 opacity-20 mb-2" />
+			<div class="flex flex-col items-center justify-center py-3 sm:py-8 text-muted-foreground">
+				<HeaderIcon class="w-8 h-8 opacity-20 mb-2 hidden sm:block" />
 				<p class="text-sm">No tasks</p>
 			</div>
 		{/if}
