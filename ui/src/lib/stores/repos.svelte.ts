@@ -42,10 +42,7 @@ class RepoStore {
 
 	addRepo(repo: Repo) {
 		this.repos = [...this.repos, repo];
-		// Auto-select if first repo
-		if (!this.selectedRepoId) {
-			this.selectRepo(repo.id);
-		}
+		this.selectRepo(repo.id);
 	}
 
 	removeRepo(id: string) {

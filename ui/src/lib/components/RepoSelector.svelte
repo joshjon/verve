@@ -9,6 +9,18 @@
 	let open = $state(false);
 	let openAddRepo = $state(false);
 	let removing = $state<string | null>(null);
+	let dialogWasOpen = false;
+
+	// When the add repo dialog closes, prevent focus returning to the popover trigger
+	// from re-opening the dropdown
+	$effect(() => {
+		if (openAddRepo) {
+			dialogWasOpen = true;
+		} else if (dialogWasOpen) {
+			dialogWasOpen = false;
+			requestAnimationFrame(() => { open = false; });
+		}
+	});
 
 	async function handleRemove(e: MouseEvent, repoId: string) {
 		e.stopPropagation();

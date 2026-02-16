@@ -4,6 +4,9 @@ set -e
 echo "=== Verve Agent Starting ==="
 echo "Task ID: ${TASK_ID}"
 echo "Repository: ${GITHUB_REPO}"
+if [ -n "${TASK_TITLE}" ]; then
+    echo "Title: ${TASK_TITLE}"
+fi
 echo "Description: ${TASK_DESCRIPTION}"
 if [ "${ATTEMPT:-1}" -gt 1 ]; then
     echo "Attempt: ${ATTEMPT} (retry)"
@@ -34,10 +37,57 @@ echo "https://${GITHUB_TOKEN}@github.com" > /home/agent/.git-credentials
 git config --global user.email "verve-agent@verve.ai"
 git config --global user.name "Verve Agent"
 
+# Create a PR via the GitHub API (replaces gh CLI dependency)
+create_pr() {
+    local title="$1"
+    local body="$2"
+    local head="$3"
+    local base="$4"
+
+    # Escape title and body for JSON
+    local json_title
+    json_title=$(printf '%s' "$title" | jq -Rs .)
+    local json_body
+    json_body=$(printf '%s' "$body" | jq -Rs .)
+
+    local response
+    response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${GITHUB_REPO}/pulls" \
+        -d "{\"title\":${json_title},\"body\":${json_body},\"head\":\"${head}\",\"base\":\"${base}\"}")
+
+    local http_code
+    http_code=$(echo "$response" | tail -1)
+    local response_body
+    response_body=$(echo "$response" | sed '$d')
+
+    if [ "$http_code" = "201" ]; then
+        local pr_url
+        pr_url=$(echo "$response_body" | jq -r '.html_url // empty')
+        local pr_number
+        pr_number=$(echo "$response_body" | jq -r '.number // empty')
+        if [ -n "$pr_url" ] && [ -n "$pr_number" ]; then
+            echo "[agent] Pull request created: ${pr_url}"
+            echo "VERVE_PR_CREATED:{\"url\":\"${pr_url}\",\"number\":${pr_number}}"
+        else
+            echo "[agent] Pull request created but could not parse response"
+        fi
+    else
+        local error_msg
+        error_msg=$(echo "$response_body" | jq -r '.message // empty' 2>/dev/null || echo "unknown error")
+        echo "[agent] Warning: Failed to create pull request (HTTP ${http_code}): ${error_msg}"
+    fi
+}
+
 # Clone repository (embed token in URL for push access)
 echo "[agent] Cloning repository: ${GITHUB_REPO}..."
 git clone "https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" /workspace/repo
 cd /workspace/repo
+
+# Detect default branch
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+echo "[agent] Default branch: ${DEFAULT_BRANCH}"
 
 # Branch handling: retry uses existing branch, first attempt creates new
 BRANCH="verve/task-${TASK_ID}"
@@ -46,12 +96,12 @@ if [ "${ATTEMPT:-1}" -gt 1 ]; then
     git fetch origin "${BRANCH}"
     git checkout "${BRANCH}"
 
-    # For merge conflicts, attempt rebase on main
+    # For merge conflicts, attempt rebase on default branch
     if echo "$RETRY_REASON" | grep -qi "merge conflict"; then
-        echo "[agent] Rebasing on main to resolve merge conflicts..."
-        git fetch origin main
+        echo "[agent] Rebasing on ${DEFAULT_BRANCH} to resolve merge conflicts..."
+        git fetch origin "${DEFAULT_BRANCH}"
         # Don't fail if rebase has conflicts - Claude will resolve them
-        git rebase origin/main || true
+        git rebase "origin/${DEFAULT_BRANCH}" || true
     fi
 else
     echo "[agent] Creating branch: ${BRANCH}"
@@ -197,8 +247,44 @@ check_prereqs() {
             reason=$(echo "$item" | jq -r '.reason')
             echo "[agent]   - ${tool}: ${reason}"
         done
+
+        # Use Claude to analyze the repo and generate a tailored Dockerfile
+        local dockerfile_json='null'
+        if [ "$DRY_RUN" != "true" ]; then
+            echo ""
+            echo "[agent] Analyzing repository and generating suggested Dockerfile..."
+
+            local dockerfile_prompt="Analyze this repository and generate a Dockerfile that extends the Verve agent base image with all the dependencies needed to build and work on this project.
+
+Look at the project files (e.g. go.mod, requirements.txt, Cargo.toml, package.json, Makefile, etc.) to determine the exact language versions, build tools, and system dependencies required.
+
+Rules:
+- Start with: FROM ghcr.io/joshjon/verve-agent:latest
+- The base image is Alpine Linux (node:22-alpine based). Node.js and npm are already available.
+- Where official language images exist (e.g. golang, rust, python), prefer COPY --from to copy the toolchain. For example: COPY --from=golang:1.23-alpine /usr/local/go /usr/local/go
+- Use 'apk add' for system packages, not apt-get
+- Switch to USER root for installs, then back to USER agent at the end
+- The non-root user is called 'agent' with home dir /home/agent
+- Add a header comment with build and usage instructions
+- Keep it minimal — only install what's actually needed
+- Match the exact language versions from the project's config files where possible
+- Output ONLY the raw Dockerfile content, no markdown fences, no explanation, no surrounding text"
+
+            local model="${CLAUDE_MODEL:-sonnet}"
+            local dockerfile_content
+            dockerfile_content=$(claude --print --model "${model}" "${dockerfile_prompt}" 2>/dev/null || echo "")
+
+            if [ -n "$dockerfile_content" ]; then
+                echo "[agent] Suggested Dockerfile:"
+                echo "$dockerfile_content"
+                dockerfile_json=$(printf '%s' "$dockerfile_content" | jq -Rs .)
+            else
+                echo "[agent] Could not generate Dockerfile suggestion"
+            fi
+        fi
+
         echo ""
-        echo "VERVE_PREREQ_FAILED:{\"detected\":${detected_json},\"missing\":${missing_json}}"
+        echo "VERVE_PREREQ_FAILED:{\"detected\":${detected_json},\"missing\":${missing_json},\"dockerfile\":${dockerfile_json}}"
         exit 1
     fi
 
@@ -230,7 +316,8 @@ DRYEOF
     # Commit and push
     echo "[agent] Committing changes..."
     git add -A
-    git commit -m "dry-run: ${TASK_DESCRIPTION}
+    COMMIT_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
+    git commit -m "dry-run: ${COMMIT_TITLE}
 
 Implemented by Verve AI Agent (dry run)
 Task ID: ${TASK_ID}"
@@ -244,10 +331,13 @@ Task ID: ${TASK_ID}"
     fi
     echo "[agent] Branch pushed successfully: ${BRANCH}"
 
-    # Only create PR on first attempt
-    if [ "${ATTEMPT:-1}" -le 1 ]; then
+    # Only create PR on first attempt (unless skip_pr is set)
+    if [ "$SKIP_PR" = "true" ]; then
+        echo "[agent] Skip PR mode: branch pushed, skipping PR creation"
+        echo "VERVE_BRANCH_PUSHED:{\"branch\":\"${BRANCH}\"}"
+    elif [ "${ATTEMPT:-1}" -le 1 ]; then
         echo "[agent] Creating pull request..."
-        PR_TITLE="[Dry Run] ${TASK_DESCRIPTION}"
+        PR_TITLE="[Dry Run] ${TASK_TITLE:-${TASK_DESCRIPTION}}"
         PR_BODY="## Dry Run
 
 This PR was created in dry-run mode (no Claude API calls).
@@ -258,21 +348,7 @@ This PR was created in dry-run mode (no Claude API calls).
 ---
 *Implemented by Verve AI Agent (dry run)*"
 
-        PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
-        PR_EXIT_CODE=$?
-
-        if [ ${PR_EXIT_CODE} -eq 0 ]; then
-            PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
-            if [ -n "${PR_URL}" ]; then
-                PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
-                echo "[agent] Pull request created: ${PR_URL}"
-                echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
-            else
-                echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
-            fi
-        else
-            echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
-        fi
+        create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"
     else
         echo "[agent] Retry: pushed fixes to existing PR branch"
     fi
@@ -298,7 +374,7 @@ Reason for retry: ${RETRY_REASON}
 Please examine the existing code changes on this branch, review the CI failure details below, and fix the issues. Do NOT create a new PR - just fix the code and commit to this branch."
     elif echo "$RETRY_REASON" | grep -qi "merge_conflict"; then
         PROMPT="${PROMPT}
-The branch had merge conflicts with main. A rebase was attempted. Please resolve any remaining conflicts, ensure the code works correctly with the latest main branch, and commit. Do NOT create a new PR."
+The branch had merge conflicts with ${DEFAULT_BRANCH}. A rebase was attempted. Please resolve any remaining conflicts, ensure the code works correctly with the latest ${DEFAULT_BRANCH} branch, and commit. Do NOT create a new PR."
     fi
 
     # Include detailed CI failure logs if available
@@ -340,15 +416,18 @@ VERVE_STATUS:{\"files_modified\":[],\"tests_status\":\"pass|fail|skip\",\"confid
 
 # Run Claude Code
 echo "[agent] Starting Claude Code session..."
-echo "[agent] Task: ${TASK_DESCRIPTION}"
+if [ -n "${TASK_TITLE}" ]; then
+    echo "[agent] Task: ${TASK_TITLE}"
+fi
+echo "[agent] Description: ${TASK_DESCRIPTION}"
 echo ""
 
 # Run Claude Code in non-interactive mode
 # --output-format stream-json: Stream JSON events for real-time output
 # --verbose: Required for stream-json, shows thinking
 # --dangerously-skip-permissions: Skip permission prompts (we trust the agent)
-# --model: Use specified model (defaults to haiku for cost efficiency)
-CLAUDE_MODEL="${CLAUDE_MODEL:-haiku}"
+# --model: Use specified model
+CLAUDE_MODEL="${CLAUDE_MODEL:-sonnet}"
 echo "[agent] Using model: ${CLAUDE_MODEL}"
 
 # Use stream-json for real-time output, parse with jq
@@ -413,14 +492,19 @@ echo "[agent] Checking for changes..."
 git add -A
 
 if git diff --cached --quiet; then
-    echo "[agent] No changes to commit"
+    echo "[agent] No new changes to commit"
 else
     echo "[agent] Committing changes..."
-    git commit -m "feat: ${TASK_DESCRIPTION}
+    COMMIT_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
+    git commit -m "feat: ${COMMIT_TITLE}
 
 Implemented by Verve AI Agent
 Task ID: ${TASK_ID}"
+fi
 
+# Check for any unpushed commits (handles case where Claude committed via Bash tool)
+UNPUSHED=$(git log "origin/${BRANCH}..HEAD" --oneline 2>/dev/null || git log --oneline -1 2>/dev/null)
+if [ -n "$UNPUSHED" ]; then
     if [ "${ATTEMPT:-1}" -gt 1 ]; then
         echo "[agent] Pushing fixes to existing branch..."
         git push --force-with-lease origin "${BRANCH}"
@@ -430,18 +514,21 @@ Task ID: ${TASK_ID}"
     fi
     echo "[agent] Branch pushed successfully: ${BRANCH}"
 
-    # Only create PR on first attempt
-    if [ "${ATTEMPT:-1}" -le 1 ]; then
-        # Create Pull Request (gh CLI uses GITHUB_TOKEN env var automatically)
+    # Only create PR on first attempt (unless skip_pr is set)
+    if [ "$SKIP_PR" = "true" ]; then
+        echo "[agent] Skip PR mode: branch pushed, skipping PR creation"
+        echo "VERVE_BRANCH_PUSHED:{\"branch\":\"${BRANCH}\"}"
+    elif [ "${ATTEMPT:-1}" -le 1 ]; then
         echo "[agent] Creating pull request..."
 
         # Get diff summary for PR description context
-        DIFF_SUMMARY=$(git diff origin/main...HEAD --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+        DIFF_SUMMARY=$(git diff "origin/${DEFAULT_BRANCH}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
 
         # Generate PR title and description using Claude
         PR_PROMPT="Generate a pull request title and description for the following task and changes.
 
-Task: ${TASK_DESCRIPTION}
+Task Title: ${TASK_TITLE:-${TASK_DESCRIPTION}}
+Task Description: ${TASK_DESCRIPTION}
 
 Files changed:
 ${DIFF_SUMMARY}
@@ -480,7 +567,7 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code blocks, 
 
         # Fallback if Claude/jq failed
         if [ -z "${PR_TITLE}" ]; then
-            PR_TITLE="${TASK_DESCRIPTION}"
+            PR_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
         fi
         if [ -z "${PR_BODY}" ]; then
             PR_BODY="## Summary
@@ -499,24 +586,7 @@ ${DIFF_SUMMARY}"
 *Implemented by Verve AI Agent*
 **Task ID:** \`${TASK_ID}\`"
 
-        # Create the PR
-        PR_OUTPUT=$(gh pr create --title "${PR_TITLE}" --body "${PR_BODY}" --head "${BRANCH}" 2>&1)
-        PR_EXIT_CODE=$?
-
-        if [ ${PR_EXIT_CODE} -eq 0 ]; then
-            # Extract the PR URL from output
-            PR_URL=$(echo "${PR_OUTPUT}" | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)
-            if [ -n "${PR_URL}" ]; then
-                PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
-                echo "[agent] Pull request created: ${PR_URL}"
-                # Output structured marker for worker to parse
-                echo "VERVE_PR_CREATED:{\"url\":\"${PR_URL}\",\"number\":${PR_NUMBER}}"
-            else
-                echo "[agent] Pull request created but could not parse URL from: ${PR_OUTPUT}"
-            fi
-        else
-            echo "[agent] Warning: Failed to create pull request: ${PR_OUTPUT}"
-        fi
+        create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"
     else
         echo "[agent] Retry: pushed fixes to existing PR branch"
     fi

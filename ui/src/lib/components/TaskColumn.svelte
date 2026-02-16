@@ -21,7 +21,7 @@
 	} = $props();
 </script>
 
-<div class="rounded-xl border bg-muted/50 min-h-[200px] sm:min-h-[500px] flex flex-col overflow-hidden">
+<div class="rounded-xl border bg-muted/45 flex flex-col overflow-hidden">
 	<div class="flex items-center gap-2 px-3 py-2.5 {headerBg} border-b">
 		<HeaderIcon class="w-4 h-4 {iconClass}" />
 		<span class="font-medium text-sm {iconClass}">{label}</span>

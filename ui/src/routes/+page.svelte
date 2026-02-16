@@ -104,7 +104,7 @@
 	]);
 </script>
 
-<div class="p-4 sm:p-6 h-full flex flex-col">
+<div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col">
 	{#if hasRepo}
 		<header class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6">
 			<div>
@@ -113,13 +113,13 @@
 					{#if totalTasks > 0}
 						<div class="flex items-center gap-2">
 							<span
-								class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+								class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/15 text-primary"
 							>
 								{totalTasks} total
 							</span>
 							{#if activeTasks > 0}
 								<span
-									class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+									class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/15 text-primary"
 								>
 									{activeTasks} active
 								</span>
@@ -144,6 +144,10 @@
 					<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
 					<span class="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync PRs'}</span>
 				</Button>
+				<Button onclick={() => (openCreate = true)} class="gap-2">
+					<Plus class="w-4 h-4" />
+					New Task
+				</Button>
 			</div>
 		</header>
 
@@ -157,18 +161,16 @@
 		{/if}
 
 		{#snippet pendingAction()}
-			<Button
-				size="sm"
-				variant="outline"
+			<button
 				onclick={() => (openCreate = true)}
-				class="h-6 px-2 gap-1 text-xs"
+				class="h-6 px-2 gap-1 text-xs inline-flex items-center rounded-md font-medium bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors"
 			>
 				<Plus class="w-3 h-3" />
 				New
-			</Button>
+			</button>
 		{/snippet}
 
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 flex-1 min-h-0">
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 flex-1 min-h-0 auto-rows-[1fr]">
 			<TaskColumn
 				label="Pending"
 				icon={Clock}

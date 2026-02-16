@@ -11,6 +11,10 @@ Verve is a distributed AI agent orchestrator platform. It dispatches AI coding a
 
 Key constraint: User source code and secrets never leave their network. We send task descriptions in; we get logs and PR notifications out.
 
+## Important Rules
+
+- **Never build binaries to the project root.** Always use `make build` or output to `bin/` (e.g. `go build -o bin/ ./cmd/...`). The `bin/` directory is git-ignored.
+
 ## Development Commands
 
 ```bash

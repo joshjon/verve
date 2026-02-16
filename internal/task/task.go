@@ -18,6 +18,7 @@ const (
 type Task struct {
 	ID                  TaskID    `json:"id"`
 	RepoID              string    `json:"repo_id"`
+	Title               string    `json:"title"`
 	Description         string    `json:"description"`
 	Status              Status    `json:"status"`
 	Logs                []string  `json:"logs"`
@@ -28,25 +29,32 @@ type Task struct {
 	Attempt             int       `json:"attempt"`
 	MaxAttempts         int       `json:"max_attempts"`
 	RetryReason         string    `json:"retry_reason,omitempty"`
-	AcceptanceCriteria  string    `json:"acceptance_criteria,omitempty"`
+	AcceptanceCriteria  []string  `json:"acceptance_criteria"`
 	AgentStatus         string    `json:"agent_status,omitempty"`
 	RetryContext        string    `json:"retry_context,omitempty"`
 	ConsecutiveFailures int       `json:"consecutive_failures"`
 	CostUSD             float64   `json:"cost_usd"`
 	MaxCostUSD          float64   `json:"max_cost_usd,omitempty"`
+	SkipPR              bool      `json:"skip_pr"`
+	Model               string    `json:"model,omitempty"`
+	BranchName          string    `json:"branch_name,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // NewTask creates a new Task with a generated TaskID and pending status.
-func NewTask(repoID, description string, dependsOn []string, acceptanceCriteria string, maxCostUSD float64) *Task {
+func NewTask(repoID, title, description string, dependsOn []string, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string) *Task {
 	now := time.Now()
 	if dependsOn == nil {
 		dependsOn = []string{}
 	}
+	if acceptanceCriteria == nil {
+		acceptanceCriteria = []string{}
+	}
 	return &Task{
 		ID:                 NewTaskID(),
 		RepoID:             repoID,
+		Title:              title,
 		Description:        description,
 		Status:             StatusPending,
 		DependsOn:          dependsOn,
@@ -54,6 +62,8 @@ func NewTask(repoID, description string, dependsOn []string, acceptanceCriteria 
 		MaxAttempts:        5,
 		AcceptanceCriteria: acceptanceCriteria,
 		MaxCostUSD:         maxCostUSD,
+		SkipPR:             skipPR,
+		Model:              model,
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}

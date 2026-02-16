@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, repo_id, description, status, depends_on, attempt, max_attempts, acceptance_criteria, max_cost_usd, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO task (id, repo_id, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, model, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = ?;
@@ -15,10 +15,10 @@ SELECT * FROM task WHERE repo_id = ? ORDER BY created_at DESC;
 SELECT * FROM task WHERE status = 'pending' ORDER BY created_at ASC;
 
 -- name: AppendTaskLogs :exec
-INSERT INTO task_log (task_id, lines) VALUES (?, ?);
+INSERT INTO task_log (task_id, attempt, lines) VALUES (?, ?, ?);
 
 -- name: ReadTaskLogs :many
-SELECT lines FROM task_log WHERE task_id = ? ORDER BY id;
+SELECT attempt, lines FROM task_log WHERE task_id = ? ORDER BY id;
 
 -- name: UpdateTaskStatus :exec
 UPDATE task SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -69,3 +69,20 @@ UPDATE task SET consecutive_failures = ?, updated_at = strftime('%Y-%m-%dT%H:%M:
 
 -- name: SetCloseReason :exec
 UPDATE task SET close_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;
+
+-- name: SetBranchName :exec
+UPDATE task SET branch_name = ?, status = 'review', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;
+
+-- name: ListTasksInReviewNoPR :many
+SELECT * FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_number IS NULL;
+
+-- name: ManualRetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  retry_reason = ?, retry_context = NULL, agent_status = NULL,
+  close_reason = NULL, consecutive_failures = 0,
+  pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'failed';
+
+-- name: DeleteTaskLogs :exec
+DELETE FROM task_log WHERE task_id = ?;

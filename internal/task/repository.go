@@ -23,9 +23,9 @@ type TaskRepository interface {
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	ListPendingTasksByRepos(ctx context.Context, repoIDs []string) ([]*Task, error)
-	AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error
+	AppendTaskLogs(ctx context.Context, id TaskID, attempt int, logs []string) error
 	ReadTaskLogs(ctx context.Context, id TaskID) ([]string, error)
-	StreamTaskLogs(ctx context.Context, id TaskID, fn func(lines []string) error) error
+	StreamTaskLogs(ctx context.Context, id TaskID, fn func(attempt int, lines []string) error) error
 	UpdateTaskStatus(ctx context.Context, id TaskID, status Status) error
 	SetTaskPullRequest(ctx context.Context, id TaskID, prURL string, prNumber int) error
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
@@ -44,4 +44,8 @@ type TaskRepository interface {
 	AddCost(ctx context.Context, id TaskID, costUSD float64) error
 	SetConsecutiveFailures(ctx context.Context, id TaskID, count int) error
 	SetCloseReason(ctx context.Context, id TaskID, reason string) error
+	SetBranchName(ctx context.Context, id TaskID, branchName string) error
+	ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error)
+	ManualRetryTask(ctx context.Context, id TaskID, instructions string) (bool, error)
+	DeleteTaskLogs(ctx context.Context, id TaskID) error
 }

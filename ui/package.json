@@ -27,6 +27,7 @@
 		"vite": "^7.3.1"
 	},
 	"dependencies": {
+		"ansi_up": "^6.0.6",
 		"bits-ui": "^2.15.5",
 		"clsx": "^2.1.1",
 		"lucide-svelte": "^0.563.0",

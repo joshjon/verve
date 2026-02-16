@@ -5,21 +5,45 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
-	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign } from 'lucide-svelte';
+	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
 		onCreated
 	}: { open: boolean; onCreated: () => void } = $props();
 
+	let title = $state('');
 	let description = $state('');
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let selectedDeps = $state<string[]>([]);
 	let searchQuery = $state('');
-	let acceptanceCriteria = $state('');
+	let acceptanceCriteria = $state<string[]>([]);
 	let maxCostUsd = $state<number | undefined>(undefined);
+	let skipPr = $state(false);
 	let showAdvanced = $state(false);
+	let selectedModel = $state('');
+	let defaultModel = $state('');
+
+	// Fetch default model when dialog opens
+	$effect(() => {
+		if (open) {
+			client.getDefaultModel().then((res) => {
+				defaultModel = res.model || '';
+			}).catch(() => {});
+		}
+	});
+
+	const modelOptions = [
+		{ value: '', label: 'Default' },
+		{ value: 'haiku', label: 'Haiku' },
+		{ value: 'sonnet', label: 'Sonnet' },
+		{ value: 'opus', label: 'Opus' }
+	];
+
+	const defaultModelLabel = $derived(
+		defaultModel ? modelOptions.find((m) => m.value === defaultModel)?.label || defaultModel : 'not set'
+	);
 
 	// Filter available tasks (exclude closed/failed and already selected)
 	const availableTasks = $derived(
@@ -35,7 +59,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		if (!description.trim()) return;
+		if (!title.trim() || !description.trim()) return;
 
 		loading = true;
 		error = null;
@@ -43,17 +67,24 @@
 		try {
 			const repoId = repoStore.selectedRepoId;
 			if (!repoId) throw new Error('No repository selected');
+			const filteredCriteria = acceptanceCriteria.filter((c) => c.trim() !== '');
 			await client.createTaskInRepo(
 				repoId,
+				title,
 				description,
 				selectedDeps.length > 0 ? selectedDeps : undefined,
-				acceptanceCriteria || undefined,
-				maxCostUsd
+				filteredCriteria.length > 0 ? filteredCriteria : undefined,
+				maxCostUsd,
+				skipPr || undefined,
+				selectedModel || undefined
 			);
+			title = '';
 			description = '';
 			selectedDeps = [];
-			acceptanceCriteria = '';
+			acceptanceCriteria = [];
 			maxCostUsd = undefined;
+			skipPr = false;
+			selectedModel = '';
 			showAdvanced = false;
 			open = false;
 			onCreated();
@@ -66,10 +97,13 @@
 
 	function handleClose() {
 		open = false;
+		title = '';
 		description = '';
 		selectedDeps = [];
-		acceptanceCriteria = '';
+		acceptanceCriteria = [];
 		maxCostUsd = undefined;
+		skipPr = false;
+		selectedModel = '';
 		showAdvanced = false;
 		error = null;
 		searchQuery = '';
@@ -83,10 +117,22 @@
 	function removeDependency(taskId: string) {
 		selectedDeps = selectedDeps.filter((id) => id !== taskId);
 	}
+
+	function addCriterion() {
+		acceptanceCriteria = [...acceptanceCriteria, ''];
+	}
+
+	function removeCriterion(index: number) {
+		acceptanceCriteria = acceptanceCriteria.filter((_, i) => i !== index);
+	}
+
+	function updateCriterion(index: number, value: string) {
+		acceptanceCriteria = acceptanceCriteria.map((c, i) => (i === index ? value : c));
+	}
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-[540px]">
+	<Dialog.Content class="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2">
 				<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -99,36 +145,87 @@
 			</Dialog.Description>
 		</Dialog.Header>
 		<form onsubmit={handleSubmit}>
-			<div class="py-4 space-y-5">
-				<div>
-					<label for="description" class="text-sm font-medium mb-2 flex items-center gap-2">
-						<FileText class="w-4 h-4 text-muted-foreground" />
-						Description
-					</label>
-					<textarea
-						id="description"
-						bind:value={description}
-						autofocus
-						class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
-						placeholder="e.g., Add a function that calculates the Fibonacci sequence and include unit tests..."
-						disabled={loading}
-					></textarea>
+			<div class="py-4 space-y-7">
+				<div class="space-y-3">
+					<div>
+						<label for="title" class="text-sm font-medium mb-2 flex items-center gap-2">
+							<Type class="w-4 h-4 text-muted-foreground" />
+							Title
+						</label>
+						<input
+							id="title"
+							type="text"
+							bind:value={title}
+							autofocus
+							maxlength={150}
+							class="w-full border rounded-lg p-3 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+							placeholder="e.g., Add Fibonacci function with unit tests"
+							disabled={loading}
+						/>
+						<p class="text-xs text-muted-foreground mt-1 text-right">{title.length}/150</p>
+					</div>
+
+					<div>
+						<label for="description" class="text-sm font-medium mb-2 flex items-center gap-2">
+							<FileText class="w-4 h-4 text-muted-foreground" />
+							Description
+						</label>
+						<textarea
+							id="description"
+							bind:value={description}
+							class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+							placeholder="Detailed description of what needs to be done..."
+							disabled={loading}
+						></textarea>
+					</div>
 				</div>
 
+				<hr class="border-border" />
+
 				<div>
-					<label for="acceptance-criteria" class="text-sm font-medium mb-2 flex items-center gap-2">
+					<label class="text-sm font-medium mb-2 flex items-center gap-2">
 						<Target class="w-4 h-4 text-muted-foreground" />
 						Acceptance Criteria
 						<span class="text-xs text-muted-foreground font-normal">(optional)</span>
 					</label>
-					<textarea
-						id="acceptance-criteria"
-						bind:value={acceptanceCriteria}
-						class="w-full border rounded-lg p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow text-sm"
-						placeholder="e.g., All tests pass, No linting errors, Function handles edge cases..."
+					{#if acceptanceCriteria.length > 0}
+						<div class="space-y-2 mb-2">
+							{#each acceptanceCriteria as criterion, i}
+								<div class="flex items-center gap-2">
+									<span class="text-xs text-muted-foreground font-mono w-5 shrink-0 text-right">{i + 1}.</span>
+									<input
+										type="text"
+										value={criterion}
+										oninput={(e) => updateCriterion(i, (e.target as HTMLInputElement).value)}
+										class="flex-1 border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow text-sm"
+										placeholder="e.g., All tests pass"
+										disabled={loading}
+									/>
+									<button
+										type="button"
+										class="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded transition-colors shrink-0"
+										onclick={() => removeCriterion(i)}
+									>
+										<X class="w-3.5 h-3.5" />
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onclick={addCriterion}
 						disabled={loading}
-					></textarea>
+						class="gap-1.5 text-xs"
+					>
+						<Plus class="w-3.5 h-3.5" />
+						Add criterion
+					</Button>
 				</div>
+
+				<hr class="border-border" />
 
 				<div>
 					<label for="dep-search" class="text-sm font-medium mb-2 flex items-center gap-2">
@@ -180,7 +277,7 @@
 											{task.id}
 										</span>
 									</div>
-									<div class="text-sm line-clamp-2 mt-1">{task.description}</div>
+									<div class="text-sm line-clamp-2 mt-1">{task.title || task.description}</div>
 								</button>
 							{/each}
 						{:else if searchQuery}
@@ -214,6 +311,24 @@
 					{#if showAdvanced}
 						<div class="mt-3 space-y-4 pl-1">
 							<div>
+								<label for="model-select" class="text-sm font-medium mb-2 flex items-center gap-2">
+									<Cpu class="w-4 h-4 text-muted-foreground" />
+									Model
+								</label>
+								<select
+									id="model-select"
+									bind:value={selectedModel}
+									class="w-full border rounded-lg p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow text-sm"
+									disabled={loading}
+								>
+									{#each modelOptions as option}
+										<option value={option.value}>
+											{option.label}{option.value === '' ? ` (${defaultModelLabel})` : ''}
+										</option>
+									{/each}
+								</select>
+							</div>
+							<div>
 								<label for="max-cost" class="text-sm font-medium mb-2 flex items-center gap-2">
 									<DollarSign class="w-4 h-4 text-muted-foreground" />
 									Max Cost (USD)
@@ -230,6 +345,27 @@
 									disabled={loading}
 								/>
 							</div>
+							<label
+								for="skip-pr"
+								class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
+							>
+								<input
+									id="skip-pr"
+									type="checkbox"
+									bind:checked={skipPr}
+									class="w-4 h-4 rounded border-input accent-primary"
+									disabled={loading}
+								/>
+								<div class="flex-1">
+									<div class="text-sm font-medium flex items-center gap-1.5">
+										<GitBranch class="w-3.5 h-3.5 text-muted-foreground" />
+										Push to branch only
+									</div>
+									<p class="text-xs text-muted-foreground mt-0.5">
+										Skip PR creation. You can create the PR manually and it will be detected on sync.
+									</p>
+								</div>
+							</label>
 						</div>
 					{/if}
 				</div>
@@ -245,7 +381,7 @@
 				<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={loading || !description.trim()} class="gap-2">
+				<Button type="submit" disabled={loading || !title.trim() || !description.trim()} class="gap-2">
 					{#if loading}
 						<Loader2 class="w-4 h-4 animate-spin" />
 						Creating...

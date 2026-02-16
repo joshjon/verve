@@ -43,26 +43,33 @@ func NewTaskRepository(db DB) *TaskRepository {
 }
 
 func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
-	var acceptanceCriteria *string
-	if t.AcceptanceCriteria != "" {
-		acceptanceCriteria = &t.AcceptanceCriteria
-	}
 	var maxCostUSD *float64
 	if t.MaxCostUSD > 0 {
 		maxCostUSD = &t.MaxCostUSD
 	}
+	var skipPR int64
+	if t.SkipPR {
+		skipPR = 1
+	}
+	var model *string
+	if t.Model != "" {
+		model = &t.Model
+	}
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
-		ID:                 t.ID.String(),
-		RepoID:             t.RepoID,
-		Description:        t.Description,
-		Status:             string(t.Status),
-		DependsOn:          marshalJSONStrings(t.DependsOn),
-		Attempt:            int64(t.Attempt),
-		MaxAttempts:        int64(t.MaxAttempts),
-		AcceptanceCriteria: acceptanceCriteria,
-		MaxCostUsd:         maxCostUSD,
-		CreatedAt:          t.CreatedAt,
-		UpdatedAt:          t.UpdatedAt,
+		ID:                    t.ID.String(),
+		RepoID:                t.RepoID,
+		Title:                 t.Title,
+		Description:           t.Description,
+		Status:                string(t.Status),
+		DependsOn:             marshalJSONStrings(t.DependsOn),
+		Attempt:               int64(t.Attempt),
+		MaxAttempts:           int64(t.MaxAttempts),
+		AcceptanceCriteriaList: marshalJSONStrings(t.AcceptanceCriteria),
+		MaxCostUsd:            maxCostUSD,
+		SkipPr:                skipPR,
+		Model:                 model,
+		CreatedAt:             t.CreatedAt,
+		UpdatedAt:             t.UpdatedAt,
 	})
 	return tagTaskErr(err)
 }
@@ -105,7 +112,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	if len(repoIDs) == 0 {
 		return nil, nil
 	}
-	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
+	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model FROM task WHERE status = 'pending' AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
 	args := make([]any, len(repoIDs))
 	for i, id := range repoIDs {
 		args[i] = id
@@ -118,7 +125,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	var tasks []*task.Task
 	for rows.Next() {
 		var t sqlc.Task
-		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.AcceptanceCriteria, &t.AgentStatus, &t.RetryContext, &t.ConsecutiveFailures, &t.CostUsd, &t.MaxCostUsd, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.AcceptanceCriteria, &t.AgentStatus, &t.RetryContext, &t.ConsecutiveFailures, &t.CostUsd, &t.MaxCostUsd, &t.CreatedAt, &t.UpdatedAt, &t.SkipPr, &t.BranchName, &t.Title, &t.AcceptanceCriteriaList, &t.Model); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, unmarshalTask(&t))
@@ -126,10 +133,11 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	return tasks, rows.Err()
 }
 
-func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, logs []string) error {
+func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, attempt int, logs []string) error {
 	return tagTaskErr(r.db.AppendTaskLogs(ctx, sqlc.AppendTaskLogsParams{
-		TaskID: id.String(),
-		Lines:  marshalJSONStrings(logs),
+		TaskID:  id.String(),
+		Attempt: int64(attempt),
+		Lines:   marshalJSONStrings(logs),
 	}))
 }
 
@@ -140,7 +148,7 @@ func (r *TaskRepository) ReadTaskLogs(ctx context.Context, id task.TaskID) ([]st
 	}
 	var logs []string
 	for _, batch := range batches {
-		logs = append(logs, unmarshalJSONStrings(batch)...)
+		logs = append(logs, unmarshalJSONStrings(batch.Lines)...)
 	}
 	if logs == nil {
 		logs = []string{}
@@ -148,18 +156,19 @@ func (r *TaskRepository) ReadTaskLogs(ctx context.Context, id task.TaskID) ([]st
 	return logs, nil
 }
 
-func (r *TaskRepository) StreamTaskLogs(ctx context.Context, id task.TaskID, fn func(lines []string) error) error {
-	rows, err := r.dbtx.QueryContext(ctx, "SELECT lines FROM task_log WHERE task_id = ? ORDER BY id", id.String())
+func (r *TaskRepository) StreamTaskLogs(ctx context.Context, id task.TaskID, fn func(attempt int, lines []string) error) error {
+	rows, err := r.dbtx.QueryContext(ctx, "SELECT attempt, lines FROM task_log WHERE task_id = ? ORDER BY id", id.String())
 	if err != nil {
 		return tagTaskErr(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
+		var attempt int
 		var linesJSON string
-		if err := rows.Scan(&linesJSON); err != nil {
+		if err := rows.Scan(&attempt, &linesJSON); err != nil {
 			return err
 		}
-		if err := fn(unmarshalJSONStrings(linesJSON)); err != nil {
+		if err := fn(attempt, unmarshalJSONStrings(linesJSON)); err != nil {
 			return err
 		}
 	}
@@ -274,6 +283,37 @@ func (r *TaskRepository) SetCloseReason(ctx context.Context, id task.TaskID, rea
 		CloseReason: &reason,
 		ID:          id.String(),
 	}))
+}
+
+func (r *TaskRepository) SetBranchName(ctx context.Context, id task.TaskID, branchName string) error {
+	return tagTaskErr(r.db.SetBranchName(ctx, sqlc.SetBranchNameParams{
+		BranchName: &branchName,
+		ID:         id.String(),
+	}))
+}
+
+func (r *TaskRepository) ManualRetryTask(ctx context.Context, id task.TaskID, instructions string) (bool, error) {
+	var reason *string
+	if instructions != "" {
+		reason = &instructions
+	}
+	rows, err := r.db.ManualRetryTask(ctx, sqlc.ManualRetryTaskParams{
+		RetryReason: reason,
+		ID:          id.String(),
+	})
+	return rows > 0, tagTaskErr(err)
+}
+
+func (r *TaskRepository) DeleteTaskLogs(ctx context.Context, id task.TaskID) error {
+	return tagTaskErr(r.db.DeleteTaskLogs(ctx, id.String()))
+}
+
+func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksInReviewNoPR(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
 }
 
 func (r *TaskRepository) WithTx(txn tx.Tx) task.Repository {

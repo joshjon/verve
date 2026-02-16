@@ -19,25 +19,27 @@ type Config struct {
 	APIURL               string
 	AnthropicAPIKey      string // API key auth (pay-per-use)
 	ClaudeCodeOAuthToken string // OAuth token auth (subscription-based, alternative to API key)
-	ClaudeModel          string // Model to use (haiku, sonnet, opus) - defaults to haiku
 	AgentImage           string // Docker image for agent - defaults to verve-agent:latest
 	MaxConcurrentTasks   int    // Maximum concurrent tasks (default: 1)
 	DryRun               bool   // Skip Claude and make a dummy change instead
 }
 
 type Task struct {
-	ID                 string  `json:"id"`
-	RepoID             string  `json:"repo_id"`
-	Description        string  `json:"description"`
-	Status             string  `json:"status"`
-	Attempt            int     `json:"attempt"`
-	MaxAttempts        int     `json:"max_attempts"`
-	RetryReason        string  `json:"retry_reason,omitempty"`
-	AcceptanceCriteria string  `json:"acceptance_criteria,omitempty"`
-	RetryContext       string  `json:"retry_context,omitempty"`
-	AgentStatus        string  `json:"agent_status,omitempty"`
-	CostUSD            float64 `json:"cost_usd"`
-	MaxCostUSD         float64 `json:"max_cost_usd,omitempty"`
+	ID                 string   `json:"id"`
+	RepoID             string   `json:"repo_id"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	Status             string   `json:"status"`
+	Attempt            int      `json:"attempt"`
+	MaxAttempts        int      `json:"max_attempts"`
+	RetryReason        string   `json:"retry_reason,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria"`
+	RetryContext       string   `json:"retry_context,omitempty"`
+	AgentStatus        string   `json:"agent_status,omitempty"`
+	CostUSD            float64  `json:"cost_usd"`
+	MaxCostUSD         float64  `json:"max_cost_usd,omitempty"`
+	SkipPR             bool     `json:"skip_pr"`
+	Model              string   `json:"model,omitempty"`
 }
 
 // PollResponse wraps a claimed task with credentials and repo info from the server.
@@ -211,6 +213,7 @@ func (w *Worker) pollForTask(ctx context.Context) (*PollResponse, error) {
 type logStreamer struct {
 	worker    *Worker
 	taskID    string
+	attempt   int
 	ctx       context.Context
 	buffer    []string
 	mu        sync.Mutex
@@ -220,10 +223,11 @@ type logStreamer struct {
 	batchSize int
 }
 
-func newLogStreamer(ctx context.Context, w *Worker, taskID string) *logStreamer {
+func newLogStreamer(ctx context.Context, w *Worker, taskID string, attempt int) *logStreamer {
 	ls := &logStreamer{
 		worker:    w,
 		taskID:    taskID,
+		attempt:   attempt,
 		ctx:       ctx,
 		buffer:    make([]string, 0, 100),
 		done:      make(chan struct{}),
@@ -284,7 +288,7 @@ func (ls *logStreamer) flush() {
 	ls.mu.Unlock()
 
 	// Send to API server
-	if err := ls.worker.sendLogs(ls.ctx, ls.taskID, toSend); err != nil {
+	if err := ls.worker.sendLogs(ls.ctx, ls.taskID, ls.attempt, toSend); err != nil {
 		ls.worker.logger.Error("failed to send logs", "task_id", ls.taskID, "error", err)
 	}
 }
@@ -293,11 +297,12 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	taskLogger := w.logger.With("task_id", task.ID)
 
 	// Create log streamer for real-time log streaming
-	streamer := newLogStreamer(ctx, w, task.ID)
+	streamer := newLogStreamer(ctx, w, task.ID, task.Attempt)
 
-	// Track PR info and agent markers
+	// Track PR info, branch info, and agent markers
 	var prURL string
 	var prNumber int
+	var branchName string
 	var agentStatus string
 	var costUSD float64
 	var prereqFailed string
@@ -308,9 +313,13 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		taskLogger.Debug("agent output", "line", line)
 		streamer.AddLine(line)
 
+		// Strip markdown formatting (e.g. **bold**) that the agent
+		// may wrap around marker lines.
+		cleanLine := strings.TrimRight(strings.TrimLeft(line, "*"), "*")
+
 		// Parse PR marker
-		if strings.HasPrefix(line, "VERVE_PR_CREATED:") {
-			jsonStr := strings.TrimPrefix(line, "VERVE_PR_CREATED:")
+		if strings.HasPrefix(cleanLine, "VERVE_PR_CREATED:") {
+			jsonStr := strings.TrimPrefix(cleanLine, "VERVE_PR_CREATED:")
 			var prInfo struct {
 				URL    string `json:"url"`
 				Number int    `json:"number"`
@@ -324,9 +333,23 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 			}
 		}
 
+		// Parse branch pushed marker (skip-PR mode)
+		if strings.HasPrefix(cleanLine, "VERVE_BRANCH_PUSHED:") {
+			jsonStr := strings.TrimPrefix(cleanLine, "VERVE_BRANCH_PUSHED:")
+			var branchInfo struct {
+				Branch string `json:"branch"`
+			}
+			if err := json.Unmarshal([]byte(jsonStr), &branchInfo); err == nil {
+				markerMu.Lock()
+				branchName = branchInfo.Branch
+				markerMu.Unlock()
+				taskLogger.Info("captured branch", "branch", branchName)
+			}
+		}
+
 		// Parse agent status marker
-		if strings.HasPrefix(line, "VERVE_STATUS:") {
-			statusJSON := strings.TrimPrefix(line, "VERVE_STATUS:")
+		if strings.HasPrefix(cleanLine, "VERVE_STATUS:") {
+			statusJSON := strings.TrimPrefix(cleanLine, "VERVE_STATUS:")
 			markerMu.Lock()
 			agentStatus = statusJSON
 			markerMu.Unlock()
@@ -334,8 +357,8 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		}
 
 		// Parse prereq failure marker
-		if strings.HasPrefix(line, "VERVE_PREREQ_FAILED:") {
-			jsonStr := strings.TrimPrefix(line, "VERVE_PREREQ_FAILED:")
+		if strings.HasPrefix(cleanLine, "VERVE_PREREQ_FAILED:") {
+			jsonStr := strings.TrimPrefix(cleanLine, "VERVE_PREREQ_FAILED:")
 			markerMu.Lock()
 			prereqFailed = jsonStr
 			markerMu.Unlock()
@@ -343,8 +366,8 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		}
 
 		// Parse cost marker
-		if strings.HasPrefix(line, "VERVE_COST:") {
-			costStr := strings.TrimPrefix(line, "VERVE_COST:")
+		if strings.HasPrefix(cleanLine, "VERVE_COST:") {
+			costStr := strings.TrimPrefix(cleanLine, "VERVE_COST:")
 			var cost float64
 			if _, err := fmt.Sscanf(costStr, "%f", &cost); err == nil {
 				markerMu.Lock()
@@ -358,13 +381,15 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	// Create agent config from worker config + server-provided credentials
 	agentCfg := AgentConfig{
 		TaskID:               task.ID,
+		TaskTitle:            task.Title,
 		TaskDescription:      task.Description,
 		GitHubToken:          githubToken,
 		GitHubRepo:           repoFullName,
 		AnthropicAPIKey:      w.config.AnthropicAPIKey,
 		ClaudeCodeOAuthToken: w.config.ClaudeCodeOAuthToken,
-		ClaudeModel:          w.config.ClaudeModel,
+		ClaudeModel:          task.Model,
 		DryRun:               w.config.DryRun,
+		SkipPR:               task.SkipPR,
 		Attempt:              task.Attempt,
 		RetryReason:          task.RetryReason,
 		AcceptanceCriteria:   task.AcceptanceCriteria,
@@ -382,6 +407,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	markerMu.Lock()
 	capturedPRURL := prURL
 	capturedPRNumber := prNumber
+	capturedBranchName := branchName
 	capturedAgentStatus := agentStatus
 	capturedCostUSD := costUSD
 	capturedPrereqFailed := prereqFailed
@@ -390,22 +416,22 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	// Report completion with PR info, agent status, and cost
 	if result.Error != nil {
 		taskLogger.Error("task failed", "error", result.Error)
-		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
+		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
 	} else if result.Success {
 		taskLogger.Info("task completed successfully")
-		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedAgentStatus, capturedCostUSD, "")
+		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "")
 	} else {
 		errMsg := fmt.Sprintf("exit code %d", result.ExitCode)
 		if capturedPrereqFailed != "" {
 			errMsg = "prerequisite check failed"
 		}
 		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		w.completeTask(ctx, task.ID, false, errMsg, "", 0, capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
+		w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
 	}
 }
 
-func (w *Worker) sendLogs(ctx context.Context, taskID string, logs []string) error {
-	body, _ := json.Marshal(map[string][]string{"logs": logs})
+func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs []string) error {
+	body, _ := json.Marshal(map[string]any{"logs": logs, "attempt": attempt})
 	req, err := http.NewRequestWithContext(ctx, "POST", w.config.APIURL+"/api/v1/tasks/"+taskID+"/logs", bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -425,7 +451,7 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, logs []string) err
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int, agentStatus string, costUSD float64, prereqFailed string) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int, branchName string, agentStatus string, costUSD float64, prereqFailed string) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
@@ -433,6 +459,9 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	if prURL != "" {
 		payload["pull_request_url"] = prURL
 		payload["pr_number"] = prNumber
+	}
+	if branchName != "" {
+		payload["branch_name"] = branchName
 	}
 	if agentStatus != "" {
 		payload["agent_status"] = agentStatus

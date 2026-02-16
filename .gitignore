@@ -6,9 +6,12 @@ tmp/
 local/
 dist/
 
-.env
-.env.prod
-.env.dev
+.env.server
+.env.worker
+.env.server.prod
+.env.server.dev
+.env.worker.prod
+.env.worker.dev
 
 # Go server UI assets
 !internal/frontend/dist/

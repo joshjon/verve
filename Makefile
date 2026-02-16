@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-worker build-agent build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate up down logs ui-install ui-dev ui-build ui-build-go deploy
+.PHONY: all build build-server build-worker build-agent build-agent-dev build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate up down logs dev dev-build dev-down dev-logs ui-install ui-dev ui-build ui-build-go deploy
 
 AGENT_IMAGE = ghcr.io/joshjon/verve-agent
 
@@ -17,6 +17,9 @@ build-worker:
 # Build agent Docker image
 build-agent:
 	docker build -t verve-agent:latest ./agent
+
+build-agent-dev: build-agent
+	docker build -f agent/Dockerfile.dev -t verve-agent:dev ./agent
 
 build-agent-no-cache:
 	docker build --no-cache -t verve-agent:latest ./agent
@@ -57,7 +60,7 @@ run-worker: build-worker
 up:
 	docker compose up -d
 
-up-build: ui-build-go
+up-build:
 	docker compose up -d --build
 
 down:
@@ -65,6 +68,19 @@ down:
 
 logs:
 	docker compose logs -f
+
+# Docker Compose (dev stack — uses verve-agent:dev)
+dev: build-agent-dev
+	docker compose -f docker-compose.dev.yml up -d
+
+dev-build: build-agent-dev
+	docker compose -f docker-compose.dev.yml up -d --build
+
+dev-down:
+	docker compose -f docker-compose.dev.yml down
+
+dev-logs:
+	docker compose -f docker-compose.dev.yml logs -f
 
 # Create a test task
 test-task:

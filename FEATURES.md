@@ -26,8 +26,9 @@
 
 - **Docker isolation**: Each task runs in an ephemeral container, automatically cleaned up
 - **Claude Code integration**: Stream-JSON output mode with model selection (haiku, sonnet, opus); supports both API key (`ANTHROPIC_API_KEY`) and OAuth token (`CLAUDE_CODE_OAUTH_TOKEN`) for subscription-based auth
+- **Per-task model selection**: Choose Claude model (haiku, sonnet, opus) per task at creation time; falls back to server-wide default model setting, then sonnet
 - **Branch management**: Auto-creates `verve/task-{id}` branches; reuses on retry with rebase
-- **PR creation**: Automatic PR with Claude-generated title/description via `gh` CLI
+- **PR creation**: Automatic PR with Claude-generated title/description via GitHub API
 - **Dry run mode**: Skip Claude API calls for testing; creates dummy changes with dry-run label
 - **Structured agent status**: JSON output with `files_modified`, `tests_status`, `confidence`, `blockers`, `criteria_met`, `notes`
 
@@ -37,7 +38,8 @@
 - **File-based detection**: Scans for manifest files (`go.mod`, `requirements.txt`, `Cargo.toml`, etc.)
 - **Description-based detection**: Keyword matching in task descriptions for empty repos
 - **Structured failure reporting**: Missing tools reported with installation instructions
-- **No wasted tokens**: Checks run before Claude, so API costs are not incurred on prerequisite failures
+- **Dockerfile generation**: Claude generates a suggested Dockerfile tailored to the project when prerequisites are missing, displayed in the UI with a copy button
+- **No wasted tokens**: Checks run before Claude, so API costs are not incurred on prerequisite failures (only the Dockerfile generation call is made)
 
 ## Worker
 
@@ -54,6 +56,8 @@
 - **Real-time batching**: Logs sent every 2 seconds or when buffer reaches 50 lines
 - **Docker demultiplexing**: stdout/stderr separated via `stdcopy`
 - **SSE streaming**: Dedicated `/tasks/{id}/logs` endpoint with historical replay
+- **Per-attempt logs**: Logs tagged with attempt number; retries preserve previous attempt logs
+- **Tabbed log viewer**: UI shows attempt tabs when task has multiple attempts, with auto-switch to latest
 - **Auto-scroll UI**: Log viewer with auto-scroll that disables on manual scroll
 
 ## GitHub Integration
@@ -101,7 +105,8 @@
 - **Kanban dashboard**: Six status columns with task count badges
 - **Real-time updates**: SSE-driven live task state changes
 - **Task detail page**: Description (markdown), status, retries, logs, agent status, cost, dependencies, PR link, acceptance criteria, prerequisite failures
-- **Create task dialog**: Description, acceptance criteria, dependency search/selection, max cost budget
+- **Create task dialog**: Description, acceptance criteria, dependency search/selection, max cost budget, model selection
+- **Settings management**: Server-wide default model configuration via API and UI
 - **Task cards**: Preview with retry count, cost, dependency count, consecutive failure warnings
 - **Repository management**: Selector dropdown, add from GitHub with search, remove repos
 - **Close task**: Dialog with optional reason

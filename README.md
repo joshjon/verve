@@ -38,13 +38,37 @@ make down     # Stop everything
 
 ### 3. Open the dashboard
 
-Open [http://localhost:7400](http://localhost:8080) to create tasks, monitor progress, and view agent logs.
+Open [http://localhost:7400](http://localhost:7400) to create tasks, monitor progress, and view agent logs.
 
 When complete, the agent pushes a branch and opens a PR on your repository.
 
-## Documentation
+## Try It Out
 
-- [Configuration](docs/configuration.md) — environment variables and credentials
-- [API Reference](docs/api.md) — endpoints, request/response formats, task statuses
-- [Custom Agents](docs/custom-agents.md) — extending the agent image with additional dependencies
-- [Design](DESIGN.md) — architecture and design decisions
+Use the [verve-example](https://github.com/joshjon/verve-example) repo to see the full task lifecycle in action, including CI failure detection and automatic retries.
+
+### Setup
+
+1. Fork [joshjon/verve-example](https://github.com/joshjon/verve-example) to your GitHub account
+2. Add the forked repo in the Verve dashboard
+3. Create a task with the details below
+
+### Sample task
+
+**Title:** Add readability function
+
+**Description:**
+Implement and export a `readability(text)` function in `src/textstats.js` that calculates a Flesch-Kincaid grade level score. It should return an object with `grade` (number, rounded to 1 decimal place) and `level` (string: "easy", "moderate", or "difficult").
+
+**Acceptance Criteria:**
+1. All tests pass
+2. Lint checks pass
+
+### What to expect
+
+1. The agent implements the `readability` function, makes tests and lint pass
+2. The agent pushes a branch and opens a PR
+3. CI runs three checks: **test**, **lint**, and **changelog** validation
+4. The **changelog** check fails because the agent didn't add an entry to `CHANGELOG.md` (it wasn't mentioned in the task)
+5. Verve detects the CI failure and automatically retries the task with the failure context
+6. On retry, the agent reads the CI error, adds a changelog entry, and pushes the fix
+7. All CI checks pass and the task moves to review

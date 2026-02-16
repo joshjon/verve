@@ -1,0 +1,29 @@
+# Verve Agent for developing on the Verve project itself
+# Builds on top of the LOCAL base agent image (not ghcr.io)
+#
+# Build:
+#   make build-agent-dev
+#
+# Use:
+#   AGENT_IMAGE=verve-agent:dev make run-worker
+
+FROM verve-agent:latest
+
+USER root
+
+# Install Go from official image (match version in go.mod)
+COPY --from=golang:1.25-alpine /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Install make (used by Makefile targets)
+RUN apk add --no-cache make
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Set up GOPATH with correct ownership for agent user
+ENV GOPATH="/home/agent/go"
+ENV PATH="${GOPATH}/bin:${PATH}"
+RUN mkdir -p /home/agent/go/bin && chown -R agent:agent /home/agent/go
+
+USER agent

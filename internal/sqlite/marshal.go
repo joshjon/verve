@@ -9,13 +9,15 @@ import (
 
 func unmarshalTask(in *sqlc.Task) *task.Task {
 	t := &task.Task{
-		ID:          task.MustParseTaskID(in.ID),
-		RepoID:      in.RepoID,
-		Description: in.Description,
-		Status:      task.Status(in.Status),
-		DependsOn:   unmarshalJSONStrings(in.DependsOn),
-		CreatedAt:   in.CreatedAt,
-		UpdatedAt:   in.UpdatedAt,
+		ID:                 task.MustParseTaskID(in.ID),
+		RepoID:             in.RepoID,
+		Title:              in.Title,
+		Description:        in.Description,
+		Status:             task.Status(in.Status),
+		DependsOn:          unmarshalJSONStrings(in.DependsOn),
+		AcceptanceCriteria: unmarshalJSONStrings(in.AcceptanceCriteriaList),
+		CreatedAt:          in.CreatedAt,
+		UpdatedAt:          in.UpdatedAt,
 	}
 	if in.PullRequestUrl != nil {
 		t.PullRequestURL = *in.PullRequestUrl
@@ -31,9 +33,6 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if in.RetryReason != nil {
 		t.RetryReason = *in.RetryReason
 	}
-	if in.AcceptanceCriteria != nil {
-		t.AcceptanceCriteria = *in.AcceptanceCriteria
-	}
 	if in.AgentStatus != nil {
 		t.AgentStatus = *in.AgentStatus
 	}
@@ -44,6 +43,13 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	t.CostUSD = in.CostUsd
 	if in.MaxCostUsd != nil {
 		t.MaxCostUSD = *in.MaxCostUsd
+	}
+	t.SkipPR = in.SkipPr != 0
+	if in.Model != nil {
+		t.Model = *in.Model
+	}
+	if in.BranchName != nil {
+		t.BranchName = *in.BranchName
 	}
 	return t
 }

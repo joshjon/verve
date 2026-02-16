@@ -3,6 +3,7 @@ export type TaskStatus = 'pending' | 'running' | 'review' | 'merged' | 'closed' 
 export interface Task {
 	id: string;
 	repo_id: string;
+	title: string;
 	description: string;
 	status: TaskStatus;
 	logs: string[];
@@ -13,12 +14,15 @@ export interface Task {
 	attempt: number;
 	max_attempts: number;
 	retry_reason?: string;
-	acceptance_criteria?: string;
+	acceptance_criteria: string[];
 	agent_status?: string;
 	retry_context?: string;
 	consecutive_failures: number;
 	cost_usd: number;
 	max_cost_usd?: number;
+	skip_pr: boolean;
+	model?: string;
+	branch_name?: string;
 	created_at: string;
 	updated_at: string;
 }

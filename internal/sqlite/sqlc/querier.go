@@ -17,21 +17,28 @@ type Querier interface {
 	CreateTask(ctx context.Context, arg CreateTaskParams) error
 	DeleteGitHubToken(ctx context.Context) error
 	DeleteRepo(ctx context.Context, id string) error
+	DeleteSetting(ctx context.Context, key string) error
+	DeleteTaskLogs(ctx context.Context, taskID string) error
 	HasTasksForRepo(ctx context.Context, repoID string) (int64, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	ListRepos(ctx context.Context) ([]*Repo, error)
+	ListSettings(ctx context.Context) ([]*ListSettingsRow, error)
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
 	ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error)
+	ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error)
+	ManualRetryTask(ctx context.Context, arg ManualRetryTaskParams) (int64, error)
 	ReadGitHubToken(ctx context.Context) (string, error)
 	ReadRepo(ctx context.Context, id string) (*Repo, error)
 	ReadRepoByFullName(ctx context.Context, fullName string) (*Repo, error)
+	ReadSetting(ctx context.Context, key string) (string, error)
 	ReadTask(ctx context.Context, id string) (*Task, error)
-	ReadTaskLogs(ctx context.Context, taskID string) ([]string, error)
+	ReadTaskLogs(ctx context.Context, taskID string) ([]*ReadTaskLogsRow, error)
 	ReadTaskStatus(ctx context.Context, id string) (string, error)
 	RetryTask(ctx context.Context, arg RetryTaskParams) (int64, error)
 	SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) error
+	SetBranchName(ctx context.Context, arg SetBranchNameParams) error
 	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error
 	SetConsecutiveFailures(ctx context.Context, arg SetConsecutiveFailuresParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
@@ -39,6 +46,7 @@ type Querier interface {
 	TaskExists(ctx context.Context, id string) (int64, error)
 	UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error
 	UpsertGitHubToken(ctx context.Context, arg UpsertGitHubTokenParams) error
+	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 }
 
 var _ Querier = (*Queries)(nil)

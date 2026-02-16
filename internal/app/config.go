@@ -4,7 +4,8 @@ package app
 type Config struct {
 	Port          int
 	UI            bool
-	Postgres      PostgresConfig // If empty, uses in-memory SQLite
+	Postgres      PostgresConfig // If empty, uses SQLite
+	SQLiteDir     string         // Directory for SQLite DB file; if empty, uses in-memory
 	EncryptionKey string         // Hex-encoded 32-byte key for encrypting secrets at rest
 	CorsOrigins   []string
 }

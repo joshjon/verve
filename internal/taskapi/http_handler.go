@@ -13,6 +13,7 @@ import (
 	"verve/internal/github"
 	"verve/internal/githubtoken"
 	"verve/internal/repo"
+	"verve/internal/setting"
 	"verve/internal/task"
 )
 
@@ -21,11 +22,12 @@ type HTTPHandler struct {
 	store              *task.Store
 	repoStore          *repo.Store
 	githubTokenService *githubtoken.Service
+	settingService     *setting.Service
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubTokenService *githubtoken.Service) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, githubTokenService: githubTokenService}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubTokenService *githubtoken.Service, settingService *setting.Service) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, githubTokenService: githubTokenService, settingService: settingService}
 }
 
 // Register adds the endpoints to the provided Echo router group.
@@ -49,7 +51,9 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/:id/logs", h.AppendLogs)
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
+	g.POST("/tasks/:id/retry", h.RetryTask)
 	g.POST("/tasks/:id/sync", h.SyncTaskStatus)
+	g.GET("/tasks/:id/checks", h.GetTaskChecks)
 
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
@@ -58,6 +62,9 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.PUT("/settings/github-token", h.SaveGitHubToken)
 	g.GET("/settings/github-token", h.GetGitHubTokenStatus)
 	g.DELETE("/settings/github-token", h.DeleteGitHubToken)
+	g.PUT("/settings/default-model", h.SaveDefaultModel)
+	g.GET("/settings/default-model", h.GetDefaultModel)
+	g.DELETE("/settings/default-model", h.DeleteDefaultModel)
 }
 
 // --- Settings Handlers ---
@@ -75,6 +82,9 @@ func (h *HTTPHandler) SaveGitHubToken(c echo.Context) error {
 	if req.Token == "" {
 		return c.JSON(http.StatusBadRequest, errorResponse("token required"))
 	}
+	if !githubtoken.IsValidTokenPrefix(req.Token) {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid token format — expected a GitHub personal access token starting with ghp_ or github_pat_"))
+	}
 
 	if err := h.githubTokenService.SaveToken(c.Request().Context(), req.Token); err != nil {
 		return c.JSON(http.StatusInternalServerError, errorResponse("failed to save token: "+err.Error()))
@@ -85,7 +95,8 @@ func (h *HTTPHandler) SaveGitHubToken(c echo.Context) error {
 // GetGitHubTokenStatus handles GET /settings/github-token
 func (h *HTTPHandler) GetGitHubTokenStatus(c echo.Context) error {
 	configured := h.githubTokenService != nil && h.githubTokenService.HasToken()
-	return c.JSON(http.StatusOK, GitHubTokenStatusResponse{Configured: configured})
+	fineGrained := h.githubTokenService != nil && h.githubTokenService.IsFineGrained()
+	return c.JSON(http.StatusOK, GitHubTokenStatusResponse{Configured: configured, FineGrained: fineGrained})
 }
 
 // DeleteGitHubToken handles DELETE /settings/github-token
@@ -96,6 +107,49 @@ func (h *HTTPHandler) DeleteGitHubToken(c echo.Context) error {
 
 	if err := h.githubTokenService.DeleteToken(c.Request().Context()); err != nil {
 		return c.JSON(http.StatusInternalServerError, errorResponse("failed to delete token: "+err.Error()))
+	}
+	return c.JSON(http.StatusOK, statusOK())
+}
+
+// --- Default Model Settings Handlers ---
+
+// SaveDefaultModel handles PUT /settings/default-model
+func (h *HTTPHandler) SaveDefaultModel(c echo.Context) error {
+	if h.settingService == nil {
+		return c.JSON(http.StatusServiceUnavailable, errorResponse("settings not available"))
+	}
+
+	var req DefaultModelRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.Model == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("model required"))
+	}
+
+	if err := h.settingService.Set(c.Request().Context(), setting.KeyDefaultModel, req.Model); err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("failed to save default model: "+err.Error()))
+	}
+	return c.JSON(http.StatusOK, DefaultModelResponse{Model: req.Model})
+}
+
+// GetDefaultModel handles GET /settings/default-model
+func (h *HTTPHandler) GetDefaultModel(c echo.Context) error {
+	var model string
+	if h.settingService != nil {
+		model = h.settingService.Get(setting.KeyDefaultModel)
+	}
+	return c.JSON(http.StatusOK, DefaultModelResponse{Model: model})
+}
+
+// DeleteDefaultModel handles DELETE /settings/default-model
+func (h *HTTPHandler) DeleteDefaultModel(c echo.Context) error {
+	if h.settingService == nil {
+		return c.JSON(http.StatusServiceUnavailable, errorResponse("settings not available"))
+	}
+
+	if err := h.settingService.Delete(c.Request().Context(), setting.KeyDefaultModel); err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("failed to delete default model: "+err.Error()))
 	}
 	return c.JSON(http.StatusOK, statusOK())
 }
@@ -186,11 +240,24 @@ func (h *HTTPHandler) CreateTask(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
 	}
+	if req.Title == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("title required"))
+	}
+	if len(req.Title) > 150 {
+		return c.JSON(http.StatusBadRequest, errorResponse("title must be 150 characters or less"))
+	}
 	if req.Description == "" {
 		return c.JSON(http.StatusBadRequest, errorResponse("description required"))
 	}
 
-	t := task.NewTask(repoID.String(), req.Description, req.DependsOn, req.AcceptanceCriteria, req.MaxCostUSD)
+	model := req.Model
+	if model == "" && h.settingService != nil {
+		model = h.settingService.Get(setting.KeyDefaultModel)
+	}
+	if model == "" {
+		model = "sonnet"
+	}
+	t := task.NewTask(repoID.String(), req.Title, req.Description, req.DependsOn, req.AcceptanceCriteria, req.MaxCostUSD, req.SkipPR, model)
 	if err := h.store.CreateTask(c.Request().Context(), t); err != nil {
 		return jsonError(c, err)
 	}
@@ -275,7 +342,12 @@ func (h *HTTPHandler) AppendLogs(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
 	}
 
-	if err := h.store.AppendTaskLogs(c.Request().Context(), id, req.Logs); err != nil {
+	attempt := req.Attempt
+	if attempt == 0 {
+		attempt = 1 // default for backward compat with old workers
+	}
+
+	if err := h.store.AppendTaskLogs(c.Request().Context(), id, attempt, req.Logs); err != nil {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, statusOK())
@@ -320,9 +392,26 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 		if err := h.store.SetTaskPullRequest(ctx, id, req.PullRequestURL, req.PRNumber); err != nil {
 			return jsonError(c, err)
 		}
-	} else {
-		if err := h.store.UpdateTaskStatus(ctx, id, task.StatusClosed); err != nil {
+	} else if req.BranchName != "" {
+		if err := h.store.SetTaskBranch(ctx, id, req.BranchName); err != nil {
 			return jsonError(c, err)
+		}
+	} else {
+		// Check if this task already has a PR (retry scenario — agent pushed
+		// fixes to the existing branch without emitting a new PR marker).
+		// Return it to review rather than closing.
+		t, readErr := h.store.ReadTask(ctx, id)
+		if readErr != nil {
+			return jsonError(c, readErr)
+		}
+		if t.PRNumber > 0 || t.BranchName != "" {
+			if err := h.store.UpdateTaskStatus(ctx, id, task.StatusReview); err != nil {
+				return jsonError(c, err)
+			}
+		} else {
+			if err := h.store.UpdateTaskStatus(ctx, id, task.StatusClosed); err != nil {
+				return jsonError(c, err)
+			}
 		}
 	}
 
@@ -430,7 +519,54 @@ func (h *HTTPHandler) CloseTask(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
+	// Read task before closing to check for open PR.
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
 	if err := h.store.CloseTask(ctx, id, req.Reason); err != nil {
+		return jsonError(c, err)
+	}
+
+	// Close the corresponding GitHub PR and delete its branch if unmerged.
+	if t.PRNumber > 0 && t.Status != task.StatusMerged {
+		if gh := h.githubClient(); gh != nil {
+			repoID, parseErr := repo.ParseRepoID(t.RepoID)
+			if parseErr == nil {
+				r, readErr := h.repoStore.ReadRepo(ctx, repoID)
+				if readErr == nil {
+					branch, closeErr := gh.ClosePR(ctx, r.Owner, r.Name, t.PRNumber)
+					if closeErr == nil && branch != "" {
+						_ = gh.DeleteBranch(ctx, r.Owner, r.Name, branch)
+					}
+				}
+			}
+		}
+	}
+
+	t, err = h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// RetryTask handles POST /tasks/:id/retry
+func (h *HTTPHandler) RetryTask(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	var req RetryTaskRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+
+	ctx := c.Request().Context()
+
+	if err := h.store.ManualRetryTask(ctx, id, req.Instructions); err != nil {
 		return jsonError(c, err)
 	}
 
@@ -439,6 +575,58 @@ func (h *HTTPHandler) CloseTask(c echo.Context) error {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, t)
+}
+
+// GetTaskChecks handles GET /tasks/:id/checks
+// Returns the CI check status for a task's PR from GitHub.
+func (h *HTTPHandler) GetTaskChecks(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	ctx := c.Request().Context()
+
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
+	if t.PRNumber <= 0 {
+		return c.JSON(http.StatusOK, CheckStatusResponse{Status: "success", Summary: "No CI checks configured"})
+	}
+
+	gh := h.githubClient()
+	if gh == nil {
+		return c.JSON(http.StatusOK, CheckStatusResponse{Status: "error", Summary: "GitHub token not configured"})
+	}
+
+	// Fine-grained tokens cannot access CI check APIs — skip entirely.
+	if h.githubTokenService.IsFineGrained() {
+		return c.JSON(http.StatusOK, CheckStatusResponse{Status: "success", CheckRunsSkipped: true})
+	}
+
+	repoID, parseErr := repo.ParseRepoID(t.RepoID)
+	if parseErr != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("invalid repo ID on task"))
+	}
+	r, readErr := h.repoStore.ReadRepo(ctx, repoID)
+	if readErr != nil {
+		return jsonError(c, readErr)
+	}
+
+	result, err := gh.GetPRCheckStatus(ctx, r.Owner, r.Name, t.PRNumber)
+	if err != nil {
+		return c.JSON(http.StatusOK, CheckStatusResponse{Status: "error", Summary: "Failed to fetch check status"})
+	}
+
+	return c.JSON(http.StatusOK, CheckStatusResponse{
+		Status:           string(result.Status),
+		Summary:          result.Summary,
+		FailedNames:      result.FailedNames,
+		CheckRunsSkipped: result.CheckRunsSkipped,
+		Checks:           result.Checks,
+	})
 }
 
 // StreamLogs handles GET /tasks/:id/logs as a Server-Sent Events stream.
@@ -463,11 +651,12 @@ func (h *HTTPHandler) StreamLogs(c echo.Context) error {
 	defer h.store.Unsubscribe(ch)
 
 	// Stream existing log batches from the database one row at a time.
-	err = h.store.StreamTaskLogs(ctx, id, func(lines []string) error {
+	err = h.store.StreamTaskLogs(ctx, id, func(attempt int, lines []string) error {
 		return writeSSE(w, task.EventLogsAppended, task.Event{
-			Type:   task.EventLogsAppended,
-			TaskID: id,
-			Logs:   lines,
+			Type:    task.EventLogsAppended,
+			TaskID:  id,
+			Attempt: attempt,
+			Logs:    lines,
 		})
 	})
 	if err != nil {

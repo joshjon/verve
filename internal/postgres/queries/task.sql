@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, repo_id, description, status, depends_on, attempt, max_attempts, acceptance_criteria, max_cost_usd, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+INSERT INTO task (id, repo_id, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, model, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = $1;
@@ -18,10 +18,10 @@ SELECT * FROM task WHERE status = 'pending' ORDER BY created_at ASC;
 SELECT * FROM task WHERE status = 'pending' AND repo_id = ANY($1::text[]) ORDER BY created_at ASC;
 
 -- name: AppendTaskLogs :exec
-INSERT INTO task_log (task_id, lines) VALUES (@id, @lines);
+INSERT INTO task_log (task_id, attempt, lines) VALUES (@id, @attempt, @lines);
 
 -- name: ReadTaskLogs :many
-SELECT lines FROM task_log WHERE task_id = @id ORDER BY id;
+SELECT attempt, lines FROM task_log WHERE task_id = @id ORDER BY id;
 
 -- name: UpdateTaskStatus :exec
 UPDATE task SET status = $2, updated_at = NOW()
@@ -72,3 +72,20 @@ UPDATE task SET consecutive_failures = $2, updated_at = NOW() WHERE id = $1;
 
 -- name: SetCloseReason :exec
 UPDATE task SET close_reason = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: SetBranchName :exec
+UPDATE task SET branch_name = $2, status = 'review', updated_at = NOW() WHERE id = $1;
+
+-- name: ListTasksInReviewNoPR :many
+SELECT * FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_number IS NULL;
+
+-- name: ManualRetryTask :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  retry_reason = $2, retry_context = NULL, agent_status = NULL,
+  close_reason = NULL, consecutive_failures = 0,
+  pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
+  updated_at = NOW()
+WHERE id = $1 AND status = 'failed';
+
+-- name: DeleteTaskLogs :exec
+DELETE FROM task_log WHERE task_id = $1;

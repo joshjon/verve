@@ -16,6 +16,7 @@ import (
 	"verve/internal/github"
 	"verve/internal/githubtoken"
 	"verve/internal/postgres"
+	"verve/internal/setting"
 	pgmigrations "verve/internal/postgres/migrations"
 	"verve/internal/repo"
 	"verve/internal/sqlite"
@@ -28,6 +29,7 @@ type stores struct {
 	task        *task.Store
 	repo        *repo.Store
 	githubToken *githubtoken.Service
+	setting     *setting.Service
 }
 
 // Run starts the API server. If Postgres is not configured, it falls back to
@@ -56,13 +58,23 @@ func Run(ctx context.Context, logger log.Logger, cfg Config) error {
 		}
 	}
 
+	if s.setting != nil {
+		if err := s.setting.Load(ctx); err != nil {
+			logger.Error("failed to load settings from database", "error", err)
+		}
+	}
+
 	return serve(ctx, logger, cfg, s)
 }
 
 func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKey []byte) (stores, func(), error) {
 	if !cfg.Postgres.IsSet() {
-		logger.Warn("Postgres not configured, using in-memory SQLite (data will not persist)")
-		return initSQLite(ctx, encryptionKey)
+		if cfg.SQLiteDir != "" {
+			logger.Info("Postgres not configured, using file-backed SQLite", "dir", cfg.SQLiteDir)
+		} else {
+			logger.Warn("Postgres not configured, using in-memory SQLite (data will not persist)")
+		}
+		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey)
 	}
 	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey)
 }
@@ -94,11 +106,20 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey)
 	}
 
-	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService}, func() { pool.Close() }, nil
+	settingRepo := postgres.NewSettingRepository(pool)
+	settingService := setting.NewService(settingRepo)
+
+	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context, encryptionKey []byte) (stores, func(), error) {
-	db, err := sqlitedb.Open(ctx, sqlitedb.WithInMemory())
+func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, func(), error) {
+	var opts []sqlitedb.OpenOption
+	if dir != "" {
+		opts = append(opts, sqlitedb.WithDir(dir), sqlitedb.WithDBName("verve"))
+	} else {
+		opts = append(opts, sqlitedb.WithInMemory())
+	}
+	db, err := sqlitedb.Open(ctx, opts...)
 	if err != nil {
 		return stores{}, nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -121,7 +142,10 @@ func initSQLite(ctx context.Context, encryptionKey []byte) (stores, func(), erro
 		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey)
 	}
 
-	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService}, func() { db.Close() }, nil
+	settingRepo := sqlite.NewSettingRepository(db)
+	settingService := setting.NewService(settingRepo)
+
+	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService, setting: settingService}, func() { db.Close() }, nil
 }
 
 func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
@@ -147,7 +171,7 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 		srv.Add(echo.GET, "/*", uiHandler)
 	}
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken))
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken, s.setting))
 
 	// Background PR sync.
 	go backgroundSync(ctx, logger, s, 30*time.Second)
@@ -199,6 +223,40 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, interval t
 			if gh == nil {
 				continue
 			}
+			fineGrained := s.githubToken.IsFineGrained()
+
+			// Sync branch-only tasks: check if PRs were manually created.
+			branchTasks, err := s.task.ListTasksInReviewNoPR(ctx)
+			if err != nil {
+				logger.Error("failed to list branch-only tasks", "error", err)
+			} else {
+				for _, t := range branchTasks {
+					if t.BranchName == "" {
+						continue
+					}
+					// Look up repo for this task.
+					repoID, parseErr := repo.ParseRepoID(t.RepoID)
+					if parseErr != nil {
+						continue
+					}
+					r, readErr := s.repo.ReadRepo(ctx, repoID)
+					if readErr != nil {
+						continue
+					}
+					prURL, prNumber, findErr := gh.FindPRForBranch(ctx, r.Owner, r.Name, t.BranchName)
+					if findErr != nil {
+						logger.Error("failed to find PR for branch", "task_id", t.ID, "branch", t.BranchName, "error", findErr)
+						continue
+					}
+					if prNumber > 0 {
+						if err := s.task.SetTaskPullRequest(ctx, t.ID, prURL, prNumber); err != nil {
+							logger.Error("failed to link PR to task", "task_id", t.ID, "error", err)
+						} else {
+							logger.Info("linked PR to branch-only task", "task_id", t.ID, "pr_number", prNumber)
+						}
+					}
+				}
+			}
 
 			repos, err := s.repo.ListRepos(ctx)
 			if err != nil {
@@ -246,7 +304,10 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, interval t
 						continue
 					}
 
-					// 3. Check CI status.
+					// 3. Check CI status (skipped for fine-grained tokens).
+					if fineGrained {
+						continue
+					}
 					checkResult, err := gh.GetPRCheckStatus(ctx, r.Owner, r.Name, t.PRNumber)
 					if err != nil {
 						logger.Error("failed to check CI status", "task_id", t.ID, "error", err)

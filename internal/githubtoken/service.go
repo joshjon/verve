@@ -3,12 +3,25 @@ package githubtoken
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
 	"verve/internal/crypto"
 	"verve/internal/github"
 )
+
+const (
+	// classicTokenPrefix is the prefix for classic personal access tokens.
+	classicTokenPrefix = "ghp_"
+	// fineGrainedTokenPrefix is the prefix for fine-grained personal access tokens.
+	fineGrainedTokenPrefix = "github_pat_"
+)
+
+// IsValidTokenPrefix checks whether a token has a recognised GitHub PAT prefix.
+func IsValidTokenPrefix(token string) bool {
+	return strings.HasPrefix(token, classicTokenPrefix) || strings.HasPrefix(token, fineGrainedTokenPrefix)
+}
 
 // ErrTokenNotFound is returned when no GitHub token is stored.
 var ErrTokenNotFound = errors.New("github token not found")
@@ -102,6 +115,13 @@ func (s *Service) HasToken() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.token != ""
+}
+
+// IsFineGrained reports whether the configured token is a fine-grained PAT.
+func (s *Service) IsFineGrained() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return strings.HasPrefix(s.token, fineGrainedTokenPrefix)
 }
 
 // DeleteToken removes the token from the database and clears the in-memory

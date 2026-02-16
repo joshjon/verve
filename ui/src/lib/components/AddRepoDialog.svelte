@@ -54,6 +54,7 @@
 		try {
 			const repo = await client.addRepo(fullName);
 			repoStore.addRepo(repo);
+			open = false;
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {

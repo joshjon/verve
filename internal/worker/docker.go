@@ -68,6 +68,7 @@ type RunResult struct {
 // AgentConfig holds the configuration for running an agent
 type AgentConfig struct {
 	TaskID               string
+	TaskTitle            string
 	TaskDescription      string
 	GitHubToken          string
 	GitHubRepo           string
@@ -75,9 +76,10 @@ type AgentConfig struct {
 	ClaudeCodeOAuthToken string // OAuth token (subscription-based, alternative to API key)
 	ClaudeModel          string
 	DryRun               bool
+	SkipPR               bool
 	Attempt              int
 	RetryReason          string
-	AcceptanceCriteria   string
+	AcceptanceCriteria   []string
 	RetryContext         string
 	PreviousStatus       string
 }
@@ -91,6 +93,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	// Create container with all required environment variables
 	env := []string{
 		"TASK_ID=" + cfg.TaskID,
+		"TASK_TITLE=" + cfg.TaskTitle,
 		"TASK_DESCRIPTION=" + cfg.TaskDescription,
 		"GITHUB_TOKEN=" + cfg.GitHubToken,
 		"GITHUB_REPO=" + cfg.GitHubRepo,
@@ -105,6 +108,9 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	if cfg.DryRun {
 		env = append(env, "DRY_RUN=true")
 	}
+	if cfg.SkipPR {
+		env = append(env, "SKIP_PR=true")
+	}
 	if cfg.Attempt > 1 {
 		env = append(env,
 			fmt.Sprintf("ATTEMPT=%d", cfg.Attempt),
@@ -117,8 +123,15 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			env = append(env, "PREVIOUS_STATUS="+cfg.PreviousStatus)
 		}
 	}
-	if cfg.AcceptanceCriteria != "" {
-		env = append(env, "ACCEPTANCE_CRITERIA="+cfg.AcceptanceCriteria)
+	if len(cfg.AcceptanceCriteria) > 0 {
+		var ac string
+		for i, c := range cfg.AcceptanceCriteria {
+			if i > 0 {
+				ac += "\n"
+			}
+			ac += fmt.Sprintf("%d. %s", i+1, c)
+		}
+		env = append(env, "ACCEPTANCE_CRITERIA="+ac)
 	}
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{

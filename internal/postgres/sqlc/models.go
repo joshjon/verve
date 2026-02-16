@@ -96,26 +96,36 @@ type Repo struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type Setting struct {
+	Key       string             `json:"key"`
+	Value     string             `json:"value"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Task struct {
-	ID                  string             `json:"id"`
-	RepoID              string             `json:"repo_id"`
-	Description         string             `json:"description"`
-	Status              TaskStatus         `json:"status"`
-	PullRequestUrl      *string            `json:"pull_request_url"`
-	PrNumber            *int32             `json:"pr_number"`
-	DependsOn           []string           `json:"depends_on"`
-	CloseReason         *string            `json:"close_reason"`
-	Attempt             int32              `json:"attempt"`
-	MaxAttempts         int32              `json:"max_attempts"`
-	RetryReason         *string            `json:"retry_reason"`
-	AcceptanceCriteria  *string            `json:"acceptance_criteria"`
-	AgentStatus         *string            `json:"agent_status"`
-	RetryContext        *string            `json:"retry_context"`
-	ConsecutiveFailures int32              `json:"consecutive_failures"`
-	CostUsd             float64            `json:"cost_usd"`
-	MaxCostUsd          *float64           `json:"max_cost_usd"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ID                     string             `json:"id"`
+	RepoID                 string             `json:"repo_id"`
+	Description            string             `json:"description"`
+	Status                 TaskStatus         `json:"status"`
+	PullRequestUrl         *string            `json:"pull_request_url"`
+	PrNumber               *int32             `json:"pr_number"`
+	DependsOn              []string           `json:"depends_on"`
+	CloseReason            *string            `json:"close_reason"`
+	Attempt                int32              `json:"attempt"`
+	MaxAttempts            int32              `json:"max_attempts"`
+	RetryReason            *string            `json:"retry_reason"`
+	AgentStatus            *string            `json:"agent_status"`
+	RetryContext           *string            `json:"retry_context"`
+	ConsecutiveFailures    int32              `json:"consecutive_failures"`
+	CostUsd                float64            `json:"cost_usd"`
+	MaxCostUsd             *float64           `json:"max_cost_usd"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	SkipPr                 bool               `json:"skip_pr"`
+	BranchName             *string            `json:"branch_name"`
+	Title                  string             `json:"title"`
+	AcceptanceCriteriaList []string           `json:"acceptance_criteria_list"`
+	Model                  *string            `json:"model"`
 }
 
 type TaskLog struct {
@@ -123,4 +133,5 @@ type TaskLog struct {
 	TaskID    string             `json:"task_id"`
 	Lines     []string           `json:"lines"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Attempt   int32              `json:"attempt"`
 }

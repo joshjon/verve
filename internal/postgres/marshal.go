@@ -11,11 +11,13 @@ import (
 
 func unmarshalTask(in *sqlc.Task) *task.Task {
 	t := &task.Task{
-		ID:          task.MustParseTaskID(in.ID),
-		RepoID:      in.RepoID,
-		Description: in.Description,
-		Status:      task.Status(in.Status),
-		DependsOn:   in.DependsOn,
+		ID:                 task.MustParseTaskID(in.ID),
+		RepoID:             in.RepoID,
+		Title:              in.Title,
+		Description:        in.Description,
+		Status:             task.Status(in.Status),
+		DependsOn:          in.DependsOn,
+		AcceptanceCriteria: in.AcceptanceCriteriaList,
 	}
 	if in.PullRequestUrl != nil {
 		t.PullRequestURL = *in.PullRequestUrl
@@ -31,9 +33,6 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if in.RetryReason != nil {
 		t.RetryReason = *in.RetryReason
 	}
-	if in.AcceptanceCriteria != nil {
-		t.AcceptanceCriteria = *in.AcceptanceCriteria
-	}
 	if in.AgentStatus != nil {
 		t.AgentStatus = *in.AgentStatus
 	}
@@ -45,6 +44,13 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if in.MaxCostUsd != nil {
 		t.MaxCostUSD = *in.MaxCostUsd
 	}
+	t.SkipPR = in.SkipPr
+	if in.Model != nil {
+		t.Model = *in.Model
+	}
+	if in.BranchName != nil {
+		t.BranchName = *in.BranchName
+	}
 	if in.CreatedAt.Valid {
 		t.CreatedAt = in.CreatedAt.Time
 	}
@@ -53,6 +59,9 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	}
 	if t.DependsOn == nil {
 		t.DependsOn = []string{}
+	}
+	if t.AcceptanceCriteria == nil {
+		t.AcceptanceCriteria = []string{}
 	}
 	return t
 }

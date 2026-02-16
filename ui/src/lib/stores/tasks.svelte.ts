@@ -24,6 +24,10 @@ class TaskStore {
 		return grouped;
 	}
 
+	get totalCost(): number {
+		return this.tasks.reduce((sum, t) => sum + (t.cost_usd || 0), 0);
+	}
+
 	get statuses(): TaskStatus[] {
 		return ALL_STATUSES;
 	}

@@ -138,6 +138,23 @@ func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason strin
 	return nil
 }
 
+// ManualRetryTask transitions a failed task back to pending for another attempt.
+// instructions contains optional guidance for the agent on the retry.
+// Previous attempt logs are preserved — the UI shows them in separate tabs.
+func (s *Store) ManualRetryTask(ctx context.Context, id TaskID, instructions string) error {
+	ok, err := s.repo.ManualRetryTask(ctx, id, instructions)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // task was not in failed status
+	}
+
+	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // SetAgentStatus stores the structured agent status JSON.
 func (s *Store) SetAgentStatus(ctx context.Context, id TaskID, status string) error {
 	if err := s.repo.SetAgentStatus(ctx, id, status); err != nil {
@@ -234,16 +251,16 @@ func (s *Store) ReadTaskLogs(ctx context.Context, id TaskID) ([]string, error) {
 
 // StreamTaskLogs iterates log batches from the database one row at a time,
 // calling fn for each batch. This avoids loading all logs into memory.
-func (s *Store) StreamTaskLogs(ctx context.Context, id TaskID, fn func(lines []string) error) error {
+func (s *Store) StreamTaskLogs(ctx context.Context, id TaskID, fn func(attempt int, lines []string) error) error {
 	return s.repo.StreamTaskLogs(ctx, id, fn)
 }
 
-// AppendTaskLogs appends log lines to a task.
-func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, logs []string) error {
-	if err := s.repo.AppendTaskLogs(ctx, id, logs); err != nil {
+// AppendTaskLogs appends log lines to a task for the given attempt.
+func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, attempt int, logs []string) error {
+	if err := s.repo.AppendTaskLogs(ctx, id, attempt, logs); err != nil {
 		return err
 	}
-	s.broker.Publish(ctx, Event{Type: EventLogsAppended, TaskID: id, Logs: logs})
+	s.broker.Publish(ctx, Event{Type: EventLogsAppended, TaskID: id, Attempt: attempt, Logs: logs})
 	return nil
 }
 
@@ -269,6 +286,20 @@ func (s *Store) SetTaskPullRequest(ctx context.Context, id TaskID, prURL string,
 // ListTasksInReview returns all tasks in review status.
 func (s *Store) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 	return s.repo.ListTasksInReview(ctx)
+}
+
+// SetTaskBranch sets the branch name and moves the task to review status.
+func (s *Store) SetTaskBranch(ctx context.Context, id TaskID, branchName string) error {
+	if err := s.repo.SetBranchName(ctx, id, branchName); err != nil {
+		return err
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
+// ListTasksInReviewNoPR returns tasks in review that have a branch but no PR yet.
+func (s *Store) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
+	return s.repo.ListTasksInReviewNoPR(ctx)
 }
 
 // CloseTask closes a task with an optional reason.

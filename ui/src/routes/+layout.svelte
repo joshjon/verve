@@ -1,11 +1,13 @@
 <script lang="ts">
 	import './layout.css';
 	import { onMount } from 'svelte';
-	import { Zap, Settings } from 'lucide-svelte';
+	import { Settings, DollarSign } from 'lucide-svelte';
 	import { client } from '$lib/api-client';
 	import { repoStore } from '$lib/stores/repos.svelte';
+	import { taskStore } from '$lib/stores/tasks.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import RepoSelector from '$lib/components/RepoSelector.svelte';
+	import VerveLogo from '$lib/components/VerveLogo.svelte';
 	import GitHubTokenDialog from '$lib/components/GitHubTokenDialog.svelte';
 
 	let { children } = $props();
@@ -57,16 +59,23 @@
 		<div class="px-4 sm:px-6 h-14 flex items-center justify-between gap-2">
 			<div class="flex items-center gap-2 sm:gap-4 min-w-0">
 				<a href="/" class="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0">
-					<div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-						<Zap class="w-5 h-5 text-primary-foreground" />
-					</div>
+					<VerveLogo size={32} />
 					<span class="font-bold text-xl tracking-tight hidden sm:inline">Verve</span>
 				</a>
 				{#if tokenConfigured}
 					<RepoSelector />
 				{/if}
+				{#if tokenConfigured && taskStore.totalCost > 0}
+					<span
+						class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border"
+						title="Total cost for this repository"
+					>
+						<DollarSign class="w-3 h-3" />
+						{taskStore.totalCost.toFixed(2)} spent
+					</span>
+				{/if}
 			</div>
-			<div class="flex items-center shrink-0">
+			<div class="flex items-center shrink-0 gap-1">
 				<Button
 					variant="ghost"
 					size="icon"
@@ -78,7 +87,7 @@
 			</div>
 		</div>
 	</header>
-	<main class="flex-1">
+	<main class="flex-1 min-h-0 flex flex-col">
 		{#if tokenConfigured}
 			{@render children()}
 		{:else if tokenConfigured === false}

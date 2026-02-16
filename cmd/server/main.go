@@ -20,6 +20,7 @@ func main() {
 	cfg := app.Config{
 		Port:          7400,
 		UI:            os.Getenv("UI") == "true",
+		SQLiteDir:     os.Getenv("SQLITE_DIR"),
 		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
 		Postgres: app.PostgresConfig{
 			User:     os.Getenv("POSTGRES_USER"),
