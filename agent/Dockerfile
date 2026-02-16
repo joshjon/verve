@@ -24,9 +24,10 @@ RUN adduser -D -s /bin/bash agent
 RUN mkdir -p /workspace && chown agent:agent /workspace
 WORKDIR /workspace
 
-# Copy entrypoint script
+# Copy entrypoint and library scripts
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY lib/ /lib/
+RUN chmod +x /entrypoint.sh /lib/*.sh
 
 # Switch to non-root user
 USER agent
