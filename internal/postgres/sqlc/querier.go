@@ -19,6 +19,7 @@ type Querier interface {
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteSetting(ctx context.Context, key string) error
 	DeleteTaskLogs(ctx context.Context, taskID string) error
+	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	ListPendingTasksByRepos(ctx context.Context, dollar_1 []string) ([]*Task, error)

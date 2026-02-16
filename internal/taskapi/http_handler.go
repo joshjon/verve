@@ -52,6 +52,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
 	g.POST("/tasks/:id/retry", h.RetryTask)
+	g.POST("/tasks/:id/feedback", h.FeedbackTask)
 	g.POST("/tasks/:id/sync", h.SyncTaskStatus)
 	g.GET("/tasks/:id/checks", h.GetTaskChecks)
 
@@ -563,6 +564,35 @@ func (h *HTTPHandler) RetryTask(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	if err := h.store.ManualRetryTask(ctx, id, req.Instructions); err != nil {
+		return jsonError(c, err)
+	}
+
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// FeedbackTask handles POST /tasks/:id/feedback
+// Re-prompts the agent to iterate on a task in review based on user feedback.
+func (h *HTTPHandler) FeedbackTask(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	var req FeedbackRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.Feedback == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("feedback is required"))
+	}
+
+	ctx := c.Request().Context()
+
+	if err := h.store.FeedbackRetryTask(ctx, id, req.Feedback); err != nil {
 		return jsonError(c, err)
 	}
 

@@ -35,7 +35,9 @@
 		CircleDot,
 		MinusCircle,
 		Copy,
-		Check
+		Check,
+		MessageSquare,
+		Send
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -80,6 +82,9 @@
 	let retrying = $state(false);
 	let showRetryForm = $state(false);
 	let retryInstructions = $state('');
+	let sendingFeedback = $state(false);
+	let showFeedbackForm = $state(false);
+	let feedbackText = $state('');
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
@@ -209,6 +214,7 @@
 
 	const canClose = $derived(task && !['closed', 'merged', 'failed'].includes(task.status));
 	const canRetry = $derived(task?.status === 'failed');
+	const canProvideFeedback = $derived(task?.status === 'review');
 
 	const currentStatusConfig = $derived(task ? statusConfig[task.status] : null);
 	const StatusIcon = $derived(currentStatusConfig?.icon ?? Clock);
@@ -404,6 +410,20 @@
 			error = (e as Error).message;
 		} finally {
 			retrying = false;
+		}
+	}
+
+	async function handleFeedback() {
+		if (!task || sendingFeedback || !feedbackText.trim()) return;
+		sendingFeedback = true;
+		try {
+			task = await client.feedbackTask(task.id, feedbackText.trim());
+			showFeedbackForm = false;
+			feedbackText = '';
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			sendingFeedback = false;
 		}
 	}
 
@@ -872,9 +892,59 @@
 							{/if}
 						</div>
 					{/if}
+					{#if canProvideFeedback}
+						<div class="ml-auto">
+							{#if showFeedbackForm}
+								<Button size="sm" variant="ghost" onclick={() => (showFeedbackForm = false)} class="gap-1">
+									<X class="w-4 h-4" />
+									Cancel
+								</Button>
+							{:else}
+								<Button size="sm" variant="outline" onclick={() => (showFeedbackForm = true)} class="gap-1 border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10">
+									<MessageSquare class="w-4 h-4" />
+									<span class="hidden sm:inline">Provide Feedback</span>
+									<span class="sm:hidden">Feedback</span>
+								</Button>
+							{/if}
+						</div>
+					{/if}
 				</div>
 
-				<!-- Agent Insights -->
+				<!-- Feedback Form -->
+			{#if showFeedbackForm}
+				<div class="px-5 py-4 border-b bg-purple-500/5">
+					<div class="space-y-4">
+						<div>
+							<label for="feedback-text" class="text-sm font-medium mb-2 block">
+								What changes would you like the agent to make?
+							</label>
+							<textarea
+								id="feedback-text"
+								bind:value={feedbackText}
+								class="w-full border rounded-lg p-3 min-h-[100px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-purple-500/40"
+								placeholder="Describe what needs to be changed or improved in the current implementation..."
+								disabled={sendingFeedback}
+							></textarea>
+						</div>
+						<div class="flex justify-end gap-2">
+							<Button variant="outline" onclick={() => (showFeedbackForm = false)} disabled={sendingFeedback}>
+								Cancel
+							</Button>
+							<Button onclick={handleFeedback} disabled={sendingFeedback || !feedbackText.trim()} class="gap-2 bg-purple-600 hover:bg-purple-700 text-white">
+								{#if sendingFeedback}
+									<Loader2 class="w-4 h-4 animate-spin" />
+									Sending...
+								{:else}
+									<Send class="w-4 h-4" />
+									Send Feedback
+								{/if}
+							</Button>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Agent Insights -->
 				{#if parsedAgentStatus || task.attempt > 1}
 					<div class="px-5 py-4 border-b space-y-4">
 						{#if task.attempt > 1}

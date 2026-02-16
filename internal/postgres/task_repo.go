@@ -277,6 +277,18 @@ func (r *TaskRepository) ManualRetryTask(ctx context.Context, id task.TaskID, in
 	return rows > 0, tagTaskErr(err)
 }
 
+func (r *TaskRepository) FeedbackRetryTask(ctx context.Context, id task.TaskID, feedback string) (bool, error) {
+	var reason *string
+	if feedback != "" {
+		reason = &feedback
+	}
+	rows, err := r.db.FeedbackRetryTask(ctx, sqlc.FeedbackRetryTaskParams{
+		ID:          id.String(),
+		RetryReason: reason,
+	})
+	return rows > 0, tagTaskErr(err)
+}
+
 func (r *TaskRepository) DeleteTaskLogs(ctx context.Context, id task.TaskID) error {
 	return tagTaskErr(r.db.DeleteTaskLogs(ctx, id.String()))
 }

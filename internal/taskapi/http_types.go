@@ -59,6 +59,12 @@ type RetryTaskRequest struct {
 	Instructions string `json:"instructions,omitempty"`
 }
 
+// FeedbackRequest is the request body for providing feedback on a task in review.
+// This re-prompts the agent to iterate on its solution using the user's feedback.
+type FeedbackRequest struct {
+	Feedback string `json:"feedback"`
+}
+
 // CheckStatusResponse is the response body for the task check status endpoint.
 type CheckStatusResponse struct {
 	Status           string                  `json:"status"`                       // "pending", "success", "failure", "error"

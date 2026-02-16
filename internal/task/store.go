@@ -155,6 +155,37 @@ func (s *Store) ManualRetryTask(ctx context.Context, id TaskID, instructions str
 	return nil
 }
 
+// FeedbackRetryTask transitions a task in review back to pending so the agent
+// can iterate on its solution based on the user's feedback. Unlike ManualRetryTask,
+// it preserves the existing PR/branch so the agent pushes fixes to the same branch.
+func (s *Store) FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) error {
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Budget check
+	if t.MaxCostUSD > 0 && t.CostUSD >= t.MaxCostUSD {
+		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	if t.Attempt >= t.MaxAttempts {
+		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	ok, err := s.repo.FeedbackRetryTask(ctx, id, feedback)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // task was not in review status
+	}
+
+	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // SetAgentStatus stores the structured agent status JSON.
 func (s *Store) SetAgentStatus(ctx context.Context, id TaskID, status string) error {
 	if err := s.repo.SetAgentStatus(ctx, id, status); err != nil {
