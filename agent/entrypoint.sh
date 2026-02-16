@@ -73,10 +73,17 @@ create_pr() {
         else
             echo "[agent] Pull request created but could not parse response"
         fi
+        return 0
     else
         local error_msg
         error_msg=$(echo "$response_body" | jq -r '.message // empty' 2>/dev/null || echo "unknown error")
-        echo "[agent] Warning: Failed to create pull request (HTTP ${http_code}): ${error_msg}"
+        local errors_detail
+        errors_detail=$(echo "$response_body" | jq -r '.errors[]?.message // empty' 2>/dev/null || echo "")
+        echo "[agent] Failed to create pull request (HTTP ${http_code}): ${error_msg}"
+        if [ -n "$errors_detail" ]; then
+            echo "[agent] Details: ${errors_detail}"
+        fi
+        return 1
     fi
 }
 
@@ -341,7 +348,10 @@ This PR was created in dry-run mode (no Claude API calls).
 
 **Description:** ${TASK_DESCRIPTION}"
 
-        create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"
+        if ! create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"; then
+            echo "[agent] PR creation failed"
+            exit 1
+        fi
     else
         echo "[agent] Retry: pushed fixes to existing PR branch"
     fi
@@ -352,15 +362,28 @@ This PR was created in dry-run mode (no Claude API calls).
     exit 0
 fi
 
-# Build the prompt with retry context
-PROMPT="${TASK_DESCRIPTION}"
+# Build the prompt
+TASK_TITLE_OR_DESC="${TASK_TITLE:-${TASK_DESCRIPTION}}"
+PROMPT="You are an autonomous coding agent running non-interactively. You MUST implement the following task by making actual code changes. Do not just explore or plan — write and commit the code.
+
+IMPORTANT: Do NOT use EnterPlanMode or ExitPlanMode. There is no human to approve plans. Just implement the changes directly.
+
+Task: ${TASK_TITLE_OR_DESC}"
+
+if [ -n "${TASK_TITLE}" ] && [ -n "${TASK_DESCRIPTION}" ]; then
+    PROMPT="${PROMPT}
+Details: ${TASK_DESCRIPTION}"
+fi
 
 if [ "${ATTEMPT:-1}" -gt 1 ]; then
     echo "[agent] Building retry-aware prompt..."
 
-    PROMPT="IMPORTANT: This is retry attempt ${ATTEMPT}. The previous attempt created a PR but it needs fixes.
-Reason for retry: ${RETRY_REASON}
-"
+    PROMPT="You are an autonomous coding agent running non-interactively. You MUST fix the issues described below by making actual code changes. Do not just explore or plan — write and commit the code.
+
+IMPORTANT: Do NOT use EnterPlanMode or ExitPlanMode. There is no human to approve plans. Just implement the changes directly.
+
+This is retry attempt ${ATTEMPT}. The previous attempt created a PR but it needs fixes.
+Reason for retry: ${RETRY_REASON}"
 
     if echo "$RETRY_REASON" | grep -qi "ci_failure"; then
         PROMPT="${PROMPT}
@@ -393,7 +416,11 @@ ${PREVIOUS_STATUS}
 
     PROMPT="${PROMPT}
 
-Original task: ${TASK_DESCRIPTION}"
+Original task: ${TASK_TITLE_OR_DESC}"
+    if [ -n "${TASK_TITLE}" ] && [ -n "${TASK_DESCRIPTION}" ]; then
+        PROMPT="${PROMPT}
+Details: ${TASK_DESCRIPTION}"
+    fi
 fi
 
 # Add acceptance criteria if provided
@@ -495,30 +522,35 @@ else
     git commit -m "${COMMIT_TITLE}"
 fi
 
-# Check for any unpushed commits (handles case where Claude committed via Bash tool)
-UNPUSHED=$(git log "origin/${BRANCH}..HEAD" --oneline 2>/dev/null || git log --oneline -1 2>/dev/null)
-if [ -n "$UNPUSHED" ]; then
-    if [ "${ATTEMPT:-1}" -gt 1 ]; then
-        echo "[agent] Pushing fixes to existing branch..."
-        git push --force-with-lease origin "${BRANCH}"
-    else
-        echo "[agent] Pushing branch to origin..."
-        git push -u origin "${BRANCH}"
-    fi
-    echo "[agent] Branch pushed successfully: ${BRANCH}"
+# Check for any commits ahead of the default branch (includes commits made by Claude via Bash tool)
+CHANGES=$(git log "origin/${DEFAULT_BRANCH}..HEAD" --oneline 2>/dev/null)
+if [ -z "$CHANGES" ]; then
+    echo "[agent] No changes were made — nothing to push or PR"
+    echo "VERVE_STATUS:{\"files_modified\":[],\"tests_status\":\"skip\",\"confidence\":\"low\",\"blockers\":[\"No changes were made\"],\"criteria_met\":[],\"notes\":\"Agent did not produce any code changes\"}"
+    exit 1
+fi
 
-    # Only create PR on first attempt (unless skip_pr is set)
-    if [ "$SKIP_PR" = "true" ]; then
-        echo "[agent] Skip PR mode: branch pushed, skipping PR creation"
-        echo "VERVE_BRANCH_PUSHED:{\"branch\":\"${BRANCH}\"}"
-    elif [ "${ATTEMPT:-1}" -le 1 ]; then
-        echo "[agent] Creating pull request..."
+if [ "${ATTEMPT:-1}" -gt 1 ]; then
+    echo "[agent] Pushing fixes to existing branch..."
+    git push --force-with-lease origin "${BRANCH}"
+else
+    echo "[agent] Pushing branch to origin..."
+    git push -u origin "${BRANCH}"
+fi
+echo "[agent] Branch pushed successfully: ${BRANCH}"
 
-        # Get diff summary for PR description context
-        DIFF_SUMMARY=$(git diff "origin/${DEFAULT_BRANCH}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+# Only create PR on first attempt (unless skip_pr is set)
+if [ "$SKIP_PR" = "true" ]; then
+    echo "[agent] Skip PR mode: branch pushed, skipping PR creation"
+    echo "VERVE_BRANCH_PUSHED:{\"branch\":\"${BRANCH}\"}"
+elif [ "${ATTEMPT:-1}" -le 1 ]; then
+    echo "[agent] Creating pull request..."
 
-        # Generate PR title and description using Claude
-        PR_PROMPT="Generate a pull request title and description for the following task and changes.
+    # Get diff summary for PR description context
+    DIFF_SUMMARY=$(git diff "origin/${DEFAULT_BRANCH}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+
+    # Generate PR title and description using Claude
+    PR_PROMPT="Generate a pull request title and description for the following task and changes.
 
 Task Title: ${TASK_TITLE:-${TASK_DESCRIPTION}}
 Task Description: ${TASK_DESCRIPTION}
@@ -529,53 +561,54 @@ ${DIFF_SUMMARY}
 Respond with ONLY valid JSON in this exact format (no markdown, no code blocks, no extra text):
 {\"title\": \"Short descriptive title (max 72 chars)\", \"description\": \"## Summary\\n\\nBrief description of changes.\\n\\n## Changes\\n\\n- Bullet points of what was done\"}"
 
-        echo "[agent] Generating PR description with Claude..."
-        PR_RAW=$(claude --print --model "${CLAUDE_MODEL}" "${PR_PROMPT}" 2>/dev/null || echo "")
+    echo "[agent] Generating PR description with Claude..."
+    PR_RAW=$(claude --print --model "${CLAUDE_MODEL}" "${PR_PROMPT}" 2>/dev/null || echo "")
 
-        # Extract JSON from response (may be wrapped in markdown code blocks)
-        # First try to extract JSON from code blocks, then try raw response
-        PR_JSON=""
-        if [ -n "${PR_RAW}" ]; then
-            # Try to extract JSON from ```json ... ``` or ``` ... ``` blocks
-            PR_JSON=$(echo "${PR_RAW}" | sed -n '/^```/,/^```$/p' | sed '1d;$d' | tr -d '\n' || echo "")
-            # If that didn't work, try to find raw JSON object
-            if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
-                PR_JSON=$(echo "${PR_RAW}" | grep -o '{[^}]*}' | head -1 || echo "")
-            fi
-            # Last resort: use raw output if it's valid JSON
-            if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
-                if echo "${PR_RAW}" | jq -e . >/dev/null 2>&1; then
-                    PR_JSON="${PR_RAW}"
-                fi
+    # Extract JSON from response (may be wrapped in markdown code blocks)
+    PR_JSON=""
+    if [ -n "${PR_RAW}" ]; then
+        # Try to extract JSON from ```json ... ``` or ``` ... ``` blocks
+        PR_JSON=$(echo "${PR_RAW}" | sed -n '/^```/,/^```$/p' | sed '1d;$d' | tr -d '\n' || echo "")
+        # If that didn't work, try to find raw JSON object
+        if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+            PR_JSON=$(echo "${PR_RAW}" | grep -o '{[^}]*}' | head -1 || echo "")
+        fi
+        # Last resort: use raw output if it's valid JSON
+        if [ -z "${PR_JSON}" ] || ! echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+            if echo "${PR_RAW}" | jq -e . >/dev/null 2>&1; then
+                PR_JSON="${PR_RAW}"
             fi
         fi
+    fi
 
-        # Extract title and description, with fallbacks
-        PR_TITLE=""
-        PR_BODY=""
-        if [ -n "${PR_JSON}" ] && echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
-            PR_TITLE=$(echo "${PR_JSON}" | jq -r '.title // empty' 2>/dev/null || echo "")
-            PR_BODY=$(echo "${PR_JSON}" | jq -r '.description // empty' 2>/dev/null || echo "")
-        fi
+    # Extract title and description, with fallbacks
+    PR_TITLE=""
+    PR_BODY=""
+    if [ -n "${PR_JSON}" ] && echo "${PR_JSON}" | jq -e . >/dev/null 2>&1; then
+        PR_TITLE=$(echo "${PR_JSON}" | jq -r '.title // empty' 2>/dev/null || echo "")
+        PR_BODY=$(echo "${PR_JSON}" | jq -r '.description // empty' 2>/dev/null || echo "")
+    fi
 
-        # Fallback if Claude/jq failed
-        if [ -z "${PR_TITLE}" ]; then
-            PR_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
-        fi
-        if [ -z "${PR_BODY}" ]; then
-            PR_BODY="## Summary
+    # Fallback if Claude/jq failed
+    if [ -z "${PR_TITLE}" ]; then
+        PR_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
+    fi
+    if [ -z "${PR_BODY}" ]; then
+        PR_BODY="## Summary
 
 Automated implementation of: ${TASK_DESCRIPTION}
 
 ## Changes
 
 ${DIFF_SUMMARY}"
-        fi
-
-        create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"
-    else
-        echo "[agent] Retry: pushed fixes to existing PR branch"
     fi
+
+    if ! create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"; then
+        echo "[agent] PR creation failed"
+        exit 1
+    fi
+else
+    echo "[agent] Retry: pushed fixes to existing PR branch"
 fi
 
 echo ""

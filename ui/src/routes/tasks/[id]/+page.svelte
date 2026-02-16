@@ -1029,7 +1029,7 @@
 								</div>
 							</div>
 						{/if}
-						{#if parsedAgentStatus?.criteria_met && parsedAgentStatus.criteria_met.length > 0}
+						{#if parsedAgentStatus?.criteria_met && parsedAgentStatus.criteria_met.length > 0 && task.acceptance_criteria && task.acceptance_criteria.length > 0}
 							<div class="space-y-1.5">
 								<span class="text-sm font-medium">Criteria</span>
 								<div class="flex flex-wrap gap-1.5">
