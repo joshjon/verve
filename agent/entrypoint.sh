@@ -34,8 +34,8 @@ fi
 echo "[agent] Configuring git..."
 git config --global credential.helper store
 echo "https://${GITHUB_TOKEN}@github.com" > /home/agent/.git-credentials
-git config --global user.email "verve-agent@verve.ai"
 git config --global user.name "Verve Agent"
+git config --global user.email ""
 
 # Create a PR via the GitHub API (replaces gh CLI dependency)
 create_pr() {
@@ -317,10 +317,7 @@ DRYEOF
     echo "[agent] Committing changes..."
     git add -A
     COMMIT_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
-    git commit -m "dry-run: ${COMMIT_TITLE}
-
-Implemented by Verve AI Agent (dry run)
-Task ID: ${TASK_ID}"
+    git commit -m "dry-run: ${COMMIT_TITLE}"
 
     if [ "${ATTEMPT:-1}" -gt 1 ]; then
         echo "[agent] Pushing fixes to existing branch..."
@@ -342,11 +339,7 @@ Task ID: ${TASK_ID}"
 
 This PR was created in dry-run mode (no Claude API calls).
 
-**Task ID:** \`${TASK_ID}\`
-**Description:** ${TASK_DESCRIPTION}
-
----
-*Implemented by Verve AI Agent (dry run)*"
+**Description:** ${TASK_DESCRIPTION}"
 
         create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"
     else
@@ -496,10 +489,7 @@ if git diff --cached --quiet; then
 else
     echo "[agent] Committing changes..."
     COMMIT_TITLE="${TASK_TITLE:-${TASK_DESCRIPTION}}"
-    git commit -m "feat: ${COMMIT_TITLE}
-
-Implemented by Verve AI Agent
-Task ID: ${TASK_ID}"
+    git commit -m "${COMMIT_TITLE}"
 fi
 
 # Check for any unpushed commits (handles case where Claude committed via Bash tool)
@@ -578,13 +568,6 @@ Automated implementation of: ${TASK_DESCRIPTION}
 
 ${DIFF_SUMMARY}"
         fi
-
-        # Append task metadata to PR body
-        PR_BODY="${PR_BODY}
-
----
-*Implemented by Verve AI Agent*
-**Task ID:** \`${TASK_ID}\`"
 
         create_pr "${PR_TITLE}" "${PR_BODY}" "${BRANCH}" "${DEFAULT_BRANCH}"
     else
