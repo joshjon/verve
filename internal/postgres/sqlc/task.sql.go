@@ -592,6 +592,21 @@ func (q *Queries) ReadTaskStatus(ctx context.Context, id string) (TaskStatus, er
 	return status, err
 }
 
+const removeDependency = `-- name: RemoveDependency :exec
+UPDATE task SET depends_on = array_remove(depends_on, $2), updated_at = NOW()
+WHERE id = $1
+`
+
+type RemoveDependencyParams struct {
+	ID          string      `json:"id"`
+	ArrayRemove interface{} `json:"array_remove"`
+}
+
+func (q *Queries) RemoveDependency(ctx context.Context, arg RemoveDependencyParams) error {
+	_, err := q.db.Exec(ctx, removeDependency, arg.ID, arg.ArrayRemove)
+	return err
+}
+
 const retryTask = `-- name: RetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = $2, agent_status = NULL, started_at = NULL, updated_at = NOW()
 WHERE id = $1 AND status = 'review'

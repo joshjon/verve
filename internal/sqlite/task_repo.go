@@ -320,6 +320,23 @@ func (r *TaskRepository) DeleteTaskLogs(ctx context.Context, id task.TaskID) err
 	return tagTaskErr(r.db.DeleteTaskLogs(ctx, id.String()))
 }
 
+func (r *TaskRepository) RemoveDependency(ctx context.Context, id task.TaskID, depID string) error {
+	t, err := r.ReadTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(t.DependsOn))
+	for _, d := range t.DependsOn {
+		if d != depID {
+			filtered = append(filtered, d)
+		}
+	}
+	return tagTaskErr(r.db.SetDependsOn(ctx, sqlc.SetDependsOnParams{
+		DependsOn: marshalJSONStrings(filtered),
+		ID:        id.String(),
+	}))
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {

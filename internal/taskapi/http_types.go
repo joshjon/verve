@@ -65,6 +65,11 @@ type FeedbackRequest struct {
 	Feedback string `json:"feedback"`
 }
 
+// RemoveDependencyRequest is the request body for removing a dependency from a task.
+type RemoveDependencyRequest struct {
+	DependsOn string `json:"depends_on"`
+}
+
 // CheckStatusResponse is the response body for the task check status endpoint.
 type CheckStatusResponse struct {
 	Status           string                  `json:"status"`                       // "pending", "success", "failure", "error"

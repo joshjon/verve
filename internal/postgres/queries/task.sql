@@ -96,3 +96,7 @@ WHERE id = $1 AND status = 'review';
 
 -- name: DeleteTaskLogs :exec
 DELETE FROM task_log WHERE task_id = $1;
+
+-- name: RemoveDependency :exec
+UPDATE task SET depends_on = array_remove(depends_on, $2), updated_at = NOW()
+WHERE id = $1;

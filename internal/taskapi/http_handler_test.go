@@ -274,6 +274,23 @@ func (m *mockTaskRepo) DeleteTaskLogs(_ context.Context, id task.TaskID) error {
 	return nil
 }
 
+func (m *mockTaskRepo) RemoveDependency(_ context.Context, id task.TaskID, depID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id.String()]
+	if !ok {
+		return errors.New("task not found")
+	}
+	filtered := make([]string, 0, len(t.DependsOn))
+	for _, d := range t.DependsOn {
+		if d != depID {
+			filtered = append(filtered, d)
+		}
+	}
+	t.DependsOn = filtered
+	return nil
+}
+
 func (m *mockTaskRepo) BeginTxFunc(ctx context.Context, fn func(context.Context, tx.Tx, task.Repository) error) error {
 	return fn(ctx, nil, m)
 }
@@ -913,4 +930,59 @@ func TestCompleteTask_WithAgentStatus(t *testing.T) {
 	err := handler.CompleteTask(c)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestRemoveDependency_Success(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	dep := task.NewTask(testRepo.ID.String(), "dep", "dep desc", nil, nil, 0, false, "sonnet")
+	taskRepo.tasks[dep.ID.String()] = dep
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", []string{dep.ID.String()}, nil, 0, false, "sonnet")
+	taskRepo.tasks[tsk.ID.String()] = tsk
+
+	body := `{"depends_on":"` + dep.ID.String() + `"}`
+	c, rec := newContext(e, http.MethodDelete, "/tasks/"+tsk.ID.String()+"/dependency", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.RemoveDependency(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result task.Task
+	json.Unmarshal(rec.Body.Bytes(), &result)
+	assert.Empty(t, result.DependsOn)
+}
+
+func TestRemoveDependency_InvalidTaskID(t *testing.T) {
+	handler, _, _, _ := setupHandler()
+	e := echo.New()
+
+	body := `{"depends_on":"tsk_abc"}`
+	c, rec := newContext(e, http.MethodDelete, "/tasks/invalid/dependency", body)
+	c.SetParamNames("id")
+	c.SetParamValues("invalid")
+
+	err := handler.RemoveDependency(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRemoveDependency_EmptyDependsOn(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	taskRepo.tasks[tsk.ID.String()] = tsk
+
+	body := `{"depends_on":""}`
+	c, rec := newContext(e, http.MethodDelete, "/tasks/"+tsk.ID.String()+"/dependency", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.RemoveDependency(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
