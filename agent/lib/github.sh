@@ -3,6 +3,34 @@
 
 # Depends on: log.sh (sourced by entrypoint.sh)
 
+# Check whether an open pull request already exists for a given head branch.
+# Returns 0 (true) if a PR exists, 1 (false) otherwise.
+# Sets PR_URL to the HTML URL of the existing PR when found.
+# Usage: pr_exists_for_branch <head_branch>
+pr_exists_for_branch() {
+    local head="$1"
+
+    local response
+    response=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${GITHUB_REPO}/pulls?head=${GITHUB_REPO%%/*}:${head}&state=open")
+
+    local http_code response_body
+    http_code=$(echo "$response" | tail -1)
+    response_body=$(echo "$response" | sed '$d')
+
+    if [ "$http_code" = "200" ]; then
+        local count
+        count=$(echo "$response_body" | jq 'length' 2>/dev/null || echo "0")
+        if [ "$count" -gt 0 ]; then
+            PR_URL=$(echo "$response_body" | jq -r '.[0].html_url // empty' 2>/dev/null || echo "")
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Create a pull request via the GitHub API.
 # Usage: create_pr <title> <body> <head_branch> <base_branch>
 create_pr() {
