@@ -102,6 +102,50 @@ const MOCK_TASKS = [
 		duration_ms: 300000,
 		created_at: '2025-05-29T15:00:00Z',
 		updated_at: '2025-05-29T16:05:00Z'
+	},
+	// Retry scenario: agent is actively running a retry on a task that already has a PR
+	{
+		id: 'tsk_retry_running01',
+		repo_id: 'repo_mock01',
+		title: 'Fix flaky integration tests',
+		description: 'Stabilize integration test suite that randomly fails in CI',
+		status: 'running',
+		logs: ['[agent] Re-analyzing test failures...', '[agent] Applying fix to connection teardown'],
+		pull_request_url: 'https://github.com/acme/webapp/pull/45',
+		pr_number: 45,
+		branch_name: 'verve/fix-flaky-tests',
+		attempt: 2,
+		max_attempts: 3,
+		acceptance_criteria: ['All integration tests pass consistently', 'No test timeouts'],
+		retry_reason: 'CI checks failed — test suite still flaky after first attempt',
+		consecutive_failures: 1,
+		cost_usd: 0.62,
+		skip_pr: false,
+		started_at: '2025-06-01T11:00:00Z',
+		created_at: '2025-06-01T09:00:00Z',
+		updated_at: '2025-06-01T11:05:00Z'
+	},
+	// Retry scenario: task is pending (waiting for agent pickup) with existing PR
+	{
+		id: 'tsk_retry_pending01',
+		repo_id: 'repo_mock01',
+		title: 'Improve error handling in API',
+		description: 'Add proper error responses and validation to all API endpoints',
+		status: 'pending',
+		logs: ['[agent] Previous attempt completed with errors'],
+		pull_request_url: 'https://github.com/acme/webapp/pull/47',
+		pr_number: 47,
+		branch_name: 'verve/improve-error-handling',
+		attempt: 3,
+		max_attempts: 3,
+		acceptance_criteria: ['All endpoints return proper error codes', 'Input validation on all routes'],
+		retry_reason: 'Missing validation on POST /users endpoint',
+		retry_context: 'FAIL: TestPostUsers_InvalidInput\n  Expected status 400, got 500\n  Error: missing required field validation',
+		consecutive_failures: 2,
+		cost_usd: 1.20,
+		skip_pr: false,
+		created_at: '2025-05-31T14:00:00Z',
+		updated_at: '2025-06-01T12:00:00Z'
 	}
 ];
 
@@ -232,6 +276,30 @@ test.describe('UI Screenshots', () => {
 
 		await page.screenshot({
 			path: `screenshots/task-running-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('task detail - retry running', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto(`/tasks/tsk_retry_running01`);
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/task-retry-running-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('task detail - retry pending', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto(`/tasks/tsk_retry_pending01`);
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/task-retry-pending-${testInfo.project.name}.png`,
 			fullPage: true
 		});
 	});
