@@ -216,6 +216,7 @@
 	const canClose = $derived(task && !['closed', 'merged', 'failed'].includes(task.status));
 	const canRetry = $derived(task?.status === 'failed');
 	const canProvideFeedback = $derived(task?.status === 'review');
+	const isRetrying = $derived(task?.pull_request_url && (task?.status === 'running' || task?.status === 'pending'));
 
 	const currentStatusConfig = $derived(task ? statusConfig[task.status] : null);
 	const StatusIcon = $derived(currentStatusConfig?.icon ?? Clock);
@@ -675,15 +676,18 @@
 
 				<!-- Pull Request -->
 				{#if task.pull_request_url}
-					<div class="rounded-xl border shadow-sm overflow-hidden {task.status === 'merged' ? 'border-green-500/30 bg-green-500/10' : task.status === 'closed' || task.status === 'failed' ? 'border-gray-500/30 bg-gray-500/5' : 'border-purple-500/30 bg-purple-500/[0.08]'}">
+					<div class="rounded-xl border shadow-sm overflow-hidden {task.status === 'merged' ? 'border-green-500/30 bg-green-500/10' : task.status === 'closed' || task.status === 'failed' ? 'border-gray-500/30 bg-gray-500/5' : isRetrying ? 'border-blue-500/30 bg-blue-500/[0.08]' : 'border-purple-500/30 bg-purple-500/[0.08]'}">
 						<!-- Header -->
-						<div class="flex items-center gap-2 px-5 py-3 {task.status === 'review' ? 'border-b' : ''}">
+						<div class="flex items-center gap-2 px-5 py-3 {task.status === 'review' || isRetrying ? 'border-b' : ''}">
 							{#if task.status === 'merged'}
 								<GitMerge class="w-4 h-4 text-green-500" />
 								<span class="font-semibold text-sm">Pull Request (Merged)</span>
 							{:else if task.status === 'closed' || task.status === 'failed'}
 								<GitPullRequest class="w-4 h-4 text-gray-500" />
 								<span class="font-semibold text-sm">Pull Request (Closed)</span>
+							{:else if isRetrying}
+								<GitPullRequest class="w-4 h-4 text-blue-500" />
+								<span class="font-semibold text-sm">Pull Request (Updating)</span>
 							{:else}
 								<GitPullRequest class="w-4 h-4 text-purple-500" />
 								<span class="font-semibold text-sm">Pull Request</span>
@@ -712,6 +716,15 @@
 								{/if}
 							</div>
 						</div>
+						<!-- Active Retry Note -->
+						{#if isRetrying}
+							<div class="px-5 py-3 flex items-center gap-3 bg-blue-500/5">
+								<Loader2 class="w-4 h-4 animate-spin text-blue-500 shrink-0" />
+								<span class="text-sm text-blue-600 dark:text-blue-400">
+									{task.status === 'running' ? 'Agent is working on changes — the PR will be updated soon.' : 'Waiting for agent to pick up the task — the PR will be updated soon.'}
+								</span>
+							</div>
+						{/if}
 						<!-- CI Checks -->
 						{#if task.status === 'review'}
 							<div class="px-5 py-3 space-y-2">
@@ -858,6 +871,14 @@
 							</div>
 							{#if task.status === 'review'}
 								<p class="text-sm text-muted-foreground">No PR linked yet. Create one from this branch and sync to detect it.</p>
+							{/if}
+							{#if !task.pull_request_url && task.branch_name && (task.status === 'running' || task.status === 'pending') && task.attempt > 1}
+								<div class="flex items-center gap-3 pt-2">
+									<Loader2 class="w-4 h-4 animate-spin text-blue-500 shrink-0" />
+									<span class="text-sm text-blue-600 dark:text-blue-400">
+										{task.status === 'running' ? 'Agent is working on changes — the branch will be updated soon.' : 'Waiting for agent to pick up the task — the branch will be updated soon.'}
+									</span>
+								</div>
 							{/if}
 							{#if canProvideFeedback}
 								<div class="pt-3 border-t mt-3">

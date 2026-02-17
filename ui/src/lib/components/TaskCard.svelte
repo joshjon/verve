@@ -2,7 +2,7 @@
 	import type { Task } from '$lib/models/task';
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
-	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle } from 'lucide-svelte';
+	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2 } from 'lucide-svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
 
 	let { task }: { task: Task } = $props();
@@ -95,16 +95,24 @@
 		{/if}
 	</div>
 	{#if task.pull_request_url}
-		<a
-			href={task.pull_request_url}
-			class="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
-			onclick={handlePRClick}
-			target="_blank"
-			rel="noopener noreferrer"
-		>
-			<GitPullRequest class="w-3 h-3" />
-			PR #{task.pr_number}
-		</a>
+		<div class="flex items-center gap-2 mt-2">
+			<a
+				href={task.pull_request_url}
+				class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+				onclick={handlePRClick}
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<GitPullRequest class="w-3 h-3" />
+				PR #{task.pr_number}
+			</a>
+			{#if task.status === 'running' || task.status === 'pending'}
+				<span class="inline-flex items-center gap-1 text-[10px] text-blue-500">
+					<Loader2 class="w-3 h-3 animate-spin" />
+					Updating
+				</span>
+			{/if}
+		</div>
 	{:else if task.branch_name}
 		<a
 			href={branchURL ?? '#'}
