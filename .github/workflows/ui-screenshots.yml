@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
           mkdir -p screenshots
           pnpm exec playwright test --project=desktop --project=mobile
 
-      - name: Upload individual screenshots
+      - name: Upload screenshots as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -56,6 +56,29 @@ jobs:
           path: ui/screenshots/
           retention-days: 30
           if-no-files-found: warn
+
+      - name: Push screenshots to branch
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          BRANCH="screenshots/pr-${{ github.event.pull_request.number }}"
+
+          # Check if any screenshots were captured.
+          if [ ! -d ui/screenshots ] || [ -z "$(ls ui/screenshots/*.png 2>/dev/null)" ]; then
+            echo "No screenshots to push"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create an orphan branch with only the screenshots.
+          git checkout --orphan "$BRANCH"
+          git rm -rf --quiet . 2>/dev/null || true
+          cp ui/screenshots/*.png .
+          git add *.png
+          git commit -m "UI screenshots for PR #${{ github.event.pull_request.number }} (${GITHUB_SHA::7})"
+          git push --force origin "$BRANCH"
 
       - name: Post screenshot comment on PR
         if: always()
@@ -73,45 +96,46 @@ jobs:
             }
 
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const branch = `screenshots/pr-${context.issue.number}`;
+            const rawBase = `https://raw.githubusercontent.com/${context.repo.owner}/${context.repo.repo}/${branch}`;
             const marker = '<!-- ui-screenshots-bot -->';
             let body = marker + '\n';
 
             if (files.length === 0) {
-              body += `## UI Screenshots\n\n`;
+              body += `## 📸 UI Screenshots\n\n`;
               body += `No screenshots were captured. Check the [workflow run](${runUrl}) for errors.\n`;
             } else {
-              body += `## UI Screenshots\n\n`;
-              body += `Captured **${files.length} screenshots** of the UI from this PR.\n\n`;
+              body += `## 📸 UI Screenshots\n\n`;
+              body += `Captured **${files.length} screenshots** from this PR.\n\n`;
 
               const desktop = files.filter(f => f.includes('-desktop'));
               const mobile = files.filter(f => f.includes('-mobile'));
 
               if (desktop.length > 0) {
-                body += `### Desktop (1280 x 900)\n`;
+                body += `### Desktop (1280 x 900)\n\n`;
                 for (const file of desktop) {
                   const pageName = file.replace('-desktop.png', '').replace(/-/g, ' ');
-                  body += `- **${pageName}**\n`;
+                  const imageUrl = `${rawBase}/${file}`;
+                  body += `<details open>\n<summary><strong>${pageName}</strong></summary>\n\n`;
+                  body += `![${pageName} - desktop](${imageUrl})\n\n`;
+                  body += `</details>\n\n`;
                 }
-                body += `\n`;
               }
 
               if (mobile.length > 0) {
-                body += `### Mobile (390 x 844)\n`;
+                body += `### Mobile (390 x 844)\n\n`;
                 for (const file of mobile) {
                   const pageName = file.replace('-mobile.png', '').replace(/-/g, ' ');
-                  body += `- **${pageName}**\n`;
+                  const imageUrl = `${rawBase}/${file}`;
+                  body += `<details open>\n<summary><strong>${pageName}</strong></summary>\n\n`;
+                  body += `<img src="${imageUrl}" alt="${pageName} - mobile" width="390">\n\n`;
+                  body += `</details>\n\n`;
                 }
-                body += `\n`;
               }
-
-              body += `### View Screenshots\n\n`;
-              body += `1. Go to the [workflow run](${runUrl})\n`;
-              body += `2. Scroll to **Artifacts** and download **ui-screenshots**\n`;
-              body += `3. Unzip to view all captured screenshots\n`;
             }
 
             body += `\n---\n`;
-            body += `*Commit: ${context.sha.substring(0, 7)} | [Workflow run](${runUrl})*`;
+            body += `*Commit: ${context.sha.substring(0, 7)} | [Workflow run](${runUrl}) | [Download artifact](${runUrl}#artifacts)*`;
 
             // Find and update existing comment or create new one.
             const { data: comments } = await github.rest.issues.listComments({
@@ -142,18 +166,23 @@ jobs:
 
       - name: Write job summary
         if: always()
+        working-directory: ui
         run: |
           if [ -d screenshots ] && [ "$(ls -A screenshots/*.png 2>/dev/null)" ]; then
+            BRANCH="screenshots/pr-${{ github.event.pull_request.number }}"
+            RAW_BASE="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH}"
+
             echo "## UI Screenshots" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The following screenshots were captured:" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+
             for f in screenshots/*.png; do
               name=$(basename "$f" .png | sed 's/-/ /g')
-              echo "- **${name}**" >> $GITHUB_STEP_SUMMARY
+              filename=$(basename "$f")
+              echo "### ${name}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "![${name}](${RAW_BASE}/${filename})" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
             done
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Download from the **ui-screenshots** artifact above." >> $GITHUB_STEP_SUMMARY
           else
             echo "## UI Screenshots" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
