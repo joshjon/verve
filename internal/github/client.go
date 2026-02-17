@@ -41,7 +41,7 @@ func NewClient(token string) *Client {
 func (c *Client) ListAccessibleRepos(ctx context.Context) ([]*GitHubRepo, error) {
 	url := "https://api.github.com/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&sort=updated"
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (c *Client) ListAccessibleRepos(ctx context.Context) ([]*GitHubRepo, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -89,7 +89,7 @@ func (c *Client) ListAccessibleRepos(ctx context.Context) ([]*GitHubRepo, error)
 func (c *Client) IsPRMerged(ctx context.Context, owner, repo string, prNumber int) (bool, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repo, prNumber)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return false, err
 	}
@@ -99,7 +99,7 @@ func (c *Client) IsPRMerged(ctx context.Context, owner, repo string, prNumber in
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -151,7 +151,7 @@ type CheckResult struct {
 func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNumber int) (*CheckResult, error) {
 	// Step 1: Get the PR to find the head SHA.
 	prURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repo, prNumber)
-	req, err := http.NewRequestWithContext(ctx, "GET", prURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, prURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d for PR", resp.StatusCode)
@@ -192,7 +192,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	var checkRunsSkipped bool
 
 	checksURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s/check-runs", owner, repo, headSHA)
-	req, err = http.NewRequestWithContext(ctx, "GET", checksURL, nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, checksURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusOK {
 		var body struct {
@@ -220,7 +220,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 
 	// Step 3: Get combined commit status (legacy status API).
 	statusURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s/status", owner, repo, headSHA)
-	req, err = http.NewRequestWithContext(ctx, "GET", statusURL, nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, statusURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d for commit status", resp.StatusCode)
@@ -290,9 +290,10 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	}
 
 	for _, s := range commitStatus.Statuses {
-		if s.State == "pending" {
+		switch s.State {
+		case "pending":
 			hasPending = true
-		} else if s.State == "failure" || s.State == "error" {
+		case "failure", "error":
 			failedNames = append(failedNames, s.Context)
 		}
 	}
@@ -300,7 +301,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	if len(failedNames) > 0 {
 		return &CheckResult{
 			Status:           CheckStatusFailure,
-			Summary:          fmt.Sprintf("%s", failedNames),
+			Summary:          fmt.Sprint(failedNames),
 			FailedRunIDs:     failedRunIDs,
 			FailedNames:      failedNames,
 			CheckRunsSkipped: checkRunsSkipped,
@@ -328,7 +329,7 @@ type PRMergeability struct {
 func (c *Client) GetPRMergeability(ctx context.Context, owner, repo string, prNumber int) (*PRMergeability, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repo, prNumber)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +339,7 @@ func (c *Client) GetPRMergeability(ctx context.Context, owner, repo string, prNu
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -386,7 +387,7 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 		}
 
 		logURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/jobs/%d/logs", owner, repoName, jobID)
-		req, err := http.NewRequestWithContext(ctx, "GET", logURL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL, http.NoBody)
 		if err != nil {
 			continue
 		}
@@ -398,7 +399,7 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 		}
 
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			parts = append(parts, fmt.Sprintf("=== Failed: %s ===\n(could not fetch logs: HTTP %d)", name, resp.StatusCode))
@@ -430,7 +431,7 @@ func (c *Client) ClosePR(ctx context.Context, owner, repoName string, prNumber i
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repoName, prNumber)
 	body := strings.NewReader(`{"state":"closed"}`)
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", url, body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, body)
 	if err != nil {
 		return "", err
 	}
@@ -441,7 +442,7 @@ func (c *Client) ClosePR(ctx context.Context, owner, repoName string, prNumber i
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -462,7 +463,7 @@ func (c *Client) ClosePR(ctx context.Context, owner, repoName string, prNumber i
 func (c *Client) DeleteBranch(ctx context.Context, owner, repoName, branch string) error {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/refs/heads/%s", owner, repoName, branch)
 
-	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -472,7 +473,7 @@ func (c *Client) DeleteBranch(ctx context.Context, owner, repoName, branch strin
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -485,7 +486,7 @@ func (c *Client) DeleteBranch(ctx context.Context, owner, repoName, branch strin
 func (c *Client) FindPRForBranch(ctx context.Context, owner, repo, branch string) (string, int, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?head=%s:%s&state=open&per_page=1", owner, repo, owner, branch)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", 0, err
 	}
@@ -495,7 +496,7 @@ func (c *Client) FindPRForBranch(ctx context.Context, owner, repo, branch string
 	if err != nil {
 		return "", 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", 0, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)

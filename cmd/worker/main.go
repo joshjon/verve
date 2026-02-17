@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -52,9 +53,9 @@ func main() {
 		logger.Error("failed to create worker", "error", err)
 		os.Exit(1)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
-	if err := w.Run(ctx); err != nil && err != context.Canceled {
+	if err := w.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("worker error", "error", err)
 		os.Exit(1)
 	}

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -178,7 +179,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer logReader.Close()
+		defer func() { _ = logReader.Close() }()
 		d.streamLogs(logReader, onLog)
 	}()
 
@@ -211,10 +212,10 @@ func (d *DockerRunner) streamLogs(reader io.Reader, onLog LogCallback) {
 
 	// Demultiplex in a goroutine
 	go func() {
-		defer stdoutPipeW.Close()
-		defer stderrPipeW.Close()
+		defer func() { _ = stdoutPipeW.Close() }()
+		defer func() { _ = stderrPipeW.Close() }()
 		_, err := stdcopy.StdCopy(stdoutPipeW, stderrPipeW, reader)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			d.logger.Warn("error demultiplexing logs", "error", err)
 		}
 	}()

@@ -131,7 +131,7 @@ func (h *HTTPHandler) SaveDefaultModel(c echo.Context) error {
 	if err := h.settingService.Set(c.Request().Context(), setting.KeyDefaultModel, req.Model); err != nil {
 		return c.JSON(http.StatusInternalServerError, errorResponse("failed to save default model: "+err.Error()))
 	}
-	return c.JSON(http.StatusOK, DefaultModelResponse{Model: req.Model})
+	return c.JSON(http.StatusOK, DefaultModelResponse(req))
 }
 
 // GetDefaultModel handles GET /settings/default-model
@@ -379,7 +379,8 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 		}
 	}
 
-	if !req.Success {
+	switch {
+	case !req.Success:
 		if req.PrereqFailed != "" {
 			if err := h.store.SetCloseReason(ctx, id, req.PrereqFailed); err != nil {
 				return jsonError(c, err)
@@ -388,15 +389,15 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 		if err := h.store.UpdateTaskStatus(ctx, id, task.StatusFailed); err != nil {
 			return jsonError(c, err)
 		}
-	} else if req.PullRequestURL != "" {
+	case req.PullRequestURL != "":
 		if err := h.store.SetTaskPullRequest(ctx, id, req.PullRequestURL, req.PRNumber); err != nil {
 			return jsonError(c, err)
 		}
-	} else if req.BranchName != "" {
+	case req.BranchName != "":
 		if err := h.store.SetTaskBranch(ctx, id, req.BranchName); err != nil {
 			return jsonError(c, err)
 		}
-	} else {
+	default:
 		// Check if this task already has a PR (retry scenario — agent pushed
 		// fixes to the existing branch without emitting a new PR marker).
 		// Return it to review rather than closing.

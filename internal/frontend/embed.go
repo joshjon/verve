@@ -50,7 +50,7 @@ func DistHandler() (echo.HandlerFunc, error) {
 			if err != nil {
 				return echo.ErrNotFound
 			}
-			defer index.Close()
+			defer func() { _ = index.Close() }()
 			return c.Stream(http.StatusOK, echo.MIMETextHTMLCharsetUTF8, index)
 		}
 		return nil

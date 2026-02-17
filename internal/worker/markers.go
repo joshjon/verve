@@ -7,7 +7,7 @@ import (
 )
 
 // parsePRMarker extracts PR URL and number from a VERVE_PR_CREATED marker line.
-func parsePRMarker(line string) (string, int) {
+func parsePRMarker(line string) (string, int) { //nolint:unused // used by tests
 	if !strings.HasPrefix(line, "VERVE_PR_CREATED:") {
 		return "", 0
 	}
@@ -23,7 +23,7 @@ func parsePRMarker(line string) (string, int) {
 }
 
 // parseBranchMarker extracts the branch name from a VERVE_BRANCH_PUSHED marker line.
-func parseBranchMarker(line string) string {
+func parseBranchMarker(line string) string { //nolint:unused // used by tests
 	if !strings.HasPrefix(line, "VERVE_BRANCH_PUSHED:") {
 		return ""
 	}
@@ -38,7 +38,7 @@ func parseBranchMarker(line string) string {
 }
 
 // parseStatusMarker extracts the status JSON from a VERVE_STATUS marker line.
-func parseStatusMarker(line string) string {
+func parseStatusMarker(line string) string { //nolint:unused // used by tests
 	if !strings.HasPrefix(line, "VERVE_STATUS:") {
 		return ""
 	}
@@ -46,7 +46,7 @@ func parseStatusMarker(line string) string {
 }
 
 // parseCostMarker extracts the cost value from a VERVE_COST marker line.
-func parseCostMarker(line string) float64 {
+func parseCostMarker(line string) float64 { //nolint:unused // used by tests
 	if !strings.HasPrefix(line, "VERVE_COST:") {
 		return 0
 	}
@@ -59,7 +59,7 @@ func parseCostMarker(line string) float64 {
 }
 
 // parsePrereqMarker extracts the prereq failure JSON from a VERVE_PREREQ_FAILED marker line.
-func parsePrereqMarker(line string) string {
+func parsePrereqMarker(line string) string { //nolint:unused // used by tests
 	if !strings.HasPrefix(line, "VERVE_PREREQ_FAILED:") {
 		return ""
 	}
