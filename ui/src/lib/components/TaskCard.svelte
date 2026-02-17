@@ -28,7 +28,7 @@
 	class="group p-3 cursor-pointer bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md"
 	onclick={handleClick}
 	role="button"
-	tabindex="0"
+	tabindex={0}
 >
 	<div class="flex items-start justify-between gap-2">
 		<p class="font-medium text-sm line-clamp-2 flex-1">{task.title || task.description}</p>

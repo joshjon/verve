@@ -137,10 +137,10 @@
 	<Dialog.Content
 		class="sm:max-w-[520px]"
 		showCloseButton={!required || configured}
-		onInteractOutside={(e) => {
+		onInteractOutside={(e: PointerEvent) => {
 			if (required && !configured) e.preventDefault();
 		}}
-		onEscapeKeydown={(e) => {
+		onEscapeKeydown={(e: KeyboardEvent) => {
 			if (required && !configured) e.preventDefault();
 		}}
 	>
