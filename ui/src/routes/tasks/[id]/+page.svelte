@@ -85,6 +85,7 @@
 	let sendingFeedback = $state(false);
 	let showFeedbackForm = $state(false);
 	let feedbackText = $state('');
+	let removingDep = $state<string | null>(null);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
@@ -428,6 +429,18 @@
 		}
 	}
 
+	async function handleRemoveDependency(depId: string) {
+		if (!task || removingDep) return;
+		removingDep = depId;
+		try {
+			task = await client.removeDependency(task.id, depId);
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			removingDep = null;
+		}
+	}
+
 	function formatDuration(ms: number): string {
 		const seconds = Math.floor(ms / 1000);
 		if (seconds < 60) return `${seconds}s`;
@@ -633,13 +646,27 @@
 							</div>
 							<div class="flex flex-wrap gap-2">
 								{#each task.depends_on as depId}
-									<button
-										class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-muted hover:bg-accent text-sm font-mono transition-colors"
-										onclick={() => goto(`/tasks/${depId}`)}
-									>
-										<Link2 class="w-3 h-3" />
-										{depId}
-									</button>
+									<div class="inline-flex items-center rounded-md bg-muted text-sm font-mono transition-colors">
+										<button
+											class="inline-flex items-center gap-1 px-3 py-1.5 hover:bg-accent rounded-l-md transition-colors"
+											onclick={() => goto(`/tasks/${depId}`)}
+										>
+											<Link2 class="w-3 h-3" />
+											{depId}
+										</button>
+										<button
+											class="inline-flex items-center px-1.5 py-1.5 hover:bg-destructive/20 hover:text-destructive rounded-r-md transition-colors border-l border-border"
+											onclick={() => handleRemoveDependency(depId)}
+											disabled={removingDep === depId}
+											title="Remove dependency"
+										>
+											{#if removingDep === depId}
+												<Loader2 class="w-3 h-3 animate-spin" />
+											{:else}
+												<X class="w-3 h-3" />
+											{/if}
+										</button>
+									</div>
 								{/each}
 							</div>
 						</div>

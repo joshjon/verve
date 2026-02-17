@@ -165,6 +165,18 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async removeDependency(id: string, dependsOn: string): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/dependency`, {
+			method: 'DELETE',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ depends_on: dependsOn })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to remove dependency');
+		}
+		return res.json();
+	}
+
 	// --- Settings APIs ---
 
 	async getGitHubTokenStatus(): Promise<{ configured: boolean; fine_grained?: boolean }> {
