@@ -140,6 +140,9 @@ func (h *HTTPHandler) GetDefaultModel(c echo.Context) error {
 	if h.settingService != nil {
 		model = h.settingService.Get(setting.KeyDefaultModel)
 	}
+	if model == "" {
+		model = "sonnet"
+	}
 	return c.JSON(http.StatusOK, DefaultModelResponse{Model: model})
 }
 
