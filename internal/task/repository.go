@@ -52,4 +52,5 @@ type TaskRepository interface {
 	// preserves the existing PR/branch so the agent pushes fixes to the same branch.
 	FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) (bool, error)
 	DeleteTaskLogs(ctx context.Context, id TaskID) error
+	RemoveDependency(ctx context.Context, id TaskID, depID string) error
 }

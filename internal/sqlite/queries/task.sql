@@ -93,3 +93,7 @@ WHERE id = ? AND status = 'review';
 
 -- name: DeleteTaskLogs :exec
 DELETE FROM task_log WHERE task_id = ?;
+
+-- name: SetDependsOn :exec
+UPDATE task SET depends_on = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?;

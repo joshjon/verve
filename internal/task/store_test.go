@@ -334,6 +334,23 @@ func (m *mockRepository) DeleteTaskLogs(_ context.Context, id TaskID) error {
 	return nil
 }
 
+func (m *mockRepository) RemoveDependency(_ context.Context, id TaskID, depID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id.String()]
+	if !ok {
+		return errors.New("task not found")
+	}
+	filtered := make([]string, 0, len(t.DependsOn))
+	for _, d := range t.DependsOn {
+		if d != depID {
+			filtered = append(filtered, d)
+		}
+	}
+	t.DependsOn = filtered
+	return nil
+}
+
 func (m *mockRepository) BeginTxFunc(ctx context.Context, fn func(context.Context, tx.Tx, Repository) error) error {
 	return fn(ctx, nil, m)
 }
@@ -694,4 +711,60 @@ func TestStore_SetTaskPullRequest(t *testing.T) {
 
 	assert.Equal(t, "https://github.com/org/repo/pull/42", tsk.PullRequestURL)
 	assert.Equal(t, 42, tsk.PRNumber)
+}
+
+func TestStore_RemoveDependency_Success(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	dep := NewTask("repo_123", "dep", "dep desc", nil, nil, 0, false, "")
+	repo.tasks[dep.ID.String()] = dep
+
+	tsk := NewTask("repo_123", "title", "desc", []string{dep.ID.String()}, nil, 0, false, "")
+	repo.tasks[tsk.ID.String()] = tsk
+
+	err := store.RemoveDependency(context.Background(), tsk.ID, dep.ID.String())
+	require.NoError(t, err)
+	assert.Empty(t, tsk.DependsOn)
+}
+
+func TestStore_RemoveDependency_InvalidDepID(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	repo.tasks[tsk.ID.String()] = tsk
+
+	err := store.RemoveDependency(context.Background(), tsk.ID, "not-a-valid-id")
+	assert.Error(t, err, "expected error for invalid dependency ID")
+}
+
+func TestStore_RemoveDependency_NotifiesPending(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	dep := NewTask("repo_123", "dep", "dep desc", nil, nil, 0, false, "")
+	repo.tasks[dep.ID.String()] = dep
+
+	tsk := NewTask("repo_123", "title", "desc", []string{dep.ID.String()}, nil, 0, false, "")
+	repo.tasks[tsk.ID.String()] = tsk
+
+	// Drain any existing notification
+	select {
+	case <-store.WaitForPending():
+	default:
+	}
+
+	err := store.RemoveDependency(context.Background(), tsk.ID, dep.ID.String())
+	require.NoError(t, err)
+
+	select {
+	case <-store.WaitForPending():
+		// Good — removing a dependency may unblock the task
+	default:
+		assert.Fail(t, "expected pending notification after removing dependency")
+	}
 }

@@ -217,6 +217,21 @@ func (s *Store) SetCloseReason(ctx context.Context, id TaskID, reason string) er
 	return nil
 }
 
+// RemoveDependency removes a dependency from a task. The dependency ID must be
+// a valid task ID. After removal, if the task is pending, a pending notification
+// is sent in case the task is now unblocked.
+func (s *Store) RemoveDependency(ctx context.Context, id TaskID, depID string) error {
+	if _, err := ParseTaskID(depID); err != nil {
+		return fmt.Errorf("invalid dependency ID %q: %w", depID, err)
+	}
+	if err := s.repo.RemoveDependency(ctx, id, depID); err != nil {
+		return err
+	}
+	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // ClaimPendingTask finds a pending task with all dependencies met and claims it
 // by setting its status to running. When repoIDs is non-empty, only tasks
 // belonging to those repos are considered. The read-check-claim flow is wrapped

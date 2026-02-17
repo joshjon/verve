@@ -38,6 +38,7 @@ type Querier interface {
 	ReadTask(ctx context.Context, id string) (*Task, error)
 	ReadTaskLogs(ctx context.Context, id string) ([]*ReadTaskLogsRow, error)
 	ReadTaskStatus(ctx context.Context, id string) (TaskStatus, error)
+	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) error
 	RetryTask(ctx context.Context, arg RetryTaskParams) (int64, error)
 	SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) error
 	SetBranchName(ctx context.Context, arg SetBranchNameParams) error

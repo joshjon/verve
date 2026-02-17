@@ -644,6 +644,21 @@ func (q *Queries) SetConsecutiveFailures(ctx context.Context, arg SetConsecutive
 	return err
 }
 
+const setDependsOn = `-- name: SetDependsOn :exec
+UPDATE task SET depends_on = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?
+`
+
+type SetDependsOnParams struct {
+	DependsOn string
+	ID        string
+}
+
+func (q *Queries) SetDependsOn(ctx context.Context, arg SetDependsOnParams) error {
+	_, err := q.db.ExecContext(ctx, setDependsOn, arg.DependsOn, arg.ID)
+	return err
+}
+
 const setRetryContext = `-- name: SetRetryContext :exec
 UPDATE task SET retry_context = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
 `
