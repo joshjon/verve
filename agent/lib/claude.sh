@@ -59,9 +59,88 @@ _handle_assistant_event() {
             [ -n "$text" ] && log_claude "$text"
             ;;
         tool_use)
-            local name
+            local name input detail
             name=$(echo "$line" | jq -r '.message.content[0].name // empty' 2>/dev/null)
-            [ -n "$name" ] && log_tool "Using: $name"
+            input=$(echo "$line" | jq -c '.message.content[0].input // empty' 2>/dev/null)
+            detail=$(_tool_detail "$name" "$input")
+            if [ -n "$name" ]; then
+                if [ -n "$detail" ]; then
+                    log_tool "$name: $detail"
+                else
+                    log_tool "Using: $name"
+                fi
+            fi
+            ;;
+    esac
+}
+
+_tool_detail() {
+    local name="$1" input="$2"
+    [ -z "$input" ] || [ "$input" = "null" ] || [ "$input" = '""' ] && return
+
+    case "$name" in
+        Bash)
+            local cmd
+            cmd=$(echo "$input" | jq -r '.command // empty' 2>/dev/null)
+            if [ -n "$cmd" ]; then
+                # Truncate long commands to keep logs readable
+                if [ ${#cmd} -gt 200 ]; then
+                    cmd="${cmd:0:200}..."
+                fi
+                echo "$cmd"
+            fi
+            ;;
+        Read)
+            echo "$input" | jq -r '.file_path // empty' 2>/dev/null
+            ;;
+        Edit)
+            echo "$input" | jq -r '.file_path // empty' 2>/dev/null
+            ;;
+        Write)
+            echo "$input" | jq -r '.file_path // empty' 2>/dev/null
+            ;;
+        Grep)
+            local pattern path
+            pattern=$(echo "$input" | jq -r '.pattern // empty' 2>/dev/null)
+            path=$(echo "$input" | jq -r '.path // empty' 2>/dev/null)
+            if [ -n "$pattern" ] && [ -n "$path" ]; then
+                echo "\"$pattern\" in $path"
+            elif [ -n "$pattern" ]; then
+                echo "\"$pattern\""
+            fi
+            ;;
+        Glob)
+            local pattern path
+            pattern=$(echo "$input" | jq -r '.pattern // empty' 2>/dev/null)
+            path=$(echo "$input" | jq -r '.path // empty' 2>/dev/null)
+            if [ -n "$pattern" ] && [ -n "$path" ]; then
+                echo "$pattern in $path"
+            elif [ -n "$pattern" ]; then
+                echo "$pattern"
+            fi
+            ;;
+        WebFetch)
+            echo "$input" | jq -r '.url // empty' 2>/dev/null
+            ;;
+        WebSearch)
+            echo "$input" | jq -r '.query // empty' 2>/dev/null
+            ;;
+        Task)
+            local desc subagent
+            desc=$(echo "$input" | jq -r '.description // empty' 2>/dev/null)
+            subagent=$(echo "$input" | jq -r '.subagent_type // empty' 2>/dev/null)
+            if [ -n "$desc" ] && [ -n "$subagent" ]; then
+                echo "[$subagent] $desc"
+            elif [ -n "$desc" ]; then
+                echo "$desc"
+            fi
+            ;;
+        TodoWrite)
+            local count
+            count=$(echo "$input" | jq '.todos | length' 2>/dev/null)
+            if [ -n "$count" ] && [ "$count" != "null" ]; then
+                echo "$count items"
+            fi
             ;;
     esac
 }
