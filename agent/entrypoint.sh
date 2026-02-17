@@ -53,7 +53,7 @@ commit_and_push
 if [ "$SKIP_PR" = "true" ]; then
     log_agent "Skip PR mode: branch pushed, skipping PR creation"
     echo "VERVE_BRANCH_PUSHED:{\"branch\":\"${BRANCH}\"}"
-elif [ "${ATTEMPT:-1}" -le 1 ]; then
+elif [ "${ATTEMPT:-1}" -le 1 ] || [ "${BRANCH_EXISTS_ON_REMOTE}" != "true" ]; then
     generate_and_create_pr "${BRANCH}" "${DEFAULT_BRANCH}"
 else
     log_agent "Retry: pushed fixes to existing PR branch"

@@ -24,17 +24,27 @@ detect_default_branch() {
 
 setup_branch() {
     BRANCH="verve/task-${TASK_ID}"
+    # Track whether the branch already existed on the remote. Used later to
+    # decide between force-push vs first push, and whether a PR still needs
+    # to be created.
+    BRANCH_EXISTS_ON_REMOTE=false
 
     if [ "${ATTEMPT:-1}" -gt 1 ]; then
         log_agent "Retry attempt ${ATTEMPT}: checking out existing branch ${BRANCH}"
-        git fetch origin "${BRANCH}"
-        git checkout "${BRANCH}"
+        if git fetch origin "${BRANCH}" 2>/dev/null; then
+            BRANCH_EXISTS_ON_REMOTE=true
+            git checkout "${BRANCH}"
 
-        if echo "$RETRY_REASON" | grep -qi "merge conflict"; then
-            log_agent "Rebasing on ${DEFAULT_BRANCH} to resolve merge conflicts..."
-            git fetch origin "${DEFAULT_BRANCH}"
-            # Don't fail if rebase has conflicts — Claude will resolve them
-            git rebase "origin/${DEFAULT_BRANCH}" || true
+            if echo "$RETRY_REASON" | grep -qi "merge conflict"; then
+                log_agent "Rebasing on ${DEFAULT_BRANCH} to resolve merge conflicts..."
+                git fetch origin "${DEFAULT_BRANCH}"
+                # Don't fail if rebase has conflicts — Claude will resolve them
+                git rebase "origin/${DEFAULT_BRANCH}" || true
+            fi
+        else
+            log_agent "Branch ${BRANCH} not found on remote (previous attempt may have failed before pushing)"
+            log_agent "Creating branch: ${BRANCH}"
+            git checkout -b "${BRANCH}"
         fi
     else
         log_agent "Creating branch: ${BRANCH}"
@@ -63,7 +73,7 @@ commit_and_push() {
         exit 1
     fi
 
-    if [ "${ATTEMPT:-1}" -gt 1 ]; then
+    if [ "${BRANCH_EXISTS_ON_REMOTE}" = "true" ]; then
         log_agent "Pushing fixes to existing branch..."
         git push --force-with-lease origin "${BRANCH}"
     else
