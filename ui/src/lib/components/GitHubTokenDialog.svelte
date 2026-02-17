@@ -26,12 +26,11 @@
 	let success = $state<string | null>(null);
 
 	// Default model state
-	let defaultModel = $state('');
+	let defaultModel = $state('sonnet');
 	let modelLoading = $state(false);
 	let modelSaving = $state(false);
 
 	const modelOptions = [
-		{ value: '', label: 'Sonnet (default)' },
 		{ value: 'haiku', label: 'Haiku' },
 		{ value: 'sonnet', label: 'Sonnet' },
 		{ value: 'opus', label: 'Opus' }
@@ -67,9 +66,9 @@
 		modelLoading = true;
 		try {
 			const res = await client.getDefaultModel();
-			defaultModel = res.model || '';
+			defaultModel = res.model;
 		} catch {
-			// Ignore - will show as "None"
+			// Ignore - default stays as 'sonnet'
 		} finally {
 			modelLoading = false;
 		}
@@ -81,13 +80,9 @@
 		error = null;
 		success = null;
 		try {
-			if (value) {
-				await client.saveDefaultModel(value);
-			} else {
-				await client.deleteDefaultModel();
-			}
+			await client.saveDefaultModel(value);
 			defaultModel = value;
-			success = `Default model ${value ? 'set to ' + modelOptions.find((m) => m.value === value)?.label : 'cleared'}`;
+			success = `Default model set to ${modelOptions.find((m) => m.value === value)?.label}`;
 			setTimeout(() => { success = null; }, 3000);
 		} catch (e) {
 			error = (e as Error).message;

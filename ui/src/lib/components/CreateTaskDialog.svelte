@@ -23,13 +23,13 @@
 	let skipPr = $state(false);
 	let showAdvanced = $state(false);
 	let selectedModel = $state('');
-	let defaultModel = $state('');
+	let defaultModel = $state('sonnet');
 
 	// Fetch default model when dialog opens
 	$effect(() => {
 		if (open) {
 			client.getDefaultModel().then((res) => {
-				defaultModel = res.model || '';
+				defaultModel = res.model;
 			}).catch(() => {});
 		}
 	});
@@ -42,7 +42,7 @@
 	];
 
 	const defaultModelLabel = $derived(
-		defaultModel ? modelOptions.find((m) => m.value === defaultModel)?.label || defaultModel : 'not set'
+		modelOptions.find((m) => m.value === defaultModel)?.label || defaultModel
 	);
 
 	// Filter available tasks (exclude closed/failed and already selected)
