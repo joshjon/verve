@@ -161,7 +161,7 @@
 		return `$${cost.toFixed(2)}`;
 	}
 
-	const taskId = $derived($page.params.id);
+	const taskId = $derived($page.params.id as string);
 
 	const statusConfig: Record<
 		TaskStatus,
@@ -274,9 +274,10 @@
 			const event = JSON.parse(e.data);
 			if (event.task?.id === taskId && task) {
 				const prev = task.status;
-				task = { ...event.task, logs: task.logs };
+				const updated = { ...event.task, logs: task.logs };
+				task = updated;
 				// Refresh check status when task enters review
-				if (task.status === 'review' && task.pr_number && prev !== 'review') {
+				if (updated.status === 'review' && updated.pr_number && prev !== 'review') {
 					checkStatus = null;
 					stopCheckPolling();
 					forceCheckPolls = 3;

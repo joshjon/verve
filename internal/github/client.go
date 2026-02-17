@@ -249,7 +249,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 	}
 
 	// Build individual check details.
-	var checks []IndividualCheck
+	checks := make([]IndividualCheck, 0, len(checkRuns)+len(commitStatus.Statuses))
 
 	for _, run := range checkRuns {
 		conclusion := ""
@@ -373,7 +373,7 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 
 	const maxTotalBytes = 4096
 	const maxLinesPerJob = 50
-	var parts []string
+	parts := make([]string, 0, len(checkResult.FailedRunIDs))
 	totalLen := 0
 
 	for i, jobID := range checkResult.FailedRunIDs {
