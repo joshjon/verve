@@ -66,7 +66,8 @@ export class VerveClient {
 		acceptanceCriteria?: string[],
 		maxCostUsd?: number,
 		skipPr?: boolean,
-		model?: string
+		model?: string,
+		notReady?: boolean
 	): Promise<Task> {
 		const body: Record<string, unknown> = { title, description, depends_on: dependsOn };
 		if (acceptanceCriteria && acceptanceCriteria.length > 0)
@@ -74,6 +75,7 @@ export class VerveClient {
 		if (maxCostUsd && maxCostUsd > 0) body.max_cost_usd = maxCostUsd;
 		if (skipPr) body.skip_pr = true;
 		if (model) body.model = model;
+		if (notReady) body.not_ready = true;
 		const res = await fetch(`${this.baseUrl}/repos/${repoId}/tasks`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -161,6 +163,18 @@ export class VerveClient {
 		});
 		if (!res.ok) {
 			throw new Error('Failed to submit feedback');
+		}
+		return res.json();
+	}
+
+	async setReady(id: string, ready: boolean): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/ready`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ready })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to update task ready state');
 		}
 		return res.json();
 	}

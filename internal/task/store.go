@@ -57,7 +57,9 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 	if err := s.repo.CreateTask(ctx, task); err != nil {
 		return err
 	}
-	s.notifyPending()
+	if task.Ready {
+		s.notifyPending()
+	}
 
 	t := *task
 	t.Logs = nil
@@ -228,6 +230,19 @@ func (s *Store) RemoveDependency(ctx context.Context, id TaskID, depID string) e
 		return err
 	}
 	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
+// SetReady updates the ready flag on a task. When a task is marked as ready and
+// is pending, a notification is sent so workers can pick it up.
+func (s *Store) SetReady(ctx context.Context, id TaskID, ready bool) error {
+	if err := s.repo.SetReady(ctx, id, ready); err != nil {
+		return err
+	}
+	if ready {
+		s.notifyPending()
+	}
 	s.publishTaskUpdated(ctx, id)
 	return nil
 }

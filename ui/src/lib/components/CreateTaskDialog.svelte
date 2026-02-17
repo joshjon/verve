@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
-	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu } from 'lucide-svelte';
+	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu, PauseCircle } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -21,6 +21,7 @@
 	let acceptanceCriteria = $state<string[]>([]);
 	let maxCostUsd = $state<number | undefined>(undefined);
 	let skipPr = $state(false);
+	let notReady = $state(false);
 	let showAdvanced = $state(false);
 	let selectedModel = $state('');
 	let defaultModel = $state('sonnet');
@@ -76,7 +77,8 @@
 				filteredCriteria.length > 0 ? filteredCriteria : undefined,
 				maxCostUsd,
 				skipPr || undefined,
-				selectedModel || undefined
+				selectedModel || undefined,
+				notReady || undefined
 			);
 			title = '';
 			description = '';
@@ -84,6 +86,7 @@
 			acceptanceCriteria = [];
 			maxCostUsd = undefined;
 			skipPr = false;
+			notReady = false;
 			selectedModel = '';
 			showAdvanced = false;
 			open = false;
@@ -103,6 +106,7 @@
 		acceptanceCriteria = [];
 		maxCostUsd = undefined;
 		skipPr = false;
+		notReady = false;
 		selectedModel = '';
 		showAdvanced = false;
 		error = null;
@@ -180,6 +184,28 @@
 						></textarea>
 					</div>
 				</div>
+
+				<label
+					for="not-ready"
+					class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
+				>
+					<input
+						id="not-ready"
+						type="checkbox"
+						bind:checked={notReady}
+						class="w-4 h-4 rounded border-input accent-primary"
+						disabled={loading}
+					/>
+					<div class="flex-1">
+						<div class="text-sm font-medium flex items-center gap-1.5">
+							<PauseCircle class="w-3.5 h-3.5 text-muted-foreground" />
+							Not ready
+						</div>
+						<p class="text-xs text-muted-foreground mt-0.5">
+							Add this task for tracking only. It won't be picked up by agents until marked as ready.
+						</p>
+					</div>
+				</label>
 
 				<hr class="border-border" />
 

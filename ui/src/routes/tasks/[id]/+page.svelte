@@ -37,7 +37,9 @@
 		Check,
 		MessageSquare,
 		Send,
-		Timer
+		Timer,
+		PauseCircle,
+		PlayCircle
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -85,6 +87,7 @@
 	let sendingFeedback = $state(false);
 	let showFeedbackForm = $state(false);
 	let feedbackText = $state('');
+	let togglingReady = $state(false);
 	let removingDep = $state<string | null>(null);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
@@ -442,6 +445,18 @@
 		}
 	}
 
+	async function handleToggleReady() {
+		if (!task || togglingReady) return;
+		togglingReady = true;
+		try {
+			task = await client.setReady(task.id, !task.ready);
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			togglingReady = false;
+		}
+	}
+
 	function formatDuration(ms: number): string {
 		const seconds = Math.floor(ms / 1000);
 		if (seconds < 60) return `${seconds}s`;
@@ -508,6 +523,12 @@
 					<StatusIcon class="w-3 h-3" />
 					{currentStatusConfig?.label}
 				</Badge>
+				{#if !task.ready && task.status === 'pending'}
+					<Badge class="bg-orange-500/20 text-orange-400 gap-1">
+						<PauseCircle class="w-3 h-3" />
+						Not Ready
+					</Badge>
+				{/if}
 				{#if task.duration_ms}
 					<span class="text-xs text-muted-foreground flex items-center gap-1.5">
 						<Timer class="w-3.5 h-3.5" />
@@ -531,6 +552,25 @@
 					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
 						<span class="text-muted-foreground/60">Updated</span> {formatDate(task.updated_at)}
 					</span>
+					{#if task.status === 'pending'}
+						<Button
+							size="sm"
+							variant="outline"
+							onclick={handleToggleReady}
+							disabled={togglingReady}
+							class="gap-1 {!task.ready ? 'border-orange-500/40 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10' : ''}"
+							title={task.ready ? 'Mark this task as not ready so agents won\'t pick it up' : 'Mark this task as ready so agents can start working on it'}
+						>
+							{#if togglingReady}
+								<Loader2 class="w-4 h-4 animate-spin" />
+							{:else if task.ready}
+								<PauseCircle class="w-4 h-4" />
+							{:else}
+								<PlayCircle class="w-4 h-4" />
+							{/if}
+							<span class="hidden sm:inline">{task.ready ? 'Mark Not Ready' : 'Mark Ready'}</span>
+						</Button>
+					{/if}
 					{#if canClose}
 						{#if showCloseForm}
 							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">

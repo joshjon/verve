@@ -291,6 +291,15 @@ func (m *mockTaskRepo) RemoveDependency(_ context.Context, id task.TaskID, depID
 	return nil
 }
 
+func (m *mockTaskRepo) SetReady(_ context.Context, id task.TaskID, ready bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if t, ok := m.tasks[id.String()]; ok {
+		t.Ready = ready
+	}
+	return nil
+}
+
 func (m *mockTaskRepo) BeginTxFunc(ctx context.Context, fn func(context.Context, tx.Tx, task.Repository) error) error {
 	return fn(ctx, nil, m)
 }
@@ -513,7 +522,7 @@ func TestGetTask_Success(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
 
@@ -547,7 +556,7 @@ func TestAppendLogs_Success(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
 
@@ -565,7 +574,7 @@ func TestAppendLogs_DefaultAttempt(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[tsk.ID.String()] = tsk
 
 	body := `{"logs":["line 1"]}`
@@ -582,7 +591,7 @@ func TestCompleteTask_Failure(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
@@ -602,7 +611,7 @@ func TestCompleteTask_SuccessWithPR(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
@@ -623,7 +632,7 @@ func TestCompleteTask_SuccessWithBranch(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
@@ -643,7 +652,7 @@ func TestCompleteTask_SuccessNoPR_ClosedIfNoExistingPR(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
@@ -663,7 +672,7 @@ func TestCompleteTask_SuccessNoPR_ReviewIfExistingPR(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	tsk.PRNumber = 10
 	tsk.PullRequestURL = "https://github.com/org/repo/pull/10"
@@ -685,7 +694,7 @@ func TestCloseTask_Success(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
@@ -705,8 +714,8 @@ func TestListTasksByRepo_Success(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk1 := task.NewTask(testRepo.ID.String(), "task 1", "desc", nil, nil, 0, false, "sonnet")
-	tsk2 := task.NewTask(testRepo.ID.String(), "task 2", "desc", nil, nil, 0, false, "sonnet")
+	tsk1 := task.NewTask(testRepo.ID.String(), "task 1", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk2 := task.NewTask(testRepo.ID.String(), "task 2", "desc", nil, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[tsk1.ID.String()] = tsk1
 	taskRepo.tasks[tsk2.ID.String()] = tsk2
 
@@ -844,7 +853,7 @@ func TestGetTaskChecks_NoPR(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.PRNumber = 0
 	taskRepo.tasks[tsk.ID.String()] = tsk
 
@@ -865,7 +874,7 @@ func TestFeedbackTask_EmptyFeedback(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusReview
 	taskRepo.tasks[tsk.ID.String()] = tsk
 
@@ -917,7 +926,7 @@ func TestCompleteTask_WithAgentStatus(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	tsk.Status = task.StatusRunning
 	taskRepo.tasks[tsk.ID.String()] = tsk
 	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
@@ -936,10 +945,10 @@ func TestRemoveDependency_Success(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	dep := task.NewTask(testRepo.ID.String(), "dep", "dep desc", nil, nil, 0, false, "sonnet")
+	dep := task.NewTask(testRepo.ID.String(), "dep", "dep desc", nil, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[dep.ID.String()] = dep
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", []string{dep.ID.String()}, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", []string{dep.ID.String()}, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[tsk.ID.String()] = tsk
 
 	body := `{"depends_on":"` + dep.ID.String() + `"}`
@@ -974,7 +983,7 @@ func TestRemoveDependency_EmptyDependsOn(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
 
-	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
 	taskRepo.tasks[tsk.ID.String()] = tsk
 
 	body := `{"depends_on":""}`
