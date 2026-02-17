@@ -46,7 +46,7 @@ jobs:
       - name: Take screenshots
         run: |
           mkdir -p screenshots
-          pnpm exec playwright test --project=desktop --project=mobile
+          pnpm exec playwright test --project=desktop
 
       - name: Upload screenshots as artifact
         if: always()
@@ -108,29 +108,12 @@ jobs:
               body += `## 📸 UI Screenshots\n\n`;
               body += `Captured **${files.length} screenshots** from this PR.\n\n`;
 
-              const desktop = files.filter(f => f.includes('-desktop'));
-              const mobile = files.filter(f => f.includes('-mobile'));
-
-              if (desktop.length > 0) {
-                body += `### Desktop (1280 x 900)\n\n`;
-                for (const file of desktop) {
-                  const pageName = file.replace('-desktop.png', '').replace(/-/g, ' ');
-                  const imageUrl = `${rawBase}/${file}`;
-                  body += `<details open>\n<summary><strong>${pageName}</strong></summary>\n\n`;
-                  body += `![${pageName} - desktop](${imageUrl})\n\n`;
-                  body += `</details>\n\n`;
-                }
-              }
-
-              if (mobile.length > 0) {
-                body += `### Mobile (390 x 844)\n\n`;
-                for (const file of mobile) {
-                  const pageName = file.replace('-mobile.png', '').replace(/-/g, ' ');
-                  const imageUrl = `${rawBase}/${file}`;
-                  body += `<details open>\n<summary><strong>${pageName}</strong></summary>\n\n`;
-                  body += `<img src="${imageUrl}" alt="${pageName} - mobile" width="390">\n\n`;
-                  body += `</details>\n\n`;
-                }
+              for (const file of files) {
+                const pageName = file.replace('-desktop.png', '').replace(/-/g, ' ');
+                const imageUrl = `${rawBase}/${file}`;
+                body += `<details open>\n<summary><strong>${pageName}</strong></summary>\n\n`;
+                body += `![${pageName}](${imageUrl})\n\n`;
+                body += `</details>\n\n`;
               }
             }
 
