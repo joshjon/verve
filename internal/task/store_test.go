@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/joshjon/kit/tx"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mockRepository implements the Repository interface for testing.
@@ -349,12 +351,8 @@ func TestStore_CreateTask_Success(t *testing.T) {
 
 	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "sonnet")
 	err := store.CreateTask(context.Background(), tsk)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo.createCalls != 1 {
-		t.Errorf("expected 1 create call, got %d", repo.createCalls)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, repo.createCalls)
 }
 
 func TestStore_CreateTask_InvalidDependencyID(t *testing.T) {
@@ -364,9 +362,7 @@ func TestStore_CreateTask_InvalidDependencyID(t *testing.T) {
 
 	tsk := NewTask("repo_123", "title", "desc", []string{"not-a-valid-id"}, nil, 0, false, "")
 	err := store.CreateTask(context.Background(), tsk)
-	if err == nil {
-		t.Error("expected error for invalid dependency ID")
-	}
+	assert.Error(t, err, "expected error for invalid dependency ID")
 }
 
 func TestStore_CreateTask_DependencyNotFound(t *testing.T) {
@@ -378,9 +374,7 @@ func TestStore_CreateTask_DependencyNotFound(t *testing.T) {
 	depID := NewTaskID()
 	tsk := NewTask("repo_123", "title", "desc", []string{depID.String()}, nil, 0, false, "")
 	err := store.CreateTask(context.Background(), tsk)
-	if err == nil {
-		t.Error("expected error for missing dependency")
-	}
+	assert.Error(t, err, "expected error for missing dependency")
 }
 
 func TestStore_CreateTask_NotifiesPending(t *testing.T) {
@@ -391,16 +385,14 @@ func TestStore_CreateTask_NotifiesPending(t *testing.T) {
 
 	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
 	err := store.CreateTask(context.Background(), tsk)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// The pending channel should have a notification
 	select {
 	case <-store.WaitForPending():
 		// Good
 	default:
-		t.Error("expected pending notification")
+		assert.Fail(t, "expected pending notification")
 	}
 }
 
@@ -414,26 +406,16 @@ func TestStore_CreateTask_PublishesEvent(t *testing.T) {
 
 	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
 	err := store.CreateTask(context.Background(), tsk)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	select {
 	case event := <-ch:
-		if event.Type != EventTaskCreated {
-			t.Errorf("expected event type %s, got %s", EventTaskCreated, event.Type)
-		}
-		if event.RepoID != "repo_123" {
-			t.Errorf("expected repo_id repo_123, got %s", event.RepoID)
-		}
-		if event.Task == nil {
-			t.Error("expected non-nil task in event")
-		}
-		if event.Task.Logs != nil {
-			t.Error("expected nil logs in published event")
-		}
+		assert.Equal(t, EventTaskCreated, event.Type)
+		assert.Equal(t, "repo_123", event.RepoID)
+		assert.NotNil(t, event.Task, "expected non-nil task in event")
+		assert.Nil(t, event.Task.Logs, "expected nil logs in published event")
 	default:
-		t.Error("expected event to be published")
+		assert.Fail(t, "expected event to be published")
 	}
 }
 
@@ -450,14 +432,10 @@ func TestStore_RetryTask_MaxAttempts(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
 	err := store.RetryTask(context.Background(), tsk.ID, "ci_failure:tests", "CI tests failed")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Task should be failed because max attempts reached
-	if tsk.Status != StatusFailed {
-		t.Errorf("expected status failed, got %s", tsk.Status)
-	}
+	assert.Equal(t, StatusFailed, tsk.Status)
 }
 
 func TestStore_RetryTask_BudgetExceeded(t *testing.T) {
@@ -472,13 +450,9 @@ func TestStore_RetryTask_BudgetExceeded(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
 	err := store.RetryTask(context.Background(), tsk.ID, "", "some reason")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if tsk.Status != StatusFailed {
-		t.Errorf("expected status failed due to budget exceeded, got %s", tsk.Status)
-	}
+	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to budget exceeded")
 }
 
 func TestStore_RetryTask_CircuitBreaker(t *testing.T) {
@@ -494,14 +468,10 @@ func TestStore_RetryTask_CircuitBreaker(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
 	err := store.RetryTask(context.Background(), tsk.ID, "ci_failure:tests", "CI tests failed again")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Circuit breaker should trigger: same category twice
-	if tsk.Status != StatusFailed {
-		t.Errorf("expected status failed due to circuit breaker, got %s", tsk.Status)
-	}
+	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to circuit breaker")
 }
 
 func TestStore_RetryTask_DifferentCategory(t *testing.T) {
@@ -519,14 +489,11 @@ func TestStore_RetryTask_DifferentCategory(t *testing.T) {
 
 	// Different category should NOT trip circuit breaker
 	err := store.RetryTask(context.Background(), tsk.ID, "merge_conflict", "merge conflict detected")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should have set consecutive failures to 1 (reset for new category)
-	if len(repo.setConsFails) != 1 || repo.setConsFails[0] != 1 {
-		t.Errorf("expected setConsecutiveFailures(1), got %v", repo.setConsFails)
-	}
+	require.Len(t, repo.setConsFails, 1)
+	assert.Equal(t, 1, repo.setConsFails[0])
 }
 
 func TestStore_ManualRetryTask(t *testing.T) {
@@ -540,9 +507,7 @@ func TestStore_ManualRetryTask(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.ManualRetryTask(context.Background(), tsk.ID, "try again please")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestStore_ManualRetryTask_NotFailed(t *testing.T) {
@@ -556,9 +521,7 @@ func TestStore_ManualRetryTask_NotFailed(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.ManualRetryTask(context.Background(), tsk.ID, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 	// Should be a no-op
 }
 
@@ -574,13 +537,9 @@ func TestStore_FeedbackRetryTask_BudgetExceeded(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
 	err := store.FeedbackRetryTask(context.Background(), tsk.ID, "fix the tests")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if tsk.Status != StatusFailed {
-		t.Errorf("expected status failed due to budget exceeded, got %s", tsk.Status)
-	}
+	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to budget exceeded")
 }
 
 func TestStore_FeedbackRetryTask_MaxAttempts(t *testing.T) {
@@ -596,13 +555,9 @@ func TestStore_FeedbackRetryTask_MaxAttempts(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
 	err := store.FeedbackRetryTask(context.Background(), tsk.ID, "fix the tests")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if tsk.Status != StatusFailed {
-		t.Errorf("expected status failed due to max attempts, got %s", tsk.Status)
-	}
+	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to max attempts")
 }
 
 func TestStore_ClaimPendingTask_NoPending(t *testing.T) {
@@ -611,12 +566,8 @@ func TestStore_ClaimPendingTask_NoPending(t *testing.T) {
 	store := NewStore(repo, broker)
 
 	claimed, err := store.ClaimPendingTask(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if claimed != nil {
-		t.Error("expected nil claimed task when no pending tasks")
-	}
+	require.NoError(t, err)
+	assert.Nil(t, claimed, "expected nil claimed task when no pending tasks")
 }
 
 func TestStore_ClaimPendingTask_Success(t *testing.T) {
@@ -630,15 +581,9 @@ func TestStore_ClaimPendingTask_Success(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusPending
 
 	claimed, err := store.ClaimPendingTask(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if claimed == nil {
-		t.Fatal("expected non-nil claimed task")
-	}
-	if claimed.Status != StatusRunning {
-		t.Errorf("expected status running, got %s", claimed.Status)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, claimed, "expected non-nil claimed task")
+	assert.Equal(t, StatusRunning, claimed.Status)
 }
 
 func TestStore_ClaimPendingTask_WithRepoFilter(t *testing.T) {
@@ -652,12 +597,8 @@ func TestStore_ClaimPendingTask_WithRepoFilter(t *testing.T) {
 	repo.taskStatuses[tsk.ID.String()] = StatusPending
 
 	claimed, err := store.ClaimPendingTask(context.Background(), []string{"repo_123"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if claimed == nil {
-		t.Fatal("expected non-nil claimed task")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, claimed, "expected non-nil claimed task")
 }
 
 func TestStore_AppendTaskLogs(t *testing.T) {
@@ -672,21 +613,15 @@ func TestStore_AppendTaskLogs(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.AppendTaskLogs(context.Background(), tsk.ID, 1, []string{"line 1", "line 2"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Check event published
 	select {
 	case event := <-ch:
-		if event.Type != EventLogsAppended {
-			t.Errorf("expected event type %s, got %s", EventLogsAppended, event.Type)
-		}
-		if len(event.Logs) != 2 {
-			t.Errorf("expected 2 logs, got %d", len(event.Logs))
-		}
+		assert.Equal(t, EventLogsAppended, event.Type)
+		assert.Len(t, event.Logs, 2)
 	default:
-		t.Error("expected log event to be published")
+		assert.Fail(t, "expected log event to be published")
 	}
 }
 
@@ -699,7 +634,7 @@ func TestStore_WaitForPending(t *testing.T) {
 	ch := store.WaitForPending()
 	select {
 	case <-ch:
-		t.Error("expected no pending notification initially")
+		assert.Fail(t, "expected no pending notification initially")
 	default:
 		// Good
 	}
@@ -712,7 +647,7 @@ func TestStore_WaitForPending(t *testing.T) {
 	case <-ch:
 		// Good
 	default:
-		t.Error("expected pending notification after create")
+		assert.Fail(t, "expected pending notification after create")
 	}
 }
 
@@ -725,16 +660,10 @@ func TestStore_CloseTask(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.CloseTask(context.Background(), tsk.ID, "no longer needed")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if tsk.Status != StatusClosed {
-		t.Errorf("expected status closed, got %s", tsk.Status)
-	}
-	if tsk.CloseReason != "no longer needed" {
-		t.Errorf("expected close reason 'no longer needed', got %s", tsk.CloseReason)
-	}
+	assert.Equal(t, StatusClosed, tsk.Status)
+	assert.Equal(t, "no longer needed", tsk.CloseReason)
 }
 
 func TestStore_UpdateTaskStatus(t *testing.T) {
@@ -746,13 +675,9 @@ func TestStore_UpdateTaskStatus(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.UpdateTaskStatus(context.Background(), tsk.ID, StatusFailed)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if tsk.Status != StatusFailed {
-		t.Errorf("expected status failed, got %s", tsk.Status)
-	}
+	assert.Equal(t, StatusFailed, tsk.Status)
 }
 
 func TestStore_SetTaskPullRequest(t *testing.T) {
@@ -765,14 +690,8 @@ func TestStore_SetTaskPullRequest(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.SetTaskPullRequest(context.Background(), tsk.ID, "https://github.com/org/repo/pull/42", 42)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if tsk.PullRequestURL != "https://github.com/org/repo/pull/42" {
-		t.Errorf("unexpected PR URL: %s", tsk.PullRequestURL)
-	}
-	if tsk.PRNumber != 42 {
-		t.Errorf("expected PR number 42, got %d", tsk.PRNumber)
-	}
+	assert.Equal(t, "https://github.com/org/repo/pull/42", tsk.PullRequestURL)
+	assert.Equal(t, 42, tsk.PRNumber)
 }

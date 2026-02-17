@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"verve/internal/crypto"
 )
 
@@ -66,9 +69,7 @@ func TestIsValidTokenPrefix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.token, func(t *testing.T) {
 			result := IsValidTokenPrefix(tt.token)
-			if result != tt.valid {
-				t.Errorf("IsValidTokenPrefix(%q) = %v, want %v", tt.token, result, tt.valid)
-			}
+			assert.Equal(t, tt.valid, result, "IsValidTokenPrefix(%q)", tt.token)
 		})
 	}
 }
@@ -78,27 +79,16 @@ func TestService_SaveAndGetToken(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	err := svc.SaveToken(context.Background(), "ghp_testtoken123")
-	if err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	require.NoError(t, err, "save")
 
 	token := svc.GetToken()
-	if token != "ghp_testtoken123" {
-		t.Errorf("expected 'ghp_testtoken123', got %q", token)
-	}
+	assert.Equal(t, "ghp_testtoken123", token)
 
-	if !svc.HasToken() {
-		t.Error("expected HasToken to return true")
-	}
-
-	if svc.IsFineGrained() {
-		t.Error("expected IsFineGrained to return false for ghp_ token")
-	}
+	assert.True(t, svc.HasToken(), "expected HasToken to return true")
+	assert.False(t, svc.IsFineGrained(), "expected IsFineGrained to return false for ghp_ token")
 
 	// Verify the stored token is encrypted
-	if repo.token == "ghp_testtoken123" {
-		t.Error("expected stored token to be encrypted")
-	}
+	assert.NotEqual(t, "ghp_testtoken123", repo.token, "expected stored token to be encrypted")
 }
 
 func TestService_SaveFineGrainedToken(t *testing.T) {
@@ -106,13 +96,9 @@ func TestService_SaveFineGrainedToken(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	err := svc.SaveToken(context.Background(), "github_pat_testtoken123")
-	if err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	require.NoError(t, err, "save")
 
-	if !svc.IsFineGrained() {
-		t.Error("expected IsFineGrained to return true for github_pat_ token")
-	}
+	assert.True(t, svc.IsFineGrained(), "expected IsFineGrained to return true for github_pat_ token")
 }
 
 func TestService_GetClient(t *testing.T) {
@@ -120,16 +106,12 @@ func TestService_GetClient(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	// Before save, client should be nil
-	if svc.GetClient() != nil {
-		t.Error("expected nil client before save")
-	}
+	assert.Nil(t, svc.GetClient(), "expected nil client before save")
 
 	_ = svc.SaveToken(context.Background(), "ghp_testtoken123")
 
 	client := svc.GetClient()
-	if client == nil {
-		t.Error("expected non-nil client after save")
-	}
+	assert.NotNil(t, client, "expected non-nil client after save")
 }
 
 func TestService_DeleteToken(t *testing.T) {
@@ -137,24 +119,14 @@ func TestService_DeleteToken(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	_ = svc.SaveToken(context.Background(), "ghp_testtoken123")
-	if !svc.HasToken() {
-		t.Fatal("expected token to be saved")
-	}
+	require.True(t, svc.HasToken(), "expected token to be saved")
 
 	err := svc.DeleteToken(context.Background())
-	if err != nil {
-		t.Fatalf("delete: %v", err)
-	}
+	require.NoError(t, err, "delete")
 
-	if svc.HasToken() {
-		t.Error("expected HasToken to return false after delete")
-	}
-	if svc.GetToken() != "" {
-		t.Error("expected empty token after delete")
-	}
-	if svc.GetClient() != nil {
-		t.Error("expected nil client after delete")
-	}
+	assert.False(t, svc.HasToken(), "expected HasToken to return false after delete")
+	assert.Empty(t, svc.GetToken(), "expected empty token after delete")
+	assert.Nil(t, svc.GetClient(), "expected nil client after delete")
 }
 
 func TestService_Load(t *testing.T) {
@@ -163,25 +135,17 @@ func TestService_Load(t *testing.T) {
 
 	// First, save a token
 	encrypted, err := crypto.Encrypt(key, "ghp_loaded_token")
-	if err != nil {
-		t.Fatalf("encrypt: %v", err)
-	}
+	require.NoError(t, err, "encrypt")
 	repo.token = encrypted
 	repo.stored = true
 
 	// Now load it
 	svc := NewService(repo, key)
 	err = svc.Load(context.Background())
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
+	require.NoError(t, err, "load")
 
-	if svc.GetToken() != "ghp_loaded_token" {
-		t.Errorf("expected 'ghp_loaded_token', got %q", svc.GetToken())
-	}
-	if !svc.HasToken() {
-		t.Error("expected HasToken to return true after load")
-	}
+	assert.Equal(t, "ghp_loaded_token", svc.GetToken())
+	assert.True(t, svc.HasToken(), "expected HasToken to return true after load")
 }
 
 func TestService_Load_NoToken(t *testing.T) {
@@ -189,13 +153,9 @@ func TestService_Load_NoToken(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	err := svc.Load(context.Background())
-	if err != nil {
-		t.Fatalf("load with no token should not error: %v", err)
-	}
+	require.NoError(t, err, "load with no token should not error")
 
-	if svc.HasToken() {
-		t.Error("expected HasToken to return false when no token stored")
-	}
+	assert.False(t, svc.HasToken(), "expected HasToken to return false when no token stored")
 }
 
 func TestService_Load_ReadError(t *testing.T) {
@@ -203,9 +163,7 @@ func TestService_Load_ReadError(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	err := svc.Load(context.Background())
-	if err == nil {
-		t.Error("expected error from load")
-	}
+	assert.Error(t, err, "expected error from load")
 }
 
 func TestService_SaveToken_RepoError(t *testing.T) {
@@ -213,9 +171,7 @@ func TestService_SaveToken_RepoError(t *testing.T) {
 	svc := NewService(repo, validKey())
 
 	err := svc.SaveToken(context.Background(), "ghp_test")
-	if err == nil {
-		t.Error("expected error from save")
-	}
+	assert.Error(t, err, "expected error from save")
 }
 
 func TestService_DeleteToken_RepoError(t *testing.T) {
@@ -226,12 +182,8 @@ func TestService_DeleteToken_RepoError(t *testing.T) {
 	repo.deleteErr = errors.New("db error")
 
 	err := svc.DeleteToken(context.Background())
-	if err == nil {
-		t.Error("expected error from delete")
-	}
+	assert.Error(t, err, "expected error from delete")
 
 	// Token should still be cached
-	if !svc.HasToken() {
-		t.Error("expected token to remain cached on delete error")
-	}
+	assert.True(t, svc.HasToken(), "expected token to remain cached on delete error")
 }

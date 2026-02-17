@@ -12,6 +12,8 @@ import (
 
 	"github.com/joshjon/kit/tx"
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"verve/internal/repo"
 	"verve/internal/setting"
@@ -419,26 +421,14 @@ func TestCreateTask_Success(t *testing.T) {
 	c.SetParamValues(testRepo.ID.String())
 
 	err := handler.CreateTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusCreated {
-		t.Errorf("expected status 201, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 
 	var created task.Task
-	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if created.Title != "Fix bug" {
-		t.Errorf("expected title 'Fix bug', got %s", created.Title)
-	}
-	if created.Status != task.StatusPending {
-		t.Errorf("expected status pending, got %s", created.Status)
-	}
-	if created.Model != "sonnet" {
-		t.Errorf("expected default model 'sonnet', got %s", created.Model)
-	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created), "decode response")
+	assert.Equal(t, "Fix bug", created.Title)
+	assert.Equal(t, task.StatusPending, created.Status)
+	assert.Equal(t, "sonnet", created.Model)
 }
 
 func TestCreateTask_EmptyTitle(t *testing.T) {
@@ -451,12 +441,8 @@ func TestCreateTask_EmptyTitle(t *testing.T) {
 	c.SetParamValues(testRepo.ID.String())
 
 	err := handler.CreateTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestCreateTask_TitleTooLong(t *testing.T) {
@@ -470,12 +456,8 @@ func TestCreateTask_TitleTooLong(t *testing.T) {
 	c.SetParamValues(testRepo.ID.String())
 
 	err := handler.CreateTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400 for long title, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "expected status 400 for long title")
 }
 
 func TestCreateTask_InvalidRepoID(t *testing.T) {
@@ -488,12 +470,8 @@ func TestCreateTask_InvalidRepoID(t *testing.T) {
 	c.SetParamValues("invalid")
 
 	err := handler.CreateTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestCreateTask_WithModel(t *testing.T) {
@@ -506,18 +484,12 @@ func TestCreateTask_WithModel(t *testing.T) {
 	c.SetParamValues(testRepo.ID.String())
 
 	err := handler.CreateTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusCreated {
-		t.Errorf("expected status 201, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 
 	var created task.Task
 	json.Unmarshal(rec.Body.Bytes(), &created)
-	if created.Model != "opus" {
-		t.Errorf("expected model 'opus', got %s", created.Model)
-	}
+	assert.Equal(t, "opus", created.Model)
 }
 
 func TestGetTask_Success(t *testing.T) {
@@ -533,18 +505,12 @@ func TestGetTask_Success(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.GetTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var result task.Task
 	json.Unmarshal(rec.Body.Bytes(), &result)
-	if result.Title != "title" {
-		t.Errorf("expected title 'title', got %s", result.Title)
-	}
+	assert.Equal(t, "title", result.Title)
 }
 
 func TestGetTask_InvalidID(t *testing.T) {
@@ -556,12 +522,8 @@ func TestGetTask_InvalidID(t *testing.T) {
 	c.SetParamValues("invalid")
 
 	err := handler.GetTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestAppendLogs_Success(t *testing.T) {
@@ -578,12 +540,8 @@ func TestAppendLogs_Success(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.AppendLogs(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestAppendLogs_DefaultAttempt(t *testing.T) {
@@ -599,12 +557,8 @@ func TestAppendLogs_DefaultAttempt(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.AppendLogs(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestCompleteTask_Failure(t *testing.T) {
@@ -622,16 +576,9 @@ func TestCompleteTask_Failure(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CompleteTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
-
-	if tsk.Status != task.StatusFailed {
-		t.Errorf("expected status failed, got %s", tsk.Status)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusFailed, tsk.Status)
 }
 
 func TestCompleteTask_SuccessWithPR(t *testing.T) {
@@ -649,19 +596,10 @@ func TestCompleteTask_SuccessWithPR(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CompleteTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
-
-	if tsk.Status != task.StatusReview {
-		t.Errorf("expected status review, got %s", tsk.Status)
-	}
-	if tsk.PRNumber != 42 {
-		t.Errorf("expected PR number 42, got %d", tsk.PRNumber)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusReview, tsk.Status)
+	assert.Equal(t, 42, tsk.PRNumber)
 }
 
 func TestCompleteTask_SuccessWithBranch(t *testing.T) {
@@ -679,15 +617,9 @@ func TestCompleteTask_SuccessWithBranch(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CompleteTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
-	if tsk.BranchName != "verve/task-tsk_123" {
-		t.Errorf("expected branch name, got %s", tsk.BranchName)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "verve/task-tsk_123", tsk.BranchName)
 }
 
 func TestCompleteTask_SuccessNoPR_ClosedIfNoExistingPR(t *testing.T) {
@@ -705,16 +637,9 @@ func TestCompleteTask_SuccessNoPR_ClosedIfNoExistingPR(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CompleteTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
-
-	if tsk.Status != task.StatusClosed {
-		t.Errorf("expected status closed (no PR), got %s", tsk.Status)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusClosed, tsk.Status, "expected status closed (no PR)")
 }
 
 func TestCompleteTask_SuccessNoPR_ReviewIfExistingPR(t *testing.T) {
@@ -734,16 +659,9 @@ func TestCompleteTask_SuccessNoPR_ReviewIfExistingPR(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CompleteTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
-
-	if tsk.Status != task.StatusReview {
-		t.Errorf("expected status review (existing PR), got %s", tsk.Status)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusReview, tsk.Status, "expected status review (existing PR)")
 }
 
 func TestCloseTask_Success(t *testing.T) {
@@ -761,16 +679,9 @@ func TestCloseTask_Success(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CloseTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
-
-	if tsk.Status != task.StatusClosed {
-		t.Errorf("expected status closed, got %s", tsk.Status)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusClosed, tsk.Status)
 }
 
 func TestListTasksByRepo_Success(t *testing.T) {
@@ -787,18 +698,12 @@ func TestListTasksByRepo_Success(t *testing.T) {
 	c.SetParamValues(testRepo.ID.String())
 
 	err := handler.ListTasksByRepo(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var tasks []*task.Task
 	json.Unmarshal(rec.Body.Bytes(), &tasks)
-	if len(tasks) != 2 {
-		t.Errorf("expected 2 tasks, got %d", len(tasks))
-	}
+	assert.Len(t, tasks, 2)
 }
 
 func TestAddRepo_Success(t *testing.T) {
@@ -809,18 +714,12 @@ func TestAddRepo_Success(t *testing.T) {
 	c, rec := newContext(e, http.MethodPost, "/repos", body)
 
 	err := handler.AddRepo(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusCreated {
-		t.Errorf("expected status 201, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 
 	var r repo.Repo
 	json.Unmarshal(rec.Body.Bytes(), &r)
-	if r.FullName != "newowner/newrepo" {
-		t.Errorf("expected full_name 'newowner/newrepo', got %s", r.FullName)
-	}
+	assert.Equal(t, "newowner/newrepo", r.FullName)
 }
 
 func TestAddRepo_EmptyFullName(t *testing.T) {
@@ -831,12 +730,8 @@ func TestAddRepo_EmptyFullName(t *testing.T) {
 	c, rec := newContext(e, http.MethodPost, "/repos", body)
 
 	err := handler.AddRepo(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestAddRepo_InvalidFullName(t *testing.T) {
@@ -847,12 +742,8 @@ func TestAddRepo_InvalidFullName(t *testing.T) {
 	c, rec := newContext(e, http.MethodPost, "/repos", body)
 
 	err := handler.AddRepo(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestListRepos(t *testing.T) {
@@ -862,12 +753,8 @@ func TestListRepos(t *testing.T) {
 	c, rec := newContext(e, http.MethodGet, "/repos", "")
 
 	err := handler.ListRepos(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestGetDefaultModel_Default(t *testing.T) {
@@ -877,18 +764,12 @@ func TestGetDefaultModel_Default(t *testing.T) {
 	c, rec := newContext(e, http.MethodGet, "/settings/default-model", "")
 
 	err := handler.GetDefaultModel(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp DefaultModelResponse
 	json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp.Model != "sonnet" {
-		t.Errorf("expected default model 'sonnet', got %s", resp.Model)
-	}
+	assert.Equal(t, "sonnet", resp.Model)
 }
 
 func TestSaveDefaultModel(t *testing.T) {
@@ -899,12 +780,8 @@ func TestSaveDefaultModel(t *testing.T) {
 	c, rec := newContext(e, http.MethodPut, "/settings/default-model", body)
 
 	err := handler.SaveDefaultModel(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestSaveDefaultModel_EmptyModel(t *testing.T) {
@@ -915,12 +792,8 @@ func TestSaveDefaultModel_EmptyModel(t *testing.T) {
 	c, rec := newContext(e, http.MethodPut, "/settings/default-model", body)
 
 	err := handler.SaveDefaultModel(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestGetGitHubTokenStatus_NotConfigured(t *testing.T) {
@@ -930,18 +803,12 @@ func TestGetGitHubTokenStatus_NotConfigured(t *testing.T) {
 	c, rec := newContext(e, http.MethodGet, "/settings/github-token", "")
 
 	err := handler.GetGitHubTokenStatus(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp GitHubTokenStatusResponse
 	json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp.Configured {
-		t.Error("expected configured=false when no token service")
-	}
+	assert.False(t, resp.Configured, "expected configured=false when no token service")
 }
 
 func TestSaveGitHubToken_NoService(t *testing.T) {
@@ -952,12 +819,8 @@ func TestSaveGitHubToken_NoService(t *testing.T) {
 	c, rec := newContext(e, http.MethodPut, "/settings/github-token", body)
 
 	err := handler.SaveGitHubToken(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected status 503, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestGetTaskChecks_NoPR(t *testing.T) {
@@ -973,18 +836,12 @@ func TestGetTaskChecks_NoPR(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.GetTaskChecks(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp CheckStatusResponse
 	json.Unmarshal(rec.Body.Bytes(), &resp)
-	if resp.Status != "success" {
-		t.Errorf("expected status 'success' for no CI, got %s", resp.Status)
-	}
+	assert.Equal(t, "success", resp.Status, "expected status 'success' for no CI")
 }
 
 func TestFeedbackTask_EmptyFeedback(t *testing.T) {
@@ -1001,12 +858,8 @@ func TestFeedbackTask_EmptyFeedback(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.FeedbackTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400 for empty feedback, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "expected status 400 for empty feedback")
 }
 
 func TestRemoveRepo_InvalidID(t *testing.T) {
@@ -1018,26 +871,18 @@ func TestRemoveRepo_InvalidID(t *testing.T) {
 	c.SetParamValues("invalid")
 
 	err := handler.RemoveRepo(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestErrorResponse(t *testing.T) {
 	resp := errorResponse("test error")
-	if resp["error"] != "test error" {
-		t.Errorf("expected 'test error', got %s", resp["error"])
-	}
+	assert.Equal(t, "test error", resp["error"])
 }
 
 func TestStatusOK(t *testing.T) {
 	resp := statusOK()
-	if resp["status"] != "ok" {
-		t.Errorf("expected 'ok', got %s", resp["status"])
-	}
+	assert.Equal(t, "ok", resp["status"])
 }
 
 func TestListAvailableRepos_NoGitHubClient(t *testing.T) {
@@ -1047,12 +892,8 @@ func TestListAvailableRepos_NoGitHubClient(t *testing.T) {
 	c, rec := newContext(e, http.MethodGet, "/repos/available", "")
 
 	err := handler.ListAvailableRepos(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected status 503, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestCompleteTask_WithAgentStatus(t *testing.T) {
@@ -1070,10 +911,6 @@ func TestCompleteTask_WithAgentStatus(t *testing.T) {
 	c.SetParamValues(tsk.ID.String())
 
 	err := handler.CompleteTask(c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", rec.Code)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }

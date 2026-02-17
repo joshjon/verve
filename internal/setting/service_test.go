@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockSettingRepo struct {
@@ -61,9 +64,7 @@ func TestService_GetEmpty(t *testing.T) {
 	svc := NewService(repo)
 
 	val := svc.Get("nonexistent")
-	if val != "" {
-		t.Errorf("expected empty string, got %q", val)
-	}
+	assert.Empty(t, val)
 }
 
 func TestService_SetAndGet(t *testing.T) {
@@ -72,19 +73,13 @@ func TestService_SetAndGet(t *testing.T) {
 
 	ctx := context.Background()
 	err := svc.Set(ctx, KeyDefaultModel, "opus")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	val := svc.Get(KeyDefaultModel)
-	if val != "opus" {
-		t.Errorf("expected 'opus', got %q", val)
-	}
+	assert.Equal(t, "opus", val)
 
 	// Verify it was persisted to the repo
-	if repo.settings[KeyDefaultModel] != "opus" {
-		t.Error("expected setting to be persisted in repo")
-	}
+	assert.Equal(t, "opus", repo.settings[KeyDefaultModel], "expected setting to be persisted in repo")
 }
 
 func TestService_SetError(t *testing.T) {
@@ -93,15 +88,11 @@ func TestService_SetError(t *testing.T) {
 	svc := NewService(repo)
 
 	err := svc.Set(context.Background(), "key", "value")
-	if err == nil {
-		t.Error("expected error from repo")
-	}
+	assert.Error(t, err, "expected error from repo")
 
 	// Cache should not be updated on error
 	val := svc.Get("key")
-	if val != "" {
-		t.Error("expected cache to not be updated on error")
-	}
+	assert.Empty(t, val, "expected cache to not be updated on error")
 }
 
 func TestService_Delete(t *testing.T) {
@@ -112,14 +103,10 @@ func TestService_Delete(t *testing.T) {
 	_ = svc.Set(ctx, "key", "value")
 
 	err := svc.Delete(ctx, "key")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	val := svc.Get("key")
-	if val != "" {
-		t.Errorf("expected empty string after delete, got %q", val)
-	}
+	assert.Empty(t, val, "expected empty string after delete")
 }
 
 func TestService_DeleteError(t *testing.T) {
@@ -131,15 +118,11 @@ func TestService_DeleteError(t *testing.T) {
 
 	repo.deleteErr = errors.New("db error")
 	err := svc.Delete(ctx, "key")
-	if err == nil {
-		t.Error("expected error from repo")
-	}
+	assert.Error(t, err, "expected error from repo")
 
 	// Cache should not be updated on error
 	val := svc.Get("key")
-	if val != "value" {
-		t.Error("expected cache to retain value on delete error")
-	}
+	assert.Equal(t, "value", val, "expected cache to retain value on delete error")
 }
 
 func TestService_Load(t *testing.T) {
@@ -150,16 +133,10 @@ func TestService_Load(t *testing.T) {
 	svc := NewService(repo)
 
 	err := svc.Load(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if svc.Get("key1") != "value1" {
-		t.Errorf("expected 'value1', got %q", svc.Get("key1"))
-	}
-	if svc.Get("key2") != "value2" {
-		t.Errorf("expected 'value2', got %q", svc.Get("key2"))
-	}
+	assert.Equal(t, "value1", svc.Get("key1"))
+	assert.Equal(t, "value2", svc.Get("key2"))
 }
 
 func TestService_LoadError(t *testing.T) {
@@ -168,13 +145,9 @@ func TestService_LoadError(t *testing.T) {
 	svc := NewService(repo)
 
 	err := svc.Load(context.Background())
-	if err == nil {
-		t.Error("expected error from repo")
-	}
+	assert.Error(t, err, "expected error from repo")
 }
 
 func TestKeyDefaultModel(t *testing.T) {
-	if KeyDefaultModel != "default_model" {
-		t.Errorf("expected 'default_model', got %q", KeyDefaultModel)
-	}
+	assert.Equal(t, "default_model", KeyDefaultModel)
 }

@@ -5,73 +5,48 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewRepo_Valid(t *testing.T) {
 	r, err := NewRepo("octocat/hello-world")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if r.Owner != "octocat" {
-		t.Errorf("expected owner 'octocat', got %s", r.Owner)
-	}
-	if r.Name != "hello-world" {
-		t.Errorf("expected name 'hello-world', got %s", r.Name)
-	}
-	if r.FullName != "octocat/hello-world" {
-		t.Errorf("expected full_name 'octocat/hello-world', got %s", r.FullName)
-	}
-	if r.ID.String() == "" {
-		t.Error("expected non-empty ID")
-	}
-	if !strings.HasPrefix(r.ID.String(), "repo_") {
-		t.Errorf("expected repo_ prefix, got %s", r.ID.String())
-	}
-	if r.CreatedAt.IsZero() {
-		t.Error("expected non-zero CreatedAt")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "octocat", r.Owner)
+	assert.Equal(t, "hello-world", r.Name)
+	assert.Equal(t, "octocat/hello-world", r.FullName)
+	assert.NotEmpty(t, r.ID.String(), "expected non-empty ID")
+	assert.True(t, strings.HasPrefix(r.ID.String(), "repo_"), "expected repo_ prefix, got %s", r.ID.String())
+	assert.False(t, r.CreatedAt.IsZero(), "expected non-zero CreatedAt")
 }
 
 func TestNewRepo_InvalidNoSlash(t *testing.T) {
 	_, err := NewRepo("justname")
-	if err == nil {
-		t.Error("expected error for repo name without slash")
-	}
+	assert.Error(t, err, "expected error for repo name without slash")
 }
 
 func TestNewRepo_EmptyOwner(t *testing.T) {
 	_, err := NewRepo("/reponame")
-	if err == nil {
-		t.Error("expected error for empty owner")
-	}
+	assert.Error(t, err, "expected error for empty owner")
 }
 
 func TestNewRepo_EmptyName(t *testing.T) {
 	_, err := NewRepo("owner/")
-	if err == nil {
-		t.Error("expected error for empty name")
-	}
+	assert.Error(t, err, "expected error for empty name")
 }
 
 func TestNewRepo_EmptyString(t *testing.T) {
 	_, err := NewRepo("")
-	if err == nil {
-		t.Error("expected error for empty string")
-	}
+	assert.Error(t, err, "expected error for empty string")
 }
 
 func TestNewRepo_MultipleSlashes(t *testing.T) {
 	// SplitN with n=2 should handle this correctly: "owner" and "repo/subpath"
 	r, err := NewRepo("owner/repo/subpath")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if r.Owner != "owner" {
-		t.Errorf("expected owner 'owner', got %s", r.Owner)
-	}
-	if r.Name != "repo/subpath" {
-		t.Errorf("expected name 'repo/subpath', got %s", r.Name)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "owner", r.Owner)
+	assert.Equal(t, "repo/subpath", r.Name)
 }
 
 // --- RepoID tests ---
@@ -79,46 +54,31 @@ func TestNewRepo_MultipleSlashes(t *testing.T) {
 func TestNewRepoID(t *testing.T) {
 	id := NewRepoID()
 	s := id.String()
-	if s == "" {
-		t.Error("expected non-empty string")
-	}
-	if !strings.HasPrefix(s, "repo_") {
-		t.Errorf("expected repo_ prefix, got %s", s)
-	}
+	assert.NotEmpty(t, s, "expected non-empty string")
+	assert.True(t, strings.HasPrefix(s, "repo_"), "expected repo_ prefix, got %s", s)
 }
 
 func TestParseRepoID_Valid(t *testing.T) {
 	original := NewRepoID()
 	parsed, err := ParseRepoID(original.String())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if parsed.String() != original.String() {
-		t.Errorf("expected %s, got %s", original.String(), parsed.String())
-	}
+	require.NoError(t, err)
+	assert.Equal(t, original.String(), parsed.String())
 }
 
 func TestParseRepoID_InvalidPrefix(t *testing.T) {
 	_, err := ParseRepoID("tsk_01h2xcejqtf2nbrexx3vqjhp41")
-	if err == nil {
-		t.Error("expected error for wrong prefix")
-	}
+	assert.Error(t, err, "expected error for wrong prefix")
 }
 
 func TestParseRepoID_Empty(t *testing.T) {
 	_, err := ParseRepoID("")
-	if err == nil {
-		t.Error("expected error for empty string")
-	}
+	assert.Error(t, err, "expected error for empty string")
 }
 
 func TestMustParseRepoID_Panics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic for invalid repo ID")
-		}
-	}()
-	MustParseRepoID("invalid")
+	assert.Panics(t, func() {
+		MustParseRepoID("invalid")
+	}, "expected panic for invalid repo ID")
 }
 
 // --- Store tests ---
@@ -200,9 +160,7 @@ func TestStore_DeleteRepo_NoTasks(t *testing.T) {
 	_ = store.CreateRepo(context.Background(), r)
 
 	err := store.DeleteRepo(context.Background(), r.ID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestStore_DeleteRepo_WithTasks(t *testing.T) {
@@ -214,12 +172,8 @@ func TestStore_DeleteRepo_WithTasks(t *testing.T) {
 	_ = store.CreateRepo(context.Background(), r)
 
 	err := store.DeleteRepo(context.Background(), r.ID)
-	if err == nil {
-		t.Error("expected error when tasks exist")
-	}
-	if !strings.Contains(err.Error(), "tasks still exist") {
-		t.Errorf("expected 'tasks still exist' error, got %s", err.Error())
-	}
+	assert.Error(t, err, "expected error when tasks exist")
+	assert.Contains(t, err.Error(), "tasks still exist")
 }
 
 func TestStore_CreateAndReadRepo(t *testing.T) {
@@ -229,17 +183,11 @@ func TestStore_CreateAndReadRepo(t *testing.T) {
 
 	r, _ := NewRepo("owner/name")
 	err := store.CreateRepo(context.Background(), r)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	read, err := store.ReadRepo(context.Background(), r.ID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if read.FullName != r.FullName {
-		t.Errorf("expected full_name %s, got %s", r.FullName, read.FullName)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, r.FullName, read.FullName)
 }
 
 func TestStore_ListRepos(t *testing.T) {
@@ -253,12 +201,8 @@ func TestStore_ListRepos(t *testing.T) {
 	_ = store.CreateRepo(context.Background(), r2)
 
 	repos, err := store.ListRepos(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(repos) != 2 {
-		t.Errorf("expected 2 repos, got %d", len(repos))
-	}
+	require.NoError(t, err)
+	assert.Len(t, repos, 2)
 }
 
 func TestStore_ReadRepoByFullName(t *testing.T) {
@@ -270,10 +214,6 @@ func TestStore_ReadRepoByFullName(t *testing.T) {
 	_ = store.CreateRepo(context.Background(), r)
 
 	read, err := store.ReadRepoByFullName(context.Background(), "owner/name")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if read.ID.String() != r.ID.String() {
-		t.Errorf("expected ID %s, got %s", r.ID.String(), read.ID.String())
-	}
+	require.NoError(t, err)
+	assert.Equal(t, r.ID.String(), read.ID.String())
 }

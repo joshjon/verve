@@ -6,20 +6,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewClient_EmptyToken(t *testing.T) {
 	c := NewClient("")
-	if c != nil {
-		t.Error("expected nil client for empty token")
-	}
+	assert.Nil(t, c, "expected nil client for empty token")
 }
 
 func TestNewClient_ValidToken(t *testing.T) {
 	c := NewClient("ghp_test")
-	if c == nil {
-		t.Error("expected non-nil client for valid token")
-	}
+	assert.NotNil(t, c, "expected non-nil client for valid token")
 }
 
 func TestClient_IsPRMerged(t *testing.T) {
@@ -38,9 +37,7 @@ func TestClient_IsPRMerged(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Header.Get("Authorization") != "Bearer test-token" {
-					t.Error("expected Bearer auth header")
-				}
+				assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"), "expected Bearer auth header")
 				w.WriteHeader(tt.statusCode)
 				if tt.statusCode == 200 {
 					json.NewEncoder(w).Encode(map[string]any{
@@ -64,21 +61,19 @@ func TestClient_IsPRMerged(t *testing.T) {
 			})
 
 			merged, err := c.IsPRMerged(context.Background(), "owner", "repo", 1)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("IsPRMerged() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err, "IsPRMerged() expected error")
+			} else {
+				assert.NoError(t, err, "IsPRMerged() unexpected error")
 			}
-			if merged != tt.wantMerged {
-				t.Errorf("IsPRMerged() = %v, want %v", merged, tt.wantMerged)
-			}
+			assert.Equal(t, tt.wantMerged, merged, "IsPRMerged() result mismatch")
 		})
 	}
 }
 
 func TestClient_ListAccessibleRepos(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer test-token" {
-			t.Error("expected Bearer auth header")
-		}
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"), "expected Bearer auth header")
 		json.NewEncoder(w).Encode([]map[string]any{
 			{
 				"full_name":   "owner/repo1",
@@ -111,28 +106,16 @@ func TestClient_ListAccessibleRepos(t *testing.T) {
 	})
 
 	repos, err := c.ListAccessibleRepos(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(repos) != 2 {
-		t.Fatalf("expected 2 repos, got %d", len(repos))
-	}
-	if repos[0].FullName != "owner/repo1" {
-		t.Errorf("expected 'owner/repo1', got %s", repos[0].FullName)
-	}
-	if repos[0].Owner != "owner" {
-		t.Errorf("expected owner 'owner', got %s", repos[0].Owner)
-	}
-	if repos[1].Private != true {
-		t.Error("expected second repo to be private")
-	}
+	require.NoError(t, err)
+	require.Len(t, repos, 2)
+	assert.Equal(t, "owner/repo1", repos[0].FullName)
+	assert.Equal(t, "owner", repos[0].Owner)
+	assert.True(t, repos[1].Private, "expected second repo to be private")
 }
 
 func TestClient_ClosePR(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "PATCH" {
-			t.Errorf("expected PATCH method, got %s", r.Method)
-		}
+		assert.Equal(t, "PATCH", r.Method, "expected PATCH method")
 		json.NewEncoder(w).Encode(map[string]any{
 			"head": map[string]string{"ref": "feature-branch"},
 		})
@@ -150,19 +133,13 @@ func TestClient_ClosePR(t *testing.T) {
 	})
 
 	branch, err := c.ClosePR(context.Background(), "owner", "repo", 42)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if branch != "feature-branch" {
-		t.Errorf("expected 'feature-branch', got %s", branch)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "feature-branch", branch)
 }
 
 func TestClient_DeleteBranch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" {
-			t.Errorf("expected DELETE method, got %s", r.Method)
-		}
+		assert.Equal(t, "DELETE", r.Method, "expected DELETE method")
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
@@ -178,9 +155,7 @@ func TestClient_DeleteBranch(t *testing.T) {
 	})
 
 	err := c.DeleteBranch(context.Background(), "owner", "repo", "feature")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestClient_DeleteBranch_NotFound(t *testing.T) {
@@ -200,9 +175,7 @@ func TestClient_DeleteBranch_NotFound(t *testing.T) {
 	})
 
 	err := c.DeleteBranch(context.Background(), "owner", "repo", "feature")
-	if err == nil {
-		t.Error("expected error for 404")
-	}
+	assert.Error(t, err, "expected error for 404")
 }
 
 func TestClient_FindPRForBranch(t *testing.T) {
@@ -224,15 +197,9 @@ func TestClient_FindPRForBranch(t *testing.T) {
 	})
 
 	url, num, err := c.FindPRForBranch(context.Background(), "owner", "repo", "feature")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if num != 42 {
-		t.Errorf("expected PR number 42, got %d", num)
-	}
-	if url != "https://github.com/owner/repo/pull/42" {
-		t.Errorf("expected PR URL, got %s", url)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 42, num)
+	assert.Equal(t, "https://github.com/owner/repo/pull/42", url)
 }
 
 func TestClient_FindPRForBranch_NoPR(t *testing.T) {
@@ -252,15 +219,9 @@ func TestClient_FindPRForBranch_NoPR(t *testing.T) {
 	})
 
 	url, num, err := c.FindPRForBranch(context.Background(), "owner", "repo", "feature")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if num != 0 {
-		t.Errorf("expected PR number 0, got %d", num)
-	}
-	if url != "" {
-		t.Errorf("expected empty URL, got %s", url)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 0, num)
+	assert.Empty(t, url)
 }
 
 func TestClient_GetPRMergeability(t *testing.T) {
@@ -284,18 +245,11 @@ func TestClient_GetPRMergeability(t *testing.T) {
 	})
 
 	result, err := c.GetPRMergeability(context.Background(), "owner", "repo", 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Mergeable == nil || !*result.Mergeable {
-		t.Error("expected mergeable=true")
-	}
-	if result.MergeableState != "clean" {
-		t.Errorf("expected state 'clean', got %s", result.MergeableState)
-	}
-	if result.HasConflicts {
-		t.Error("expected HasConflicts=false for clean state")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, result.Mergeable, "expected mergeable to be non-nil")
+	assert.True(t, *result.Mergeable, "expected mergeable=true")
+	assert.Equal(t, "clean", result.MergeableState)
+	assert.False(t, result.HasConflicts, "expected HasConflicts=false for clean state")
 }
 
 func TestClient_GetPRMergeability_Dirty(t *testing.T) {
@@ -319,24 +273,14 @@ func TestClient_GetPRMergeability_Dirty(t *testing.T) {
 	})
 
 	result, err := c.GetPRMergeability(context.Background(), "owner", "repo", 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !result.HasConflicts {
-		t.Error("expected HasConflicts=true for dirty state")
-	}
+	require.NoError(t, err)
+	assert.True(t, result.HasConflicts, "expected HasConflicts=true for dirty state")
 }
 
 func TestCheckStatusConstants(t *testing.T) {
-	if CheckStatusPending != "pending" {
-		t.Errorf("expected 'pending', got %s", CheckStatusPending)
-	}
-	if CheckStatusSuccess != "success" {
-		t.Errorf("expected 'success', got %s", CheckStatusSuccess)
-	}
-	if CheckStatusFailure != "failure" {
-		t.Errorf("expected 'failure', got %s", CheckStatusFailure)
-	}
+	assert.Equal(t, CheckStatus("pending"), CheckStatusPending)
+	assert.Equal(t, CheckStatus("success"), CheckStatusSuccess)
+	assert.Equal(t, CheckStatus("failure"), CheckStatusFailure)
 }
 
 // roundTripFunc is a helper to override HTTP transport for tests.
