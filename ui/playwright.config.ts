@@ -16,14 +16,6 @@ export default defineConfig({
 		{
 			name: 'desktop',
 			use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } }
-		},
-		{
-			name: 'mobile',
-			use: {
-				...devices['iPhone 14'],
-				browserName: 'chromium',
-				viewport: { width: 390, height: 844 }
-			}
 		}
 	],
 	webServer: {
