@@ -15,7 +15,7 @@ const (
 	// classicTokenPrefix is the prefix for classic personal access tokens.
 	classicTokenPrefix = "ghp_"
 	// fineGrainedTokenPrefix is the prefix for fine-grained personal access tokens.
-	fineGrainedTokenPrefix = "github_pat_"
+	fineGrainedTokenPrefix = "github_pat_" //nolint:gosec // not a credential, just a prefix pattern
 )
 
 // IsValidTokenPrefix checks whether a token has a recognised GitHub PAT prefix.

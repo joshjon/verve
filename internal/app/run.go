@@ -127,7 +127,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, 
 	}
 
 	if err := sqlitedb.Migrate(db, litemigrations.FS); err != nil {
-		db.Close()
+		_ = db.Close()
 		return stores{}, nil, fmt.Errorf("migrate sqlite: %w", err)
 	}
 
@@ -147,7 +147,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, 
 	settingRepo := sqlite.NewSettingRepository(db)
 	settingService := setting.NewService(settingRepo)
 
-	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService, setting: settingService}, func() { db.Close() }, nil
+	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
 }
 
 func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
@@ -192,7 +192,7 @@ func Serve(ctx context.Context, logger log.Logger, srv *server.Server) error {
 			errs <- fmt.Errorf("start server: %w", err)
 		}
 	}()
-	defer srv.Stop(ctx)
+	defer func() { _ = srv.Stop(ctx) }()
 
 	if err := srv.WaitHealthy(15, time.Second); err != nil {
 		return err

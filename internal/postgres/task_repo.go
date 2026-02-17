@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"math"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,16 @@ import (
 	"verve/internal/postgres/sqlc"
 	"verve/internal/task"
 )
+
+func safeInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if v < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(v)
+}
 
 var _ task.Repository = (*TaskRepository)(nil)
 
@@ -58,8 +69,8 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		Description:           t.Description,
 		Status:                sqlc.TaskStatus(t.Status),
 		DependsOn:             t.DependsOn,
-		Attempt:               int32(t.Attempt),
-		MaxAttempts:           int32(t.MaxAttempts),
+		Attempt:               safeInt32(t.Attempt),
+		MaxAttempts:           safeInt32(t.MaxAttempts),
 		AcceptanceCriteriaList: t.AcceptanceCriteria,
 		MaxCostUsd:            maxCostUSD,
 		SkipPr:                t.SkipPR,
@@ -113,7 +124,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 func (r *TaskRepository) AppendTaskLogs(ctx context.Context, id task.TaskID, attempt int, logs []string) error {
 	return tagTaskErr(r.db.AppendTaskLogs(ctx, sqlc.AppendTaskLogsParams{
 		ID:      id.String(),
-		Attempt: int32(attempt),
+		Attempt: safeInt32(attempt),
 		Lines:   logs,
 	}))
 }
@@ -163,7 +174,7 @@ func (r *TaskRepository) SetTaskPullRequest(ctx context.Context, id task.TaskID,
 	return tagTaskErr(r.db.SetTaskPullRequest(ctx, sqlc.SetTaskPullRequestParams{
 		ID:             id.String(),
 		PullRequestUrl: &prURL,
-		PrNumber:       ptr(int32(prNumber)),
+		PrNumber:       ptr(safeInt32(prNumber)),
 	}))
 }
 
@@ -247,7 +258,7 @@ func (r *TaskRepository) AddCost(ctx context.Context, id task.TaskID, costUSD fl
 func (r *TaskRepository) SetConsecutiveFailures(ctx context.Context, id task.TaskID, count int) error {
 	return tagTaskErr(r.db.SetConsecutiveFailures(ctx, sqlc.SetConsecutiveFailuresParams{
 		ID:                  id.String(),
-		ConsecutiveFailures: int32(count),
+		ConsecutiveFailures: safeInt32(count),
 	}))
 }
 

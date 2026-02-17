@@ -1,0 +1,62 @@
+version: "2"
+
+run:
+  tests: false
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - durationcheck
+    - errorlint
+    - fatcontext
+    - goconst
+    - gocritic
+    - gosec
+    - misspell
+    - nakedret
+    - nilerr
+    - noctx
+    - prealloc
+    - predeclared
+    - revive
+    - sqlclosecheck
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+  settings:
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    nakedret:
+      max-func-lines: 30
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - exitAfterDefer
+        - unnamedResult
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+  exclusions:
+    presets:
+      - comments
+    paths:
+      - "internal/postgres/sqlc"
+      - "internal/sqlite/sqlc"
+
+formatters:
+  exclusions:
+    paths:
+      - "internal/postgres/sqlc"
+      - "internal/sqlite/sqlc"

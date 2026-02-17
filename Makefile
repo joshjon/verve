@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-worker build-agent build-agent-dev build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate up down logs dev dev-build dev-down dev-logs ui-install ui-dev ui-build ui-build-go deploy
+.PHONY: all build build-server build-worker build-agent build-agent-dev build-agent-no-cache push-agent run-server run-server-pg run-worker test-task clean tidy generate lint up down logs dev dev-build dev-down dev-logs ui-install ui-dev ui-build ui-build-go deploy
 
 AGENT_IMAGE = ghcr.io/joshjon/verve-agent
 
@@ -38,6 +38,10 @@ else
 	docker tag verve-agent:latest $(AGENT_IMAGE):latest
 	docker push $(AGENT_IMAGE):latest
 endif
+
+# Lint
+lint:
+	golangci-lint run ./...
 
 # Generate sqlc code
 generate:

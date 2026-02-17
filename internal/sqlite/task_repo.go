@@ -121,7 +121,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var tasks []*task.Task
 	for rows.Next() {
 		var t sqlc.Task
@@ -161,7 +161,7 @@ func (r *TaskRepository) StreamTaskLogs(ctx context.Context, id task.TaskID, fn 
 	if err != nil {
 		return tagTaskErr(err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var attempt int
 		var linesJSON string

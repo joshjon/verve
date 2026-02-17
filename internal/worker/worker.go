@@ -181,7 +181,7 @@ func (w *Worker) Run(ctx context.Context) error {
 func (w *Worker) pollForTask(ctx context.Context) (*PollResponse, error) {
 	pollURL := w.config.APIURL + "/api/v1/tasks/poll"
 
-	req, err := http.NewRequestWithContext(ctx, "GET", pollURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (w *Worker) pollForTask(ctx context.Context) (*PollResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNoContent {
 		return nil, nil
@@ -414,25 +414,26 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	markerMu.Unlock()
 
 	// Report completion with PR info, agent status, and cost
-	if result.Error != nil {
+	switch {
+	case result.Error != nil:
 		taskLogger.Error("task failed", "error", result.Error)
-		w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
-	} else if result.Success {
+		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
+	case result.Success:
 		taskLogger.Info("task completed successfully")
-		w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "")
-	} else {
+		_ = w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "")
+	default:
 		errMsg := fmt.Sprintf("exit code %d", result.ExitCode)
 		if capturedPrereqFailed != "" {
 			errMsg = "prerequisite check failed"
 		}
 		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
+		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
 	}
 }
 
 func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs []string) error {
 	body, _ := json.Marshal(map[string]any{"logs": logs, "attempt": attempt})
-	req, err := http.NewRequestWithContext(ctx, "POST", w.config.APIURL+"/api/v1/tasks/"+taskID+"/logs", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/tasks/"+taskID+"/logs", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -442,7 +443,7 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -451,7 +452,7 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs 
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg string, prURL string, prNumber int, branchName string, agentStatus string, costUSD float64, prereqFailed string) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg, prURL string, prNumber int, branchName, agentStatus string, costUSD float64, prereqFailed string) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
@@ -474,7 +475,7 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", w.config.APIURL+"/api/v1/tasks/"+taskID+"/complete", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/tasks/"+taskID+"/complete", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -484,7 +485,7 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

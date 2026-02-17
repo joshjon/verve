@@ -65,7 +65,7 @@ func (t *Task) ComputeDuration() {
 }
 
 // NewTask creates a new Task with a generated TaskID and pending status.
-func NewTask(repoID, title, description string, dependsOn []string, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string) *Task {
+func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string) *Task {
 	now := time.Now()
 	if dependsOn == nil {
 		dependsOn = []string{}
