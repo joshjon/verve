@@ -88,8 +88,6 @@ github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
-github.com/joshjon/kit v0.0.0-20260202015923-10eea3337fcb h1:6qRFpMii+USHXkAGDHyQdftHft3J62bb7DpObf2H7mc=
-github.com/joshjon/kit v0.0.0-20260202015923-10eea3337fcb/go.mod h1:0iSoQf63y32KN4+iz621fnaH1lROl8ZkKe/akNnm67Q=
 github.com/joshjon/kit v0.0.0-20260213112627-d0db03dbebf8 h1:T1F0+Gp/wP/zRNthCyJlJpL0xerT6DkhmMGeApkwX0s=
 github.com/joshjon/kit v0.0.0-20260213112627-d0db03dbebf8/go.mod h1:0iSoQf63y32KN4+iz621fnaH1lROl8ZkKe/akNnm67Q=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=

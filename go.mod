@@ -8,6 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joshjon/kit v0.0.0-20260213112627-d0db03dbebf8
 	github.com/labstack/echo/v4 v4.15.0
+	github.com/stretchr/testify v1.11.1
 	go.jetify.com/typeid v1.3.0
 	modernc.org/sqlite v1.45.0
 )
@@ -59,6 +60,7 @@ require (
 	github.com/pingcap/log v1.1.0 // indirect
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20250324122243-d51e00e5bbf0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/riza-io/grpc-go v0.2.0 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
