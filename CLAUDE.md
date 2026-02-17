@@ -35,7 +35,7 @@ make run-worker                   # Start worker (connects to localhost:7400)
 # Test
 make test-task                    # Create a test task via curl
 make list-tasks                   # List all tasks
-make get-task ID=tsk_xxx          # Get specific task details
+make get-task ID=tsk-abc12        # Get specific task details
 
 # Clean
 make clean                        # Remove binaries and Docker image
@@ -74,7 +74,7 @@ verve/
 │   │   ├── config.go               # Config, PostgresConfig, GitHubConfig
 │   │   └── run.go                  # Run (auto-selects postgres or sqlite)
 │   ├── task/
-│   │   ├── id.go                   # TaskID typed ID (kit/id + typeid)
+│   │   ├── id.go                   # TaskID (tsk-xxxxx format)
 │   │   ├── task.go                 # Task struct, Status enum, NewTask
 │   │   ├── repository.go           # Repository interface
 │   │   ├── repository_errors.go    # ErrTagTaskNotFound, ErrTagTaskConflict
@@ -173,10 +173,10 @@ pending → running → review → merged
 ```
 
 ### Entity Identity Pattern
-Use TypeID prefixes for entity IDs:
-- `tsk_*` = Task (e.g., `tsk_01HQXYZ...`)
+Entity IDs use short prefixed formats for readability:
+- `tsk-*` = Task (e.g., `tsk-a1b2c`) — prefix + 5-char lowercase alphanumeric
 
-IDs use `github.com/joshjon/kit/id` with `go.jetify.com/typeid` for type-safe prefixed UUIDs.
+RepoIDs still use TypeID via `go.jetify.com/typeid`.
 
 ## Key Patterns
 
