@@ -724,6 +724,50 @@ func (q *Queries) TaskExists(ctx context.Context, id string) (int64, error) {
 	return column_1, err
 }
 
+const updatePendingTask = `-- name: UpdatePendingTask :execrows
+UPDATE task SET
+  title = ?,
+  description = ?,
+  depends_on = ?,
+  acceptance_criteria_list = ?,
+  max_cost_usd = ?,
+  skip_pr = ?,
+  model = ?,
+  ready = ?,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'pending'
+`
+
+type UpdatePendingTaskParams struct {
+	Title                  string
+	Description            string
+	DependsOn              string
+	AcceptanceCriteriaList string
+	MaxCostUsd             *float64
+	SkipPr                 int64
+	Model                  *string
+	Ready                  int64
+	ID                     string
+}
+
+func (q *Queries) UpdatePendingTask(ctx context.Context, arg UpdatePendingTaskParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updatePendingTask,
+		arg.Title,
+		arg.Description,
+		arg.DependsOn,
+		arg.AcceptanceCriteriaList,
+		arg.MaxCostUsd,
+		arg.SkipPr,
+		arg.Model,
+		arg.Ready,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateTaskStatus = `-- name: UpdateTaskStatus :exec
 UPDATE task SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?

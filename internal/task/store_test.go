@@ -369,6 +369,27 @@ func (m *mockRepository) SetReady(_ context.Context, id TaskID, ready bool) erro
 	return nil
 }
 
+func (m *mockRepository) UpdatePendingTask(_ context.Context, id TaskID, params UpdatePendingTaskParams) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id.String()]
+	if !ok {
+		return false, errors.New("task not found")
+	}
+	if t.Status != StatusPending {
+		return false, nil
+	}
+	t.Title = params.Title
+	t.Description = params.Description
+	t.DependsOn = params.DependsOn
+	t.AcceptanceCriteria = params.AcceptanceCriteria
+	t.MaxCostUSD = params.MaxCostUSD
+	t.SkipPR = params.SkipPR
+	t.Model = params.Model
+	t.Ready = params.Ready
+	return true, nil
+}
+
 func (m *mockRepository) BeginTxFunc(ctx context.Context, fn func(context.Context, tx.Tx, Repository) error) error {
 	return fn(ctx, nil, m)
 }

@@ -22,6 +22,19 @@ type CreateTaskRequest struct {
 	NotReady           bool     `json:"not_ready,omitempty"`
 }
 
+// UpdateTaskRequest is the request body for updating a pending task.
+// All fields are optional — only provided fields are updated.
+type UpdateTaskRequest struct {
+	Title              *string  `json:"title,omitempty"`
+	Description        *string  `json:"description,omitempty"`
+	DependsOn          []string `json:"depends_on,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+	MaxCostUSD         *float64 `json:"max_cost_usd,omitempty"`
+	SkipPR             *bool    `json:"skip_pr,omitempty"`
+	Model              *string  `json:"model,omitempty"`
+	NotReady           *bool    `json:"not_ready,omitempty"`
+}
+
 // SetReadyRequest is the request body for toggling a task's ready state.
 type SetReadyRequest struct {
 	Ready bool `json:"ready"`

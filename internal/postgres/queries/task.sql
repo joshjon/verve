@@ -103,3 +103,16 @@ WHERE id = $1;
 
 -- name: SetReady :exec
 UPDATE task SET ready = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdatePendingTask :execrows
+UPDATE task SET
+  title = $2,
+  description = $3,
+  depends_on = $4,
+  acceptance_criteria_list = $5,
+  max_cost_usd = $6,
+  skip_pr = $7,
+  model = $8,
+  ready = $9,
+  updated_at = NOW()
+WHERE id = $1 AND status = 'pending';

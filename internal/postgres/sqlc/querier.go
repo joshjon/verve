@@ -48,6 +48,7 @@ type Querier interface {
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	TaskExists(ctx context.Context, id string) (bool, error)
+	UpdatePendingTask(ctx context.Context, arg UpdatePendingTaskParams) (int64, error)
 	UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error
 	UpsertGitHubToken(ctx context.Context, arg UpsertGitHubTokenParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

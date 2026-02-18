@@ -746,6 +746,50 @@ func (q *Queries) TaskExists(ctx context.Context, id string) (bool, error) {
 	return exists, err
 }
 
+const updatePendingTask = `-- name: UpdatePendingTask :execrows
+UPDATE task SET
+  title = $2,
+  description = $3,
+  depends_on = $4,
+  acceptance_criteria_list = $5,
+  max_cost_usd = $6,
+  skip_pr = $7,
+  model = $8,
+  ready = $9,
+  updated_at = NOW()
+WHERE id = $1 AND status = 'pending'
+`
+
+type UpdatePendingTaskParams struct {
+	ID                     string   `json:"id"`
+	Title                  string   `json:"title"`
+	Description            string   `json:"description"`
+	DependsOn              []string `json:"depends_on"`
+	AcceptanceCriteriaList []string `json:"acceptance_criteria_list"`
+	MaxCostUsd             *float64 `json:"max_cost_usd"`
+	SkipPr                 bool     `json:"skip_pr"`
+	Model                  *string  `json:"model"`
+	Ready                  bool     `json:"ready"`
+}
+
+func (q *Queries) UpdatePendingTask(ctx context.Context, arg UpdatePendingTaskParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePendingTask,
+		arg.ID,
+		arg.Title,
+		arg.Description,
+		arg.DependsOn,
+		arg.AcceptanceCriteriaList,
+		arg.MaxCostUsd,
+		arg.SkipPr,
+		arg.Model,
+		arg.Ready,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateTaskStatus = `-- name: UpdateTaskStatus :exec
 UPDATE task SET status = $2, updated_at = NOW()
 WHERE id = $1

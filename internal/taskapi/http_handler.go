@@ -57,6 +57,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.GET("/tasks/:id/checks", h.GetTaskChecks)
 	g.DELETE("/tasks/:id/dependency", h.RemoveDependency)
 	g.PUT("/tasks/:id/ready", h.SetReady)
+	g.PATCH("/tasks/:id", h.UpdateTask)
 
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
@@ -274,6 +275,89 @@ func (h *HTTPHandler) GetTask(c echo.Context) error {
 	}
 
 	t, err := h.store.ReadTask(c.Request().Context(), id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// UpdateTask handles PATCH /tasks/:id
+// Updates a task that is still in pending status. Rejects updates if the
+// task has transitioned to any other status.
+func (h *HTTPHandler) UpdateTask(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	var req UpdateTaskRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+
+	ctx := c.Request().Context()
+
+	// Read current task to merge with provided fields
+	existing, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
+	// Build update params by merging request with current values
+	params := task.UpdatePendingTaskParams{
+		Title:              existing.Title,
+		Description:        existing.Description,
+		DependsOn:          existing.DependsOn,
+		AcceptanceCriteria: existing.AcceptanceCriteria,
+		MaxCostUSD:         existing.MaxCostUSD,
+		SkipPR:             existing.SkipPR,
+		Model:              existing.Model,
+		Ready:              existing.Ready,
+	}
+
+	if req.Title != nil {
+		if *req.Title == "" {
+			return c.JSON(http.StatusBadRequest, errorResponse("title required"))
+		}
+		if len(*req.Title) > 150 {
+			return c.JSON(http.StatusBadRequest, errorResponse("title must be 150 characters or less"))
+		}
+		params.Title = *req.Title
+	}
+	if req.Description != nil {
+		params.Description = *req.Description
+	}
+	if req.DependsOn != nil {
+		params.DependsOn = req.DependsOn
+	}
+	if req.AcceptanceCriteria != nil {
+		params.AcceptanceCriteria = req.AcceptanceCriteria
+	}
+	if req.MaxCostUSD != nil {
+		params.MaxCostUSD = *req.MaxCostUSD
+	}
+	if req.SkipPR != nil {
+		params.SkipPR = *req.SkipPR
+	}
+	if req.Model != nil {
+		params.Model = *req.Model
+	}
+	if req.NotReady != nil {
+		params.Ready = !*req.NotReady
+	}
+
+	if params.DependsOn == nil {
+		params.DependsOn = []string{}
+	}
+	if params.AcceptanceCriteria == nil {
+		params.AcceptanceCriteria = []string{}
+	}
+
+	if err := h.store.UpdatePendingTask(ctx, id, params); err != nil {
+		return jsonError(c, err)
+	}
+
+	t, err := h.store.ReadTask(ctx, id)
 	if err != nil {
 		return jsonError(c, err)
 	}
