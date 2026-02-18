@@ -636,7 +636,7 @@
 						size="sm"
 						onclick={handleToggleReady}
 						disabled={togglingReady}
-						class="gap-1.5 bg-orange-600 hover:bg-orange-700 text-white shrink-0"
+						class="gap-1.5 bg-green-600 hover:bg-green-700 text-white shrink-0"
 					>
 						{#if togglingReady}
 							<Loader2 class="w-4 h-4 animate-spin" />
