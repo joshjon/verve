@@ -169,7 +169,7 @@
 						<p class="text-xs text-muted-foreground mt-1 text-right">{title.length}/150</p>
 						<label
 							for="not-ready"
-							class="flex items-start gap-2 cursor-pointer mt-2 mb-1"
+							class="flex items-start gap-2 cursor-pointer mt-0.5"
 						>
 							<input
 								id="not-ready"
