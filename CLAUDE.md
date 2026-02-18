@@ -14,7 +14,6 @@ Key constraint: User source code and secrets never leave their network. We send 
 ## Important Rules
 
 - **Never build binaries to the project root.** Always use `make build` or output to `bin/` (e.g. `go build -o bin/ ./cmd/...`). The `bin/` directory is git-ignored.
-- **Always rebuild UI for Go embed after UI changes.** When any files under `ui/` are modified, run `make ui-build-go` to rebuild the frontend assets into `internal/frontend/dist/` so the Go embedded filesystem stays up to date.
 
 ## Development Commands
 
