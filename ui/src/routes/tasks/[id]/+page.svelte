@@ -8,6 +8,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
 	import { repoStore } from '$lib/stores/repos.svelte';
+	import { taskStore } from '$lib/stores/tasks.svelte';
 	import { marked } from 'marked';
 	import {
 		ArrowLeft,
@@ -30,6 +31,7 @@
 		DollarSign,
 		AlertTriangle,
 		ChevronDown,
+		ChevronRight,
 		ExternalLink,
 		CircleDot,
 		MinusCircle,
@@ -40,7 +42,11 @@
 		Timer,
 		PauseCircle,
 		PlayCircle,
-		RotateCcw
+		RotateCcw,
+		Pencil,
+		Plus,
+		Search,
+		Cpu
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -95,6 +101,18 @@
 	let startOverDescription = $state('');
 	let startOverCriteria = $state('');
 	let removingDep = $state<string | null>(null);
+	let editing = $state(false);
+	let showEditForm = $state(false);
+	let editTitle = $state('');
+	let editDescription = $state('');
+	let editCriteria = $state<string[]>([]);
+	let editDeps = $state<string[]>([]);
+	let editDepSearch = $state('');
+	let editMaxCostUsd = $state<number | undefined>(undefined);
+	let editSkipPr = $state(false);
+	let editModel = $state('');
+	let editNotReady = $state(false);
+	let editShowAdvanced = $state(false);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
@@ -452,6 +470,118 @@
 		}
 	}
 
+	const canEdit = $derived(task?.status === 'pending');
+
+	const editAvailableTasks = $derived(
+		taskStore.tasks.filter(
+			(t) =>
+				t.id !== task?.id &&
+				!['closed', 'failed'].includes(t.status) &&
+				!editDeps.includes(t.id) &&
+				(editDepSearch === '' ||
+					t.id.toLowerCase().includes(editDepSearch.toLowerCase()) ||
+					t.title.toLowerCase().includes(editDepSearch.toLowerCase()) ||
+					t.description.toLowerCase().includes(editDepSearch.toLowerCase()))
+		)
+	);
+
+	const modelOptions = [
+		{ value: '', label: 'Default' },
+		{ value: 'haiku', label: 'Haiku' },
+		{ value: 'sonnet', label: 'Sonnet' },
+		{ value: 'opus', label: 'Opus' }
+	];
+
+	function openEditForm() {
+		if (!task) return;
+		editTitle = task.title;
+		editDescription = task.description;
+		editCriteria = [...(task.acceptance_criteria ?? [])];
+		editDeps = [...(task.depends_on ?? [])];
+		editMaxCostUsd = task.max_cost_usd;
+		editSkipPr = task.skip_pr;
+		editModel = task.model ?? '';
+		editNotReady = !task.ready;
+		editShowAdvanced = !!(task.model || task.max_cost_usd || task.skip_pr);
+		editDepSearch = '';
+		showEditForm = true;
+		showCloseForm = false;
+		showStartOverForm = false;
+	}
+
+	function closeEditForm() {
+		showEditForm = false;
+	}
+
+	function addEditCriterion() {
+		editCriteria = [...editCriteria, ''];
+	}
+
+	function removeEditCriterion(index: number) {
+		editCriteria = editCriteria.filter((_, i) => i !== index);
+	}
+
+	function updateEditCriterion(index: number, value: string) {
+		editCriteria = editCriteria.map((c, i) => (i === index ? value : c));
+	}
+
+	function addEditDep(taskId: string) {
+		editDeps = [...editDeps, taskId];
+		editDepSearch = '';
+	}
+
+	function removeEditDep(taskId: string) {
+		editDeps = editDeps.filter((id) => id !== taskId);
+	}
+
+	async function handleEdit() {
+		if (!task || editing) return;
+		editing = true;
+		try {
+			const updates: Record<string, unknown> = {};
+			if (editTitle !== task.title) updates.title = editTitle;
+			if (editDescription !== task.description) updates.description = editDescription;
+
+			const filteredCriteria = editCriteria.filter((c) => c.trim() !== '');
+			const oldCriteria = task.acceptance_criteria ?? [];
+			if (JSON.stringify(filteredCriteria) !== JSON.stringify(oldCriteria)) {
+				updates.acceptance_criteria = filteredCriteria;
+			}
+
+			const oldDeps = task.depends_on ?? [];
+			if (JSON.stringify(editDeps) !== JSON.stringify(oldDeps)) {
+				updates.depends_on = editDeps;
+			}
+
+			const oldMaxCost = task.max_cost_usd ?? undefined;
+			if (editMaxCostUsd !== oldMaxCost) {
+				updates.max_cost_usd = editMaxCostUsd ?? 0;
+			}
+
+			if (editSkipPr !== task.skip_pr) {
+				updates.skip_pr = editSkipPr;
+			}
+
+			const oldModel = task.model ?? '';
+			if (editModel !== oldModel) {
+				updates.model = editModel;
+			}
+
+			if (editNotReady !== !task.ready) {
+				updates.not_ready = editNotReady;
+			}
+
+			if (Object.keys(updates).length > 0) {
+				task = await client.updateTask(task.id, updates);
+			}
+			showEditForm = false;
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			editing = false;
+		}
+	}
+
 	async function handleToggleReady() {
 		if (!task || togglingReady) return;
 		togglingReady = true;
@@ -584,6 +714,19 @@
 					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
 						<span class="text-muted-foreground/60">Updated</span> {formatDate(task.updated_at)}
 					</span>
+					{#if canEdit}
+						{#if showEditForm}
+							<Button size="sm" variant="ghost" onclick={closeEditForm} class="gap-1">
+								<X class="w-4 h-4" />
+								Cancel Edit
+							</Button>
+						{:else}
+							<Button size="sm" variant="outline" onclick={openEditForm} class="gap-1">
+								<Pencil class="w-4 h-4" />
+								<span class="hidden sm:inline">Edit</span>
+							</Button>
+						{/if}
+					{/if}
 					{#if task.ready && task.status === 'pending'}
 						<Button
 							size="sm"
@@ -736,6 +879,274 @@
 									{:else}
 										<RotateCcw class="w-4 h-4" />
 										Confirm Start Over
+									{/if}
+								</Button>
+							</div>
+						</div>
+					</Card.Content>
+				</Card.Root>
+			{/if}
+
+			<!-- Edit Pending Task Form (full width, above columns) -->
+			{#if showEditForm}
+				<Card.Root class="border-primary/30 bg-primary/5">
+					<Card.Header class="pb-0 gap-0">
+						<Card.Title class="text-base flex items-center gap-2">
+							<Pencil class="w-4 h-4 text-primary" />
+							Edit Task
+						</Card.Title>
+						<p class="text-sm text-muted-foreground mt-1">
+							Update this pending task. Changes are saved without resetting logs or agent data.
+						</p>
+					</Card.Header>
+					<Card.Content>
+						<div class="space-y-5">
+							<div class="space-y-3">
+								<div>
+									<label for="edit-title" class="text-sm font-medium mb-2 flex items-center gap-2">
+										Title
+									</label>
+									<input
+										id="edit-title"
+										type="text"
+										bind:value={editTitle}
+										class="w-full border rounded-lg p-3 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+										placeholder="Task title"
+										disabled={editing}
+										maxlength={150}
+									/>
+									<p class="text-xs text-muted-foreground mt-1 text-right">{editTitle.length}/150</p>
+								</div>
+
+								<div>
+									<label for="edit-description" class="text-sm font-medium mb-2 block">
+										Description
+									</label>
+									<textarea
+										id="edit-description"
+										bind:value={editDescription}
+										class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+										placeholder="Describe what the agent should do..."
+										disabled={editing}
+									></textarea>
+								</div>
+							</div>
+
+							<hr class="border-border" />
+
+							<!-- Acceptance Criteria -->
+							<div>
+								<label class="text-sm font-medium mb-2 flex items-center gap-2">
+									<Target class="w-4 h-4 text-muted-foreground" />
+									Acceptance Criteria
+									<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+								</label>
+								{#if editCriteria.length > 0}
+									<div class="space-y-2 mb-2">
+										{#each editCriteria as criterion, i}
+											<div class="flex items-center gap-2">
+												<span class="text-xs text-muted-foreground font-mono w-5 shrink-0 text-right">{i + 1}.</span>
+												<input
+													type="text"
+													value={criterion}
+													oninput={(e) => updateEditCriterion(i, (e.target as HTMLInputElement).value)}
+													class="flex-1 border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+													placeholder="e.g., All tests pass"
+													disabled={editing}
+												/>
+												<button
+													type="button"
+													class="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded transition-colors shrink-0"
+													onclick={() => removeEditCriterion(i)}
+												>
+													<X class="w-3.5 h-3.5" />
+												</button>
+											</div>
+										{/each}
+									</div>
+								{/if}
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onclick={addEditCriterion}
+									disabled={editing}
+									class="gap-1.5 text-xs"
+								>
+									<Plus class="w-3.5 h-3.5" />
+									Add criterion
+								</Button>
+							</div>
+
+							<hr class="border-border" />
+
+							<!-- Dependencies -->
+							<div>
+								<label for="edit-dep-search" class="text-sm font-medium mb-2 flex items-center gap-2">
+									<Link2 class="w-4 h-4 text-muted-foreground" />
+									Dependencies
+									<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+								</label>
+
+								{#if editDeps.length > 0}
+									<div class="flex flex-wrap gap-1.5 mb-3 max-h-20 overflow-y-auto">
+										{#each editDeps as depId}
+											<Badge variant="secondary" class="gap-1 pl-2 pr-1 py-1 max-w-48">
+												<span class="font-mono text-xs truncate">{depId}</span>
+												<button
+													type="button"
+													class="ml-1 hover:bg-destructive/20 hover:text-destructive rounded p-0.5 transition-colors shrink-0"
+													onclick={() => removeEditDep(depId)}
+												>
+													<X class="w-3 h-3" />
+												</button>
+											</Badge>
+										{/each}
+									</div>
+								{/if}
+
+								<div class="relative">
+									<Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+									<input
+										id="edit-dep-search"
+										type="text"
+										bind:value={editDepSearch}
+										class="w-full border rounded-lg pl-9 pr-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+										placeholder="Search tasks to add as dependency..."
+										disabled={editing}
+										autocomplete="off"
+									/>
+								</div>
+
+								{#if editDepSearch}
+									<div class="mt-2 border rounded-lg max-h-36 overflow-y-auto bg-muted/20">
+										{#if editAvailableTasks.length > 0}
+											{#each editAvailableTasks as t (t.id)}
+												<button
+													type="button"
+													class="w-full text-left px-3 py-2.5 hover:bg-accent cursor-pointer border-b last:border-b-0 transition-colors overflow-hidden"
+													onclick={() => addEditDep(t.id)}
+												>
+													<div class="flex items-center gap-2">
+														<span class="font-mono text-xs text-muted-foreground bg-background px-1.5 py-0.5 rounded shrink-0">
+															{t.id}
+														</span>
+													</div>
+													<div class="text-sm line-clamp-2 mt-1">{t.title || t.description}</div>
+												</button>
+											{/each}
+										{:else}
+											<div class="p-4 text-sm text-muted-foreground text-center">
+												<Search class="w-5 h-5 mx-auto mb-2 opacity-40" />
+												No matching tasks found
+											</div>
+										{/if}
+									</div>
+								{/if}
+							</div>
+
+							<!-- Advanced Options -->
+							<div>
+								<button
+									type="button"
+									class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+									onclick={() => (editShowAdvanced = !editShowAdvanced)}
+								>
+									{#if editShowAdvanced}
+										<ChevronDown class="w-4 h-4" />
+									{:else}
+										<ChevronRight class="w-4 h-4" />
+									{/if}
+									Advanced Options
+								</button>
+
+								{#if editShowAdvanced}
+									<div class="mt-3 space-y-4 pl-1">
+										<div>
+											<label for="edit-model" class="text-sm font-medium mb-2 flex items-center gap-2">
+												<Cpu class="w-4 h-4 text-muted-foreground" />
+												Model
+											</label>
+											<select
+												id="edit-model"
+												bind:value={editModel}
+												class="w-full border rounded-lg p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+												disabled={editing}
+											>
+												{#each modelOptions as option}
+													<option value={option.value}>{option.label}</option>
+												{/each}
+											</select>
+										</div>
+										<div>
+											<label for="edit-max-cost" class="text-sm font-medium mb-2 flex items-center gap-2">
+												<DollarSign class="w-4 h-4 text-muted-foreground" />
+												Max Cost (USD)
+												<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+											</label>
+											<input
+												id="edit-max-cost"
+												type="number"
+												step="0.01"
+												min="0"
+												bind:value={editMaxCostUsd}
+												class="w-full border rounded-lg p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+												placeholder="e.g., 5.00"
+												disabled={editing}
+											/>
+										</div>
+										<label
+											for="edit-skip-pr"
+											class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
+										>
+											<input
+												id="edit-skip-pr"
+												type="checkbox"
+												bind:checked={editSkipPr}
+												class="w-4 h-4 rounded border-input accent-primary"
+												disabled={editing}
+											/>
+											<div class="flex-1">
+												<div class="text-sm font-medium flex items-center gap-1.5">
+													<GitBranch class="w-3.5 h-3.5 text-muted-foreground" />
+													Push to branch only
+												</div>
+												<p class="text-xs text-muted-foreground mt-0.5">
+													Skip PR creation. You can create the PR manually.
+												</p>
+											</div>
+										</label>
+										<label
+											for="edit-not-ready"
+											class="flex items-start gap-2 cursor-pointer"
+										>
+											<input
+												id="edit-not-ready"
+												type="checkbox"
+												bind:checked={editNotReady}
+												class="w-3.5 h-3.5 rounded border-input accent-primary mt-0.5"
+												disabled={editing}
+											/>
+											<div>
+												<span class="text-sm">Mark as not ready</span>
+												<span class="block text-xs text-muted-foreground">Agent will not receive task until marked as ready</span>
+											</div>
+										</label>
+									</div>
+								{/if}
+							</div>
+
+							<div class="flex justify-end gap-2">
+								<Button variant="outline" onclick={closeEditForm} disabled={editing}>
+									Cancel
+								</Button>
+								<Button onclick={handleEdit} disabled={editing || !editTitle.trim()} class="gap-2">
+									{#if editing}
+										<Loader2 class="w-4 h-4 animate-spin" />
+										Saving...
+									{:else}
+										<Check class="w-4 h-4" />
+										Save Changes
 									{/if}
 								</Button>
 							</div>
