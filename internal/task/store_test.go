@@ -19,35 +19,38 @@ type mockRepository struct {
 	consecutiveFailMap map[string]int
 	mu                 sync.Mutex
 
-	createTaskErr          error
-	readTaskErr            error
-	taskExistsResult       bool
-	taskExistsErr          error
-	updateStatusErr        error
-	retryTaskResult        bool
-	retryTaskErr           error
-	manualRetryTaskResult  bool
-	manualRetryTaskErr     error
-	feedbackRetryResult    bool
-	feedbackRetryErr       error
-	claimTaskResult        bool
-	claimTaskErr           error
-	closeTaskErr           error
-	setAgentStatusErr      error
-	setRetryContextErr     error
-	addCostErr             error
-	setConsFailErr         error
-	setCloseReasonErr      error
-	setBranchNameErr       error
-	appendLogsErr          error
-	setPullRequestErr      error
-	hasTasksForRepoResult  bool
-	hasTasksForRepoErr     error
+	createTaskErr                    error
+	readTaskErr                      error
+	taskExistsResult                 bool
+	taskExistsErr                    error
+	updateStatusErr                  error
+	retryTaskResult                  bool
+	retryTaskErr                     error
+	scheduleRetryFromRunningResult   bool
+	scheduleRetryFromRunningErr      error
+	manualRetryTaskResult            bool
+	manualRetryTaskErr               error
+	feedbackRetryResult              bool
+	feedbackRetryErr                 error
+	claimTaskResult                  bool
+	claimTaskErr                     error
+	closeTaskErr                     error
+	setAgentStatusErr                error
+	setRetryContextErr               error
+	addCostErr                       error
+	setConsFailErr                   error
+	setCloseReasonErr                error
+	setBranchNameErr                 error
+	appendLogsErr                    error
+	setPullRequestErr                error
+	hasTasksForRepoResult            bool
+	hasTasksForRepoErr               error
 
 	// Track calls
-	createCalls       int
-	retryTaskCalls    int
-	setConsFails      []int
+	createCalls                      int
+	retryTaskCalls                   int
+	scheduleRetryFromRunningCalls    int
+	setConsFails                     []int
 }
 
 func newMockRepo() *mockRepository {
@@ -262,6 +265,25 @@ func (m *mockRepository) RetryTask(_ context.Context, _ TaskID, _ string) (bool,
 	defer m.mu.Unlock()
 	m.retryTaskCalls++
 	return m.retryTaskResult, m.retryTaskErr
+}
+
+func (m *mockRepository) ScheduleRetryFromRunning(_ context.Context, id TaskID, reason string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.scheduleRetryFromRunningCalls++
+	if m.scheduleRetryFromRunningErr != nil {
+		return false, m.scheduleRetryFromRunningErr
+	}
+	if !m.scheduleRetryFromRunningResult {
+		return false, nil
+	}
+	if t, ok := m.tasks[id.String()]; ok {
+		t.Status = StatusPending
+		t.Attempt++
+		t.RetryReason = reason
+		t.StartedAt = nil
+	}
+	return true, nil
 }
 
 func (m *mockRepository) SetAgentStatus(_ context.Context, _ TaskID, _ string) error {
@@ -921,4 +943,77 @@ func TestStore_RemoveDependency_NotifiesPending(t *testing.T) {
 	default:
 		assert.Fail(t, "expected pending notification after removing dependency")
 	}
+}
+
+func TestStore_ScheduleRetry_Success(t *testing.T) {
+	repo := newMockRepo()
+	repo.scheduleRetryFromRunningResult = true
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusRunning
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusRunning
+
+	err := store.ScheduleRetry(context.Background(), tsk.ID, "rate_limit: Claude max usage exceeded")
+	require.NoError(t, err)
+
+	assert.Equal(t, StatusPending, tsk.Status, "expected task to transition to pending for retry")
+	assert.Equal(t, 1, repo.scheduleRetryFromRunningCalls)
+}
+
+func TestStore_ScheduleRetry_MaxAttempts(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusRunning
+	tsk.Attempt = 5
+	tsk.MaxAttempts = 5
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusRunning
+
+	err := store.ScheduleRetry(context.Background(), tsk.ID, "rate_limit: max usage")
+	require.NoError(t, err)
+
+	assert.Equal(t, StatusFailed, tsk.Status, "expected task to fail when max attempts reached")
+	assert.Equal(t, 0, repo.scheduleRetryFromRunningCalls)
+}
+
+func TestStore_ScheduleRetry_BudgetExceeded(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 5.0, false, "", true)
+	tsk.CostUSD = 6.0
+	tsk.Status = StatusRunning
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusRunning
+
+	err := store.ScheduleRetry(context.Background(), tsk.ID, "rate_limit: max usage")
+	require.NoError(t, err)
+
+	assert.Equal(t, StatusFailed, tsk.Status, "expected task to fail when budget exceeded")
+}
+
+func TestStore_ScheduleRetry_CircuitBreaker(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusRunning
+	tsk.ConsecutiveFailures = 2
+	tsk.RetryReason = "rate_limit: Claude max usage exceeded"
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusRunning
+
+	err := store.ScheduleRetry(context.Background(), tsk.ID, "rate_limit: Claude max usage exceeded")
+	require.NoError(t, err)
+
+	// Circuit breaker should trigger: 3 consecutive same failures
+	assert.Equal(t, StatusFailed, tsk.Status, "expected task to fail due to circuit breaker")
 }

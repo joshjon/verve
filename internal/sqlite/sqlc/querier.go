@@ -40,6 +40,7 @@ type Querier interface {
 	ReadTaskLogs(ctx context.Context, taskID string) ([]*ReadTaskLogsRow, error)
 	ReadTaskStatus(ctx context.Context, id string) (string, error)
 	RetryTask(ctx context.Context, arg RetryTaskParams) (int64, error)
+	ScheduleRetryFromRunning(ctx context.Context, arg ScheduleRetryFromRunningParams) (int64, error)
 	SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) error
 	SetBranchName(ctx context.Context, arg SetBranchNameParams) error
 	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error

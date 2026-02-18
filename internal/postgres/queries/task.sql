@@ -117,6 +117,10 @@ UPDATE task SET
   updated_at = NOW()
 WHERE id = $1 AND status = 'pending';
 
+-- name: ScheduleRetryFromRunning :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = $2, started_at = NULL, updated_at = NOW()
+WHERE id = $1 AND status = 'running';
+
 -- name: StartOverTask :execrows
 UPDATE task SET
   status = 'pending',
