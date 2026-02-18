@@ -610,8 +610,7 @@
 						{:else}
 							<Button size="sm" variant="outline" onclick={openStartOverForm} class="gap-1">
 								<RotateCcw class="w-4 h-4" />
-								<span class="hidden sm:inline">Start Over</span>
-								<span class="sm:hidden">Restart</span>
+								Start Over
 							</Button>
 						{/if}
 					{/if}
