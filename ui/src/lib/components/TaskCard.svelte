@@ -2,7 +2,7 @@
 	import type { Task } from '$lib/models/task';
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
-	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2 } from 'lucide-svelte';
+	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2, PauseCircle } from 'lucide-svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
 
 	let { task }: { task: Task } = $props();
@@ -59,6 +59,15 @@
 			>
 				<RefreshCw class="w-3 h-3" />
 				#{task.attempt}
+			</span>
+		{/if}
+		{#if !task.ready && task.status === 'pending'}
+			<span
+				class="inline-flex items-center gap-0.5 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full border border-orange-500/20"
+				title="Not ready — this task won't be picked up by agents until marked as ready"
+			>
+				<PauseCircle class="w-3 h-3" />
+				Not Ready
 			</span>
 		{/if}
 		{#if task.consecutive_failures >= 2}

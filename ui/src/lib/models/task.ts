@@ -21,6 +21,7 @@ export interface Task {
 	cost_usd: number;
 	max_cost_usd?: number;
 	skip_pr: boolean;
+	ready: boolean;
 	model?: string;
 	branch_name?: string;
 	started_at?: string;

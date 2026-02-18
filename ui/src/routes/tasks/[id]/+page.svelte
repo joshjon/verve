@@ -37,7 +37,9 @@
 		Check,
 		MessageSquare,
 		Send,
-		Timer
+		Timer,
+		PauseCircle,
+		PlayCircle
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -85,6 +87,7 @@
 	let sendingFeedback = $state(false);
 	let showFeedbackForm = $state(false);
 	let feedbackText = $state('');
+	let togglingReady = $state(false);
 	let removingDep = $state<string | null>(null);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
@@ -442,6 +445,18 @@
 		}
 	}
 
+	async function handleToggleReady() {
+		if (!task || togglingReady) return;
+		togglingReady = true;
+		try {
+			task = await client.setReady(task.id, !task.ready);
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			togglingReady = false;
+		}
+	}
+
 	function formatDuration(ms: number): string {
 		const seconds = Math.floor(ms / 1000);
 		if (seconds < 60) return `${seconds}s`;
@@ -531,6 +546,23 @@
 					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
 						<span class="text-muted-foreground/60">Updated</span> {formatDate(task.updated_at)}
 					</span>
+					{#if task.ready && task.status === 'pending'}
+						<Button
+							size="sm"
+							variant="outline"
+							onclick={handleToggleReady}
+							disabled={togglingReady}
+							class="gap-1"
+							title="Mark this task as not ready so agents won't pick it up"
+						>
+							{#if togglingReady}
+								<Loader2 class="w-4 h-4 animate-spin" />
+							{:else}
+								<PauseCircle class="w-4 h-4" />
+							{/if}
+							<span class="hidden sm:inline">Mark Not Ready</span>
+						</Button>
+					{/if}
 					{#if canClose}
 						{#if showCloseForm}
 							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">
@@ -588,6 +620,33 @@
 						</div>
 					</Card.Content>
 				</Card.Root>
+			{/if}
+
+			<!-- Not Ready Banner -->
+			{#if !task.ready && task.status === 'pending'}
+				<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 flex items-center gap-4 flex-wrap">
+					<div class="flex items-center gap-2.5 flex-1 min-w-0">
+						<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
+						<div>
+							<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
+							<p class="text-xs text-muted-foreground mt-0.5">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
+						</div>
+					</div>
+					<Button
+						size="sm"
+						onclick={handleToggleReady}
+						disabled={togglingReady}
+						class="gap-1.5 bg-orange-600 hover:bg-orange-700 text-white shrink-0"
+					>
+						{#if togglingReady}
+							<Loader2 class="w-4 h-4 animate-spin" />
+							Updating...
+						{:else}
+							<PlayCircle class="w-4 h-4" />
+							Mark as Ready
+						{/if}
+					</Button>
+				</div>
 			{/if}
 		</div>
 

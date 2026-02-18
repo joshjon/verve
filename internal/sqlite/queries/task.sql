@@ -1,6 +1,6 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, repo_id, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, model, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO task (id, repo_id, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, model, ready, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = ?;
@@ -12,7 +12,7 @@ SELECT * FROM task ORDER BY created_at DESC;
 SELECT * FROM task WHERE repo_id = ? ORDER BY created_at DESC;
 
 -- name: ListPendingTasks :many
-SELECT * FROM task WHERE status = 'pending' ORDER BY created_at ASC;
+SELECT * FROM task WHERE status = 'pending' AND ready = 1 ORDER BY created_at ASC;
 
 -- name: AppendTaskLogs :exec
 INSERT INTO task_log (task_id, attempt, lines) VALUES (?, ?, ?);
@@ -46,7 +46,7 @@ SELECT status FROM task WHERE id = ?;
 
 -- name: ClaimTask :execrows
 UPDATE task SET status = 'running', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = ? AND status = 'pending';
+WHERE id = ? AND status = 'pending' AND ready = 1;
 
 -- name: HasTasksForRepo :one
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = ?);
@@ -96,4 +96,8 @@ DELETE FROM task_log WHERE task_id = ?;
 
 -- name: SetDependsOn :exec
 UPDATE task SET depends_on = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?;
+
+-- name: SetReady :exec
+UPDATE task SET ready = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?;

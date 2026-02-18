@@ -23,8 +23,26 @@ const MOCK_TASKS = [
 		consecutive_failures: 0,
 		cost_usd: 0,
 		skip_pr: false,
+		ready: true,
 		created_at: '2025-06-01T09:00:00Z',
 		updated_at: '2025-06-01T09:00:00Z'
+	},
+	{
+		id: 'tsk_notready01',
+		repo_id: 'repo_mock01',
+		title: 'Refactor payment processing module',
+		description: 'Break up the monolithic payment handler into smaller services',
+		status: 'pending',
+		logs: [],
+		attempt: 1,
+		max_attempts: 3,
+		acceptance_criteria: ['Payment tests pass', 'No regressions'],
+		consecutive_failures: 0,
+		cost_usd: 0,
+		skip_pr: false,
+		ready: false,
+		created_at: '2025-06-01T08:00:00Z',
+		updated_at: '2025-06-01T08:00:00Z'
 	},
 	{
 		id: 'tsk_running01',
@@ -301,6 +319,44 @@ test.describe('UI Screenshots', () => {
 		await page.screenshot({
 			path: `screenshots/task-retry-pending-${testInfo.project.name}.png`,
 			fullPage: true
+		});
+	});
+
+	test('task detail - not ready', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto(`/tasks/tsk_notready01`);
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/task-not-ready-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('create task dialog', async ({ page }, testInfo) => {
+		// Use a tall viewport so the dialog's max-h-[90vh] doesn't clip content.
+		await page.setViewportSize({ width: 1280, height: 1600 });
+		await setupMockAPI(page);
+		await page.goto('/');
+
+		// Wait for dashboard to load.
+		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
+			timeout: 5000
+		}).catch(() => {});
+		await page.waitForTimeout(1000);
+
+		// Click the "New Task" button to open the dialog.
+		const createButton = page.getByRole('button', { name: /new task/i });
+		await createButton.click();
+
+		// Wait for dialog to appear and settle.
+		await page.waitForTimeout(1000);
+
+		// Screenshot the dialog element directly to capture its full content.
+		const dialog = page.locator('[role="dialog"]');
+		await dialog.screenshot({
+			path: `screenshots/create-task-dialog-${testInfo.project.name}.png`
 		});
 	});
 });

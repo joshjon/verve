@@ -36,6 +36,7 @@ type Task struct {
 	CostUSD             float64   `json:"cost_usd"`
 	MaxCostUSD          float64   `json:"max_cost_usd,omitempty"`
 	SkipPR              bool      `json:"skip_pr"`
+	Ready               bool      `json:"ready"`
 	Model               string     `json:"model,omitempty"`
 	BranchName          string     `json:"branch_name,omitempty"`
 	StartedAt           *time.Time `json:"started_at,omitempty"`
@@ -65,7 +66,7 @@ func (t *Task) ComputeDuration() {
 }
 
 // NewTask creates a new Task with a generated TaskID and pending status.
-func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string) *Task {
+func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string, ready bool) *Task {
 	now := time.Now()
 	if dependsOn == nil {
 		dependsOn = []string{}
@@ -85,6 +86,7 @@ func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []
 		AcceptanceCriteria: acceptanceCriteria,
 		MaxCostUSD:         maxCostUSD,
 		SkipPR:             skipPR,
+		Ready:              ready,
 		Model:              model,
 		CreatedAt:          now,
 		UpdatedAt:          now,

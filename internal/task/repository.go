@@ -53,4 +53,5 @@ type TaskRepository interface {
 	FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) (bool, error)
 	DeleteTaskLogs(ctx context.Context, id TaskID) error
 	RemoveDependency(ctx context.Context, id TaskID, depID string) error
+	SetReady(ctx context.Context, id TaskID, ready bool) error
 }

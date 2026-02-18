@@ -75,6 +75,7 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		MaxCostUsd:            maxCostUSD,
 		SkipPr:                t.SkipPR,
 		Model:                 model,
+		Ready:                 t.Ready,
 		CreatedAt:             pgTimestamptz(t.CreatedAt),
 		UpdatedAt:             pgTimestamptz(t.UpdatedAt),
 	})
@@ -308,6 +309,13 @@ func (r *TaskRepository) RemoveDependency(ctx context.Context, id task.TaskID, d
 	return tagTaskErr(r.db.RemoveDependency(ctx, sqlc.RemoveDependencyParams{
 		ID:          id.String(),
 		ArrayRemove: depID,
+	}))
+}
+
+func (r *TaskRepository) SetReady(ctx context.Context, id task.TaskID, ready bool) error {
+	return tagTaskErr(r.db.SetReady(ctx, sqlc.SetReadyParams{
+		ID:    id.String(),
+		Ready: ready,
 	}))
 }
 
