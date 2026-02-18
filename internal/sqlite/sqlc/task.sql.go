@@ -122,7 +122,7 @@ func (q *Queries) DeleteTaskLogs(ctx context.Context, taskID string) error {
 
 const feedbackRetryTask = `-- name: FeedbackRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = 1,
-  retry_reason = ?, retry_context = NULL, agent_status = NULL,
+  retry_reason = ?, retry_context = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'review'
@@ -478,7 +478,7 @@ func (q *Queries) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
 
 const manualRetryTask = `-- name: ManualRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
-  retry_reason = ?, retry_context = NULL, agent_status = NULL,
+  retry_reason = ?, retry_context = NULL,
   close_reason = NULL, consecutive_failures = 0,
   pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -580,7 +580,7 @@ func (q *Queries) ReadTaskStatus(ctx context.Context, id string) (string, error)
 }
 
 const retryTask = `-- name: RetryTask :execrows
-UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = ?, agent_status = NULL, started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = ?, started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'review'
 `
 

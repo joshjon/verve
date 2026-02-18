@@ -52,7 +52,7 @@ WHERE id = ? AND status = 'pending' AND ready = 1;
 SELECT EXISTS(SELECT 1 FROM task WHERE repo_id = ?);
 
 -- name: RetryTask :execrows
-UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = ?, agent_status = NULL, started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = ?, started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'review';
 
 -- name: SetAgentStatus :exec
@@ -78,7 +78,7 @@ SELECT * FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_nu
 
 -- name: ManualRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
-  retry_reason = ?, retry_context = NULL, agent_status = NULL,
+  retry_reason = ?, retry_context = NULL,
   close_reason = NULL, consecutive_failures = 0,
   pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -86,7 +86,7 @@ WHERE id = ? AND status = 'failed';
 
 -- name: FeedbackRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = 1,
-  retry_reason = ?, retry_context = NULL, agent_status = NULL,
+  retry_reason = ?, retry_context = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'review';
