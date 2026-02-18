@@ -85,7 +85,8 @@ UPDATE task SET status = 'pending', attempt = attempt + 1,
 WHERE id = ? AND status = 'failed';
 
 -- name: FeedbackRetryTask :execrows
-UPDATE task SET status = 'pending', attempt = 1,
+UPDATE task SET status = 'pending', attempt = attempt + 1,
+  max_attempts = max_attempts + 1,
   retry_reason = ?, retry_context = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')

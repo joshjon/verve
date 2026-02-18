@@ -327,7 +327,8 @@ func (m *mockRepository) FeedbackRetryTask(_ context.Context, id TaskID, _ strin
 	if m.feedbackRetryResult {
 		m.mu.Lock()
 		if t, ok := m.tasks[id.String()]; ok {
-			t.Attempt = 1
+			t.Attempt++
+			t.MaxAttempts++
 			t.ConsecutiveFailures = 0
 			t.RetryContext = ""
 		}
@@ -598,7 +599,7 @@ func TestStore_FeedbackRetryTask_IgnoresMaxAttempts(t *testing.T) {
 	assert.NotEqual(t, StatusFailed, tsk.Status, "feedback should not fail task at max attempts")
 }
 
-func TestStore_FeedbackRetryTask_ResetsAttemptCounter(t *testing.T) {
+func TestStore_FeedbackRetryTask_IncrementsAttemptAndMaxAttempts(t *testing.T) {
 	repo := newMockRepo()
 	repo.feedbackRetryResult = true
 	broker := NewBroker(nil)
@@ -615,10 +616,11 @@ func TestStore_FeedbackRetryTask_ResetsAttemptCounter(t *testing.T) {
 	err := store.FeedbackRetryTask(context.Background(), tsk.ID, "please update the error messages")
 	require.NoError(t, err)
 
-	// After feedback retry, the attempt counter should be reset to 1.
-	// This gives subsequent automated retries (e.g. CI failures caused by
-	// the requested changes) a fresh retry budget.
-	assert.Equal(t, 1, tsk.Attempt, "attempt should be reset to 1 after feedback retry")
+	// After feedback retry, both attempt and max_attempts are incremented so
+	// the new attempt gets a unique number for log tabbing while the retry
+	// budget remains unchanged.
+	assert.Equal(t, 5, tsk.Attempt, "attempt should be incremented after feedback retry")
+	assert.Equal(t, 6, tsk.MaxAttempts, "max_attempts should be incremented to preserve retry budget")
 	assert.Equal(t, 0, tsk.ConsecutiveFailures, "consecutive failures should be reset after feedback retry")
 }
 
@@ -644,11 +646,11 @@ func TestStore_FeedbackRetryTask_ClearsRetryContext(t *testing.T) {
 }
 
 func TestStore_FeedbackRetryTask_ThenAutomatedRetryGetsFullBudget(t *testing.T) {
-	// Scenario from the feedback:
+	// Scenario:
 	// 1. Task has used several retry attempts (attempt=4, maxAttempts=5)
-	// 2. Human requests changes (feedback retry) → attempt resets to 1
+	// 2. Human requests changes (feedback retry) → attempt=5, maxAttempts=6
 	// 3. Agent updates code → CI fails → automated retry should succeed
-	//    because the attempt counter was reset
+	//    because max_attempts was also incremented
 	repo := newMockRepo()
 	repo.feedbackRetryResult = true
 	repo.retryTaskResult = true
@@ -662,20 +664,21 @@ func TestStore_FeedbackRetryTask_ThenAutomatedRetryGetsFullBudget(t *testing.T) 
 	repo.tasks[tsk.ID.String()] = tsk
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
-	// Step 1: Feedback retry resets the attempt counter
+	// Step 1: Feedback retry increments both attempt and max_attempts
 	err := store.FeedbackRetryTask(context.Background(), tsk.ID, "update error handling")
 	require.NoError(t, err)
-	assert.Equal(t, 1, tsk.Attempt, "attempt should be reset after feedback")
+	assert.Equal(t, 5, tsk.Attempt, "attempt should be incremented after feedback")
+	assert.Equal(t, 6, tsk.MaxAttempts, "max_attempts should be incremented to preserve budget")
 
-	// Simulate: agent runs again and ends up in review with attempt=1
+	// Simulate: agent runs again and ends up in review with attempt=5
 	tsk.Status = StatusReview
 
 	// Step 2: Automated retry after CI failure should NOT be blocked
-	// because the attempt counter was reset to 1 (well within maxAttempts=5)
+	// because max_attempts was also incremented (attempt=5, maxAttempts=6 → room for retry)
 	err = store.RetryTask(context.Background(), tsk.ID, "ci_failure:tests", "CI tests failed")
 	require.NoError(t, err)
 	assert.NotEqual(t, StatusFailed, tsk.Status,
-		"automated retry should succeed after feedback reset the attempt counter")
+		"automated retry should succeed after feedback incremented the budget")
 }
 
 func TestStore_ClaimPendingTask_NoPending(t *testing.T) {
