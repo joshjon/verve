@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -310,7 +311,8 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 
 	// Log callback - called from Docker log streaming goroutine
 	onLog := func(line string) {
-		taskLogger.Debug("agent output", "line", line)
+		// Print colorized agent output directly to terminal for human readability
+		WriteColorizedLine(os.Stderr, task.ID, line)
 		streamer.AddLine(line)
 
 		// Strip markdown formatting (e.g. **bold**) that the agent
