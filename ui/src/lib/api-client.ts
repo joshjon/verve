@@ -99,6 +99,31 @@ export class VerveClient {
 
 	// --- Task APIs (global by ID) ---
 
+	async updateTask(
+		id: string,
+		updates: {
+			title?: string;
+			description?: string;
+			depends_on?: string[];
+			acceptance_criteria?: string[];
+			max_cost_usd?: number;
+			skip_pr?: boolean;
+			model?: string;
+			not_ready?: boolean;
+		}
+	): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(updates)
+		});
+		if (!res.ok) {
+			const body = await res.json().catch(() => null);
+			throw new Error(body?.error || 'Failed to update task');
+		}
+		return res.json();
+	}
+
 	async getTask(id: string): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}`);
 		if (!res.ok) {
