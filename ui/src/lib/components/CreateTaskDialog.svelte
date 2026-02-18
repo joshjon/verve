@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
-	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu, PauseCircle } from 'lucide-svelte';
+	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -168,6 +168,23 @@
 						/>
 						<p class="text-xs text-muted-foreground mt-1 text-right">{title.length}/150</p>
 					</div>
+
+					<label
+						for="not-ready"
+						class="flex items-start gap-2.5 cursor-pointer text-sm"
+					>
+						<input
+							id="not-ready"
+							type="checkbox"
+							bind:checked={notReady}
+							class="mt-1 h-3.5 w-3.5 rounded border-input accent-orange-500"
+							disabled={loading}
+						/>
+						<div>
+							<span class="select-none">Mark as not ready</span>
+							<p class="text-xs text-muted-foreground select-none">Won't run until marked as ready</p>
+						</div>
+					</label>
 
 					<div>
 						<label for="description" class="text-sm font-medium mb-2 flex items-center gap-2">
@@ -382,22 +399,7 @@
 					</div>
 				{/if}
 			</div>
-			<Dialog.Footer class="flex-col gap-3 sm:flex-col">
-				<label
-					for="not-ready"
-					class="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors self-start"
-					title="Add this task for tracking only. It won't be picked up by agents until marked as ready."
-				>
-					<input
-						id="not-ready"
-						type="checkbox"
-						bind:checked={notReady}
-						class="w-3.5 h-3.5 rounded border-input accent-orange-500"
-						disabled={loading}
-					/>
-					<PauseCircle class="w-3 h-3 text-orange-500" />
-					<span>Not ready — track only, won't run until marked ready</span>
-				</label>
+			<Dialog.Footer>
 				<div class="flex justify-end gap-2 w-full">
 					<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
 						Cancel
