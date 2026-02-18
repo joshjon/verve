@@ -14,6 +14,7 @@ Key constraint: User source code and secrets never leave their network. We send 
 ## Important Rules
 
 - **Never build binaries to the project root.** Always use `make build` or output to `bin/` (e.g. `go build -o bin/ ./cmd/...`). The `bin/` directory is git-ignored.
+- **Always rebuild UI for Go embed after UI changes.** When any files under `ui/` are modified, run `make ui-build-go` to rebuild the frontend assets into `internal/frontend/dist/` so the Go embedded filesystem stays up to date.
 
 ## Development Commands
 
@@ -23,6 +24,12 @@ make build                        # Build server and worker binaries
 make build-server                 # Build API server only
 make build-worker                 # Build worker only
 make build-agent                  # Build agent Docker image
+
+# UI
+make ui-install                   # Install UI dependencies (pnpm)
+make ui-dev                       # Start UI dev server
+make ui-build                     # Build UI for standalone use
+make ui-build-go                  # Build UI into internal/frontend/dist for Go embed
 
 # Generate
 make generate                     # Generate sqlc code for postgres and sqlite
