@@ -523,12 +523,6 @@
 					<StatusIcon class="w-3 h-3" />
 					{currentStatusConfig?.label}
 				</Badge>
-				{#if !task.ready && task.status === 'pending'}
-					<Badge class="bg-orange-500/20 text-orange-400 gap-1">
-						<PauseCircle class="w-3 h-3" />
-						Not Ready
-					</Badge>
-				{/if}
 				{#if task.duration_ms}
 					<span class="text-xs text-muted-foreground flex items-center gap-1.5">
 						<Timer class="w-3.5 h-3.5" />
@@ -552,23 +546,21 @@
 					<span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
 						<span class="text-muted-foreground/60">Updated</span> {formatDate(task.updated_at)}
 					</span>
-					{#if task.status === 'pending'}
+					{#if task.ready && task.status === 'pending'}
 						<Button
 							size="sm"
 							variant="outline"
 							onclick={handleToggleReady}
 							disabled={togglingReady}
-							class="gap-1 {!task.ready ? 'border-orange-500/40 text-orange-600 dark:text-orange-400 hover:bg-orange-500/10' : ''}"
-							title={task.ready ? 'Mark this task as not ready so agents won\'t pick it up' : 'Mark this task as ready so agents can start working on it'}
+							class="gap-1"
+							title="Mark this task as not ready so agents won't pick it up"
 						>
 							{#if togglingReady}
 								<Loader2 class="w-4 h-4 animate-spin" />
-							{:else if task.ready}
-								<PauseCircle class="w-4 h-4" />
 							{:else}
-								<PlayCircle class="w-4 h-4" />
+								<PauseCircle class="w-4 h-4" />
 							{/if}
-							<span class="hidden sm:inline">{task.ready ? 'Mark Not Ready' : 'Mark Ready'}</span>
+							<span class="hidden sm:inline">Mark Not Ready</span>
 						</Button>
 					{/if}
 					{#if canClose}
@@ -628,6 +620,33 @@
 						</div>
 					</Card.Content>
 				</Card.Root>
+			{/if}
+
+			<!-- Not Ready Banner -->
+			{#if !task.ready && task.status === 'pending'}
+				<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 flex items-center gap-4 flex-wrap">
+					<div class="flex items-center gap-2.5 flex-1 min-w-0">
+						<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
+						<div>
+							<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
+							<p class="text-xs text-muted-foreground mt-0.5">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
+						</div>
+					</div>
+					<Button
+						size="sm"
+						onclick={handleToggleReady}
+						disabled={togglingReady}
+						class="gap-1.5 bg-orange-600 hover:bg-orange-700 text-white shrink-0"
+					>
+						{#if togglingReady}
+							<Loader2 class="w-4 h-4 animate-spin" />
+							Updating...
+						{:else}
+							<PlayCircle class="w-4 h-4" />
+							Mark as Ready
+						{/if}
+					</Button>
+				</div>
 			{/if}
 		</div>
 
