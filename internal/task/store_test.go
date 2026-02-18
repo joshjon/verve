@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/joshjon/kit/tx"
 	"github.com/stretchr/testify/assert"
@@ -448,6 +449,14 @@ func (m *mockRepository) BeginTxFunc(ctx context.Context, fn func(context.Contex
 
 func (m *mockRepository) WithTx(_ tx.Tx) Repository {
 	return m
+}
+
+func (m *mockRepository) Heartbeat(_ context.Context, _ TaskID) error {
+	return nil
+}
+
+func (m *mockRepository) ListStaleTasks(_ context.Context, _ time.Time) ([]*Task, error) {
+	return nil, nil
 }
 
 // --- Store tests ---

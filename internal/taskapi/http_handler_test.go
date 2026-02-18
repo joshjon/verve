@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/joshjon/kit/tx"
 	"github.com/labstack/echo/v4"
@@ -370,6 +371,14 @@ func (m *mockTaskRepo) BeginTxFunc(ctx context.Context, fn func(context.Context,
 
 func (m *mockTaskRepo) WithTx(_ tx.Tx) task.Repository {
 	return m
+}
+
+func (m *mockTaskRepo) Heartbeat(_ context.Context, _ task.TaskID) error {
+	return nil
+}
+
+func (m *mockTaskRepo) ListStaleTasks(_ context.Context, _ time.Time) ([]*task.Task, error) {
+	return nil, nil
 }
 
 // --- Mock repo repository ---
