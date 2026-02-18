@@ -536,6 +536,29 @@ test.describe('UI Screenshots', () => {
 		});
 	});
 
+	test('edit task dialog', async ({ page }, testInfo) => {
+		// Use a tall viewport so the dialog's max-h-[90vh] doesn't clip content.
+		await page.setViewportSize({ width: 1280, height: 1600 });
+		await setupMockAPI(page);
+		await page.goto('/tasks/tsk_pending01');
+
+		// Wait for task detail to load.
+		await page.waitForTimeout(2000);
+
+		// Click the "Edit" button to open the dialog.
+		const editButton = page.getByRole('button', { name: /edit/i });
+		await editButton.click();
+
+		// Wait for dialog to appear and settle.
+		await page.waitForTimeout(1000);
+
+		// Screenshot the dialog element directly to capture its full content.
+		const dialog = page.locator('[role="dialog"]');
+		await dialog.screenshot({
+			path: `screenshots/edit-task-dialog-${testInfo.project.name}.png`
+		});
+	});
+
 	test('create task dialog', async ({ page }, testInfo) => {
 		// Use a tall viewport so the dialog's max-h-[90vh] doesn't clip content.
 		await page.setViewportSize({ width: 1280, height: 1600 });
