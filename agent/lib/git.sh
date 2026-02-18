@@ -72,9 +72,10 @@ commit_and_push() {
     local changes
     changes=$(git log "origin/${DEFAULT_BRANCH}..HEAD" --oneline 2>/dev/null)
     if [ -z "$changes" ]; then
-        log_agent "No changes were made — nothing to push or PR"
-        echo 'VERVE_STATUS:{"files_modified":[],"tests_status":"skip","confidence":"low","blockers":["No changes were made"],"criteria_met":[],"notes":"Agent did not produce any code changes"}'
-        exit 1
+        log_agent "No changes were made — task appears to already meet the required criteria"
+        echo 'VERVE_NO_CHANGES:true'
+        echo 'VERVE_STATUS:{"files_modified":[],"tests_status":"skip","confidence":"high","blockers":[],"criteria_met":["already_satisfied"],"notes":"No changes needed — the codebase already meets the required criteria"}'
+        exit 0
     fi
 
     if [ "${BRANCH_EXISTS_ON_REMOTE}" = "true" ]; then

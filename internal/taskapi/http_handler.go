@@ -511,6 +511,11 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 				return jsonError(c, err)
 			}
 		} else {
+			if req.NoChanges {
+				if err := h.store.SetCloseReason(ctx, id, "No changes needed — the codebase already meets the required criteria"); err != nil {
+					return jsonError(c, err)
+				}
+			}
 			if err := h.store.UpdateTaskStatus(ctx, id, task.StatusClosed); err != nil {
 				return jsonError(c, err)
 			}

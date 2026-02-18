@@ -306,6 +306,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	var agentStatus string
 	var costUSD float64
 	var prereqFailed string
+	var noChanges bool
 	var markerMu sync.Mutex
 
 	// Log callback - called from Docker log streaming goroutine
@@ -354,6 +355,14 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 			agentStatus = statusJSON
 			markerMu.Unlock()
 			taskLogger.Info("captured agent status")
+		}
+
+		// Parse no-changes marker
+		if strings.HasPrefix(cleanLine, "VERVE_NO_CHANGES:") {
+			markerMu.Lock()
+			noChanges = true
+			markerMu.Unlock()
+			taskLogger.Info("agent reported no changes needed")
 		}
 
 		// Parse prereq failure marker
@@ -411,23 +420,28 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	capturedAgentStatus := agentStatus
 	capturedCostUSD := costUSD
 	capturedPrereqFailed := prereqFailed
+	capturedNoChanges := noChanges
 	markerMu.Unlock()
 
 	// Report completion with PR info, agent status, and cost
 	switch {
 	case result.Error != nil:
 		taskLogger.Error("task failed", "error", result.Error)
-		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
+		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false)
 	case result.Success:
-		taskLogger.Info("task completed successfully")
-		_ = w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "")
+		if capturedNoChanges {
+			taskLogger.Info("task completed — no changes needed")
+		} else {
+			taskLogger.Info("task completed successfully")
+		}
+		_ = w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "", capturedNoChanges)
 	default:
 		errMsg := fmt.Sprintf("exit code %d", result.ExitCode)
 		if capturedPrereqFailed != "" {
 			errMsg = "prerequisite check failed"
 		}
 		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed)
+		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false)
 	}
 }
 
@@ -452,7 +466,7 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs 
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg, prURL string, prNumber int, branchName, agentStatus string, costUSD float64, prereqFailed string) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg, prURL string, prNumber int, branchName, agentStatus string, costUSD float64, prereqFailed string, noChanges bool) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
@@ -472,6 +486,9 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	}
 	if prereqFailed != "" {
 		payload["prereq_failed"] = prereqFailed
+	}
+	if noChanges {
+		payload["no_changes"] = true
 	}
 	body, _ := json.Marshal(payload)
 
