@@ -603,7 +603,7 @@ func TestStore_FeedbackRetryTask_ResetsAttemptCounter(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Attempt = 4
 	tsk.MaxAttempts = 5
 	tsk.Status = StatusReview
@@ -633,7 +633,7 @@ func TestStore_FeedbackRetryTask_ThenAutomatedRetryGetsFullBudget(t *testing.T) 
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Attempt = 4
 	tsk.MaxAttempts = 5
 	tsk.Status = StatusReview
