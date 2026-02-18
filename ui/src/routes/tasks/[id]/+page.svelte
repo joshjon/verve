@@ -1235,7 +1235,7 @@
 										class="px-3 py-1 text-xs font-medium rounded-md transition-all {activeAttemptTab === num ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'}"
 										onclick={() => switchAttemptTab(num)}
 									>
-										Attempt {num}
+										Run {num}
 										{#if task.status === 'running' && num === task.attempt}
 											<span class="inline-flex ml-1 h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
 										{/if}
