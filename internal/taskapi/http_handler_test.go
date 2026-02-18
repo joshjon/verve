@@ -1094,6 +1094,27 @@ func TestRemoveDependency_InvalidTaskID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+func TestCompleteTask_SuccessNoChanges_ClosedWithReason(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":true,"no_changes":true}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusClosed, tsk.Status, "expected status closed (no changes needed)")
+	assert.Contains(t, tsk.CloseReason, "No changes needed", "expected close reason to mention no changes")
+}
+
 func TestRemoveDependency_EmptyDependsOn(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
