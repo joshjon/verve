@@ -101,3 +101,16 @@ WHERE id = ?;
 -- name: SetReady :exec
 UPDATE task SET ready = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?;
+
+-- name: UpdatePendingTask :execrows
+UPDATE task SET
+  title = ?,
+  description = ?,
+  depends_on = ?,
+  acceptance_criteria_list = ?,
+  max_cost_usd = ?,
+  skip_pr = ?,
+  model = ?,
+  ready = ?,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'pending';

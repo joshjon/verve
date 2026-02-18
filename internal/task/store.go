@@ -249,6 +249,38 @@ func (s *Store) SetReady(ctx context.Context, id TaskID, ready bool) error {
 	return nil
 }
 
+// UpdatePendingTask updates a pending task's editable fields. If the task is no
+// longer in pending status, the update is rejected with a conflict error.
+func (s *Store) UpdatePendingTask(ctx context.Context, id TaskID, params UpdatePendingTaskParams) error {
+	// Validate all dependencies exist
+	for _, depID := range params.DependsOn {
+		taskID, err := ParseTaskID(depID)
+		if err != nil {
+			return fmt.Errorf("invalid dependency ID %q: %w", depID, err)
+		}
+		exists, err := s.repo.TaskExists(ctx, taskID)
+		if err != nil {
+			return fmt.Errorf("check dependency %q: %w", depID, err)
+		}
+		if !exists {
+			return fmt.Errorf("dependency task not found: %s", depID)
+		}
+	}
+
+	ok, err := s.repo.UpdatePendingTask(ctx, id, params)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrTaskNotPending
+	}
+	if params.Ready {
+		s.notifyPending()
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // ClaimPendingTask finds a pending task with all dependencies met and claims it
 // by setting its status to running. When repoIDs is non-empty, only tasks
 // belonging to those repos are considered. The read-check-claim flow is wrapped

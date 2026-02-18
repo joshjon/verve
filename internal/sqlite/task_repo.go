@@ -353,6 +353,37 @@ func (r *TaskRepository) SetReady(ctx context.Context, id task.TaskID, ready boo
 	}))
 }
 
+func (r *TaskRepository) UpdatePendingTask(ctx context.Context, id task.TaskID, params task.UpdatePendingTaskParams) (bool, error) {
+	var maxCostUSD *float64
+	if params.MaxCostUSD > 0 {
+		maxCostUSD = &params.MaxCostUSD
+	}
+	var skipPR int64
+	if params.SkipPR {
+		skipPR = 1
+	}
+	var ready int64
+	if params.Ready {
+		ready = 1
+	}
+	var model *string
+	if params.Model != "" {
+		model = &params.Model
+	}
+	rows, err := r.db.UpdatePendingTask(ctx, sqlc.UpdatePendingTaskParams{
+		Title:                  params.Title,
+		Description:            params.Description,
+		DependsOn:              marshalJSONStrings(params.DependsOn),
+		AcceptanceCriteriaList: marshalJSONStrings(params.AcceptanceCriteria),
+		MaxCostUsd:             maxCostUSD,
+		SkipPr:                 skipPR,
+		Model:                  model,
+		Ready:                  ready,
+		ID:                     id.String(),
+	})
+	return rows > 0, tagTaskErr(err)
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {

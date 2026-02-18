@@ -65,6 +65,19 @@ func (t *Task) ComputeDuration() {
 	t.DurationMs = &ms
 }
 
+// UpdatePendingTaskParams holds the fields that can be updated on a pending task.
+// All fields are required — the caller should merge with current values before calling.
+type UpdatePendingTaskParams struct {
+	Title              string
+	Description        string
+	DependsOn          []string
+	AcceptanceCriteria []string
+	MaxCostUSD         float64
+	SkipPR             bool
+	Model              string
+	Ready              bool
+}
+
 // NewTask creates a new Task with a generated TaskID and pending status.
 func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string, ready bool) *Task {
 	now := time.Now()

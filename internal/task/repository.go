@@ -57,4 +57,7 @@ type TaskRepository interface {
 	DeleteTaskLogs(ctx context.Context, id TaskID) error
 	RemoveDependency(ctx context.Context, id TaskID, depID string) error
 	SetReady(ctx context.Context, id TaskID, ready bool) error
+	// UpdatePendingTask atomically updates a pending task's editable fields.
+	// Returns false if the task was not in pending status.
+	UpdatePendingTask(ctx context.Context, id TaskID, params UpdatePendingTaskParams) (bool, error)
 }
