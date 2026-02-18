@@ -299,30 +299,6 @@
 					</div>
 				</div>
 
-				<hr class="border-border" />
-
-				<label
-					for="not-ready"
-					class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors {notReady ? 'border-orange-500/40 bg-orange-500/5' : ''}"
-				>
-					<input
-						id="not-ready"
-						type="checkbox"
-						bind:checked={notReady}
-						class="w-4 h-4 rounded border-input accent-primary"
-						disabled={loading}
-					/>
-					<div class="flex-1">
-						<div class="text-sm font-medium flex items-center gap-1.5">
-							<PauseCircle class="w-3.5 h-3.5 text-orange-500" />
-							Not ready
-						</div>
-						<p class="text-xs text-muted-foreground mt-0.5">
-							Add this task for tracking only. It won't be picked up by agents until marked as ready.
-						</p>
-					</div>
-				</label>
-
 				<div>
 					<button
 						type="button"
@@ -406,19 +382,36 @@
 					</div>
 				{/if}
 			</div>
-			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
-					Cancel
-				</Button>
-				<Button type="submit" disabled={loading || !title.trim()} class="gap-2">
-					{#if loading}
-						<Loader2 class="w-4 h-4 animate-spin" />
-						Creating...
-					{:else}
-						<Sparkles class="w-4 h-4" />
-						Create Task
-					{/if}
-				</Button>
+			<Dialog.Footer class="flex-col gap-3 sm:flex-col">
+				<label
+					for="not-ready"
+					class="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors self-start"
+					title="Add this task for tracking only. It won't be picked up by agents until marked as ready."
+				>
+					<input
+						id="not-ready"
+						type="checkbox"
+						bind:checked={notReady}
+						class="w-3.5 h-3.5 rounded border-input accent-orange-500"
+						disabled={loading}
+					/>
+					<PauseCircle class="w-3 h-3 text-orange-500" />
+					<span>Not ready — track only, won't run until marked ready</span>
+				</label>
+				<div class="flex justify-end gap-2 w-full">
+					<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
+						Cancel
+					</Button>
+					<Button type="submit" disabled={loading || !title.trim()} class="gap-2">
+						{#if loading}
+							<Loader2 class="w-4 h-4 animate-spin" />
+							Creating...
+						{:else}
+							<Sparkles class="w-4 h-4" />
+							Create Task
+						{/if}
+					</Button>
+				</div>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>

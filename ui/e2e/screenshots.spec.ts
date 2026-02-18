@@ -335,6 +335,8 @@ test.describe('UI Screenshots', () => {
 	});
 
 	test('create task dialog', async ({ page }, testInfo) => {
+		// Use a tall viewport so the dialog's max-h-[90vh] doesn't clip content.
+		await page.setViewportSize({ width: 1280, height: 1600 });
 		await setupMockAPI(page);
 		await page.goto('/');
 
@@ -351,9 +353,10 @@ test.describe('UI Screenshots', () => {
 		// Wait for dialog to appear and settle.
 		await page.waitForTimeout(1000);
 
-		await page.screenshot({
-			path: `screenshots/create-task-dialog-${testInfo.project.name}.png`,
-			fullPage: true
+		// Screenshot the dialog element directly to capture its full content.
+		const dialog = page.locator('[role="dialog"]');
+		await dialog.screenshot({
+			path: `screenshots/create-task-dialog-${testInfo.project.name}.png`
 		});
 	});
 });
