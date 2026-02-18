@@ -87,7 +87,7 @@ func (s *Store) ConfirmEpic(ctx context.Context, id EpicID, notReady bool) error
 
 	// Map temp IDs to real task IDs
 	tempToReal := make(map[string]string)
-	var taskIDs []string
+	taskIDs := make([]string, 0, len(e.ProposedTasks))
 
 	// Create tasks in dependency order
 	for _, pt := range e.ProposedTasks {

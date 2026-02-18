@@ -82,7 +82,6 @@
 						id="epic-title"
 						type="text"
 						bind:value={title}
-						autofocus
 						maxlength={200}
 						class="w-full border rounded-lg p-3 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
 						placeholder="e.g., Implement user authentication system"

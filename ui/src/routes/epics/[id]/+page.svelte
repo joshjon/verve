@@ -61,7 +61,12 @@
 		loading = true;
 		error = null;
 		try {
-			epic = await client.getEpic(epicId);
+			const id = epicId;
+			if (!id) {
+				error = 'Epic ID is required';
+				return;
+			}
+			epic = await client.getEpic(id);
 		} catch (err) {
 			error = (err as Error).message;
 		} finally {
@@ -354,7 +359,7 @@
 												placeholder="Task description"
 											></textarea>
 											<div>
-												<label class="text-xs font-medium text-muted-foreground mb-1 block">Acceptance Criteria</label>
+												<span class="text-xs font-medium text-muted-foreground mb-1 block">Acceptance Criteria</span>
 												{#each editCriteria as criterion, ci}
 													<div class="flex items-center gap-2 mb-1">
 														<input
