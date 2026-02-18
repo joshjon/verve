@@ -99,5 +99,5 @@ func ColorizeLogLine(line string) string {
 // WriteColorizedLine writes a colorized log line to the writer with a newline.
 func WriteColorizedLine(w io.Writer, taskID, line string) {
 	colored := ColorizeLogLine(line)
-	fmt.Fprintf(w, "%s%s%s %s\n", ansiDim, taskID, ansiReset, colored)
+	_, _ = fmt.Fprintf(w, "%s%s%s %s\n", ansiDim, taskID, ansiReset, colored)
 }
