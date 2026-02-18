@@ -55,7 +55,7 @@
 
 	function colorizeLogs(html: string): string {
 		// Split on HTML tags so we only colorize text nodes, not tag attributes
-		return html.replace(/([^<]+)|(<[^>]*>)/g, (match, text, tag) => {
+		let result = html.replace(/([^<]+)|(<[^>]*>)/g, (match, text, tag) => {
 			if (tag) return tag;
 			return text
 				// Bracketed prefixes: [agent], [error], [info], [warn], [system], etc.
@@ -71,6 +71,15 @@
 				// Quoted strings
 				.replace(/("|')(.*?)(\1)/g, '<span class=log-str>$1$2$3</span>');
 		});
+
+		// Highlight [claude] lines: wrap entire lines containing the [claude] prefix
+		// with a distinct visual treatment so they stand out from other log output.
+		result = result.replace(
+			/^(.*<span class=log-bracket>\[claude\]<\/span>.*)$/gm,
+			'<span class=log-claude-line>$1</span>'
+		);
+
+		return result;
 	}
 
 	// Configure marked for safe rendering
@@ -1826,6 +1835,18 @@
 	}
 	:global(.log-str) {
 		color: #a5d6ff;
+	}
+	:global(.log-claude-line) {
+		display: inline-block;
+		width: 100%;
+		background: rgba(245, 166, 35, 0.07);
+		border-left: 2px solid #e8a33d;
+		padding-left: 8px;
+		margin-left: -8px;
+	}
+	:global(.log-claude-line .log-bracket) {
+		color: #e8a33d;
+		font-weight: 600;
 	}
 </style>
 
