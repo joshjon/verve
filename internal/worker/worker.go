@@ -307,6 +307,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	var costUSD float64
 	var prereqFailed string
 	var noChanges bool
+	var rateLimited bool
 	var markerMu sync.Mutex
 
 	// Log callback - called from Docker log streaming goroutine
@@ -385,6 +386,14 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 				taskLogger.Info("captured cost", "cost_usd", cost)
 			}
 		}
+
+		// Detect Claude rate limit or session max usage errors
+		if isRateLimitError(line) {
+			markerMu.Lock()
+			rateLimited = true
+			markerMu.Unlock()
+			taskLogger.Warn("detected Claude rate limit or max usage error")
+		}
 	}
 
 	// Create agent config from worker config + server-provided credentials
@@ -429,27 +438,28 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	capturedCostUSD := costUSD
 	capturedPrereqFailed := prereqFailed
 	capturedNoChanges := noChanges
+	capturedRateLimited := rateLimited
 	markerMu.Unlock()
 
 	// Report completion with PR info, agent status, and cost
 	switch {
 	case result.Error != nil:
 		taskLogger.Error("task failed", "error", result.Error)
-		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false)
+		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false, capturedRateLimited)
 	case result.Success:
 		if capturedNoChanges {
 			taskLogger.Info("task completed — no changes needed")
 		} else {
 			taskLogger.Info("task completed successfully")
 		}
-		_ = w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "", capturedNoChanges)
+		_ = w.completeTask(ctx, task.ID, true, "", capturedPRURL, capturedPRNumber, capturedBranchName, capturedAgentStatus, capturedCostUSD, "", capturedNoChanges, false)
 	default:
 		errMsg := fmt.Sprintf("exit code %d", result.ExitCode)
 		if capturedPrereqFailed != "" {
 			errMsg = "prerequisite check failed"
 		}
 		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false)
+		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false, capturedRateLimited)
 	}
 }
 
@@ -506,7 +516,7 @@ func (w *Worker) sendHeartbeat(ctx context.Context, taskID string) error {
 	return nil
 }
 
-func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg, prURL string, prNumber int, branchName, agentStatus string, costUSD float64, prereqFailed string, noChanges bool) error {
+func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, errMsg, prURL string, prNumber int, branchName, agentStatus string, costUSD float64, prereqFailed string, noChanges, retryable bool) error {
 	payload := map[string]interface{}{"success": success}
 	if errMsg != "" {
 		payload["error"] = errMsg
@@ -530,6 +540,9 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	if noChanges {
 		payload["no_changes"] = true
 	}
+	if retryable {
+		payload["retryable"] = true
+	}
 	body, _ := json.Marshal(payload)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/tasks/"+taskID+"/complete", bytes.NewReader(body))
@@ -549,4 +562,27 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
 	}
 	return nil
+}
+
+// rateLimitPatterns are substrings in agent output that indicate Claude rate
+// limit or session max usage errors. These are transient and the task should
+// be retried after a delay rather than permanently failed.
+var rateLimitPatterns = []string{
+	"max usage",
+	"rate limit",
+	"rate_limit",
+	"too many requests",
+	"overloaded_error",
+}
+
+// isRateLimitError checks if a log line indicates a Claude rate limit or
+// session max usage error.
+func isRateLimitError(line string) bool {
+	lower := strings.ToLower(line)
+	for _, pattern := range rateLimitPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
 }

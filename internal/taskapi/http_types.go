@@ -67,6 +67,7 @@ type CompleteRequest struct {
 	PrereqFailed   string  `json:"prereq_failed,omitempty"`
 	BranchName     string  `json:"branch_name,omitempty"`
 	NoChanges      bool    `json:"no_changes,omitempty"`
+	Retryable      bool    `json:"retryable,omitempty"`
 }
 
 // CloseRequest is the request body for closing a task.

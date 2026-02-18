@@ -247,3 +247,28 @@ func TestAgentConfig(t *testing.T) {
 func TestDefaultAgentImage(t *testing.T) {
 	assert.Equal(t, "verve-agent:latest", DefaultAgentImage)
 }
+
+func TestIsRateLimitError(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected bool
+	}{
+		{"Error: Claude max usage exceeded for this session", true},
+		{"rate limit exceeded, please try again later", true},
+		{"API returned rate_limit error", true},
+		{"Error: Too many requests to the API", true},
+		{"Error: overloaded_error from API", true},
+		{"Max Usage reached for this billing period", true},
+		{"RATE LIMIT: please wait before retrying", true},
+		{"normal log line about building code", false},
+		{"successfully compiled the project", false},
+		{"running tests...", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isRateLimitError(tt.line))
+		})
+	}
+}

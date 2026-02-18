@@ -144,6 +144,51 @@ func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason strin
 	return nil
 }
 
+// ScheduleRetry transitions a running task back to pending for another attempt.
+// This is used when the agent hits a retryable error such as Claude rate limits
+// or session max usage exceeded. The task keeps its existing PR/branch info so
+// the next attempt can continue where the previous one left off.
+func (s *Store) ScheduleRetry(ctx context.Context, id TaskID, reason string) error {
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Budget check: fail if cost exceeds max
+	if t.MaxCostUSD > 0 && t.CostUSD >= t.MaxCostUSD {
+		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	if t.Attempt >= t.MaxAttempts {
+		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	// Circuit breaker: same retryable error twice in a row → fail
+	consecutiveFailures := 1
+	if t.RetryReason == reason {
+		consecutiveFailures = t.ConsecutiveFailures + 1
+	}
+	if consecutiveFailures >= 3 {
+		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	if err := s.repo.SetConsecutiveFailures(ctx, id, consecutiveFailures); err != nil {
+		return err
+	}
+
+	ok, err := s.repo.ScheduleRetryFromRunning(ctx, id, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // task was not in running status
+	}
+
+	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return nil
+}
+
 // ManualRetryTask transitions a failed task back to pending for another attempt.
 // instructions contains optional guidance for the agent on the retry.
 // Previous attempt logs are preserved — the UI shows them in separate tabs.

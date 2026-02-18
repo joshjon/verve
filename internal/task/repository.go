@@ -40,6 +40,11 @@ type TaskRepository interface {
 	// attempt, and records the retry reason. Returns false if the task was not
 	// in review status (already retried or status changed).
 	RetryTask(ctx context.Context, id TaskID, reason string) (bool, error)
+	// ScheduleRetryFromRunning atomically transitions a task from running → pending,
+	// increments attempt, and records the retry reason. Used when the agent hits a
+	// retryable error (e.g. Claude rate limit or session max usage exceeded).
+	// Returns false if the task was not in running status.
+	ScheduleRetryFromRunning(ctx context.Context, id TaskID, reason string) (bool, error)
 	SetAgentStatus(ctx context.Context, id TaskID, status string) error
 	SetRetryContext(ctx context.Context, id TaskID, retryCtx string) error
 	AddCost(ctx context.Context, id TaskID, costUSD float64) error

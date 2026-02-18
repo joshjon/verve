@@ -668,6 +668,24 @@ func (q *Queries) RetryTask(ctx context.Context, arg RetryTaskParams) (int64, er
 	return result.RowsAffected()
 }
 
+const scheduleRetryFromRunning = `-- name: ScheduleRetryFromRunning :execrows
+UPDATE task SET status = 'pending', attempt = attempt + 1, retry_reason = ?, started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'running'
+`
+
+type ScheduleRetryFromRunningParams struct {
+	RetryReason *string
+	ID          string
+}
+
+func (q *Queries) ScheduleRetryFromRunning(ctx context.Context, arg ScheduleRetryFromRunningParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, scheduleRetryFromRunning, arg.RetryReason, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setAgentStatus = `-- name: SetAgentStatus :exec
 UPDATE task SET agent_status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?
 `

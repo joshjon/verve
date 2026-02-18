@@ -486,6 +486,17 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 				return jsonError(c, err)
 			}
 		}
+
+		// Retryable failure (e.g. Claude rate limit or session max usage exceeded):
+		// schedule a retry back to pending instead of marking as failed.
+		if req.Retryable && req.PrereqFailed == "" {
+			reason := "rate_limit: " + req.Error
+			if err := h.store.ScheduleRetry(ctx, id, reason); err != nil {
+				return jsonError(c, err)
+			}
+			return c.JSON(http.StatusOK, statusOK())
+		}
+
 		// Check if this task already has a PR or branch from a previous
 		// attempt (e.g. feedback retry). If so, return it to review
 		// instead of marking as failed — the existing PR still needs

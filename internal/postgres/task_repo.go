@@ -237,6 +237,14 @@ func (r *TaskRepository) RetryTask(ctx context.Context, id task.TaskID, reason s
 	return rows > 0, tagTaskErr(err)
 }
 
+func (r *TaskRepository) ScheduleRetryFromRunning(ctx context.Context, id task.TaskID, reason string) (bool, error) {
+	rows, err := r.db.ScheduleRetryFromRunning(ctx, sqlc.ScheduleRetryFromRunningParams{
+		ID:          id.String(),
+		RetryReason: &reason,
+	})
+	return rows > 0, tagTaskErr(err)
+}
+
 func (r *TaskRepository) SetAgentStatus(ctx context.Context, id task.TaskID, status string) error {
 	return tagTaskErr(r.db.SetAgentStatus(ctx, sqlc.SetAgentStatusParams{
 		ID:          id.String(),

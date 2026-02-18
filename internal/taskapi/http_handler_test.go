@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/joshjon/kit/tx"
 	"github.com/labstack/echo/v4"
@@ -221,6 +222,20 @@ func (m *mockTaskRepo) RetryTask(_ context.Context, _ task.TaskID, _ string) (bo
 	return false, nil
 }
 
+func (m *mockTaskRepo) ScheduleRetryFromRunning(_ context.Context, id task.TaskID, reason string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id.String()]
+	if !ok || t.Status != task.StatusRunning {
+		return false, nil
+	}
+	t.Status = task.StatusPending
+	t.Attempt++
+	t.RetryReason = reason
+	t.StartedAt = nil
+	return true, nil
+}
+
 func (m *mockTaskRepo) SetAgentStatus(_ context.Context, _ task.TaskID, _ string) error {
 	return nil
 }
@@ -356,6 +371,14 @@ func (m *mockTaskRepo) BeginTxFunc(ctx context.Context, fn func(context.Context,
 
 func (m *mockTaskRepo) WithTx(_ tx.Tx) task.Repository {
 	return m
+}
+
+func (m *mockTaskRepo) Heartbeat(_ context.Context, _ task.TaskID) error {
+	return nil
+}
+
+func (m *mockTaskRepo) ListStaleTasks(_ context.Context, _ time.Time) ([]*task.Task, error) {
+	return nil, nil
 }
 
 // --- Mock repo repository ---
@@ -1130,4 +1153,67 @@ func TestRemoveDependency_EmptyDependsOn(t *testing.T) {
 	err := handler.RemoveDependency(c)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCompleteTask_RetryableFailure_SchedulesRetry(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"Claude max usage exceeded","retryable":true}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusPending, tsk.Status, "expected task to be scheduled for retry")
+	assert.Equal(t, 2, tsk.Attempt, "expected attempt to be incremented")
+}
+
+func TestCompleteTask_RetryableFailure_MaxAttemptsReached(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	tsk.Attempt = 5
+	tsk.MaxAttempts = 5
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"Claude rate limit exceeded","retryable":true}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusFailed, tsk.Status, "expected task to fail when max attempts reached")
+}
+
+func TestCompleteTask_RetryableWithPrereqFailed_NotRetried(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"prereq issue","retryable":true,"prereq_failed":"missing deps"}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusFailed, tsk.Status, "prereq failures should not be retried even if retryable flag is set")
 }
