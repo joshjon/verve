@@ -170,7 +170,7 @@
 			</button>
 		{/snippet}
 
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 flex-1 min-h-0 sm:auto-rows-[1fr]">
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 flex-1 min-h-0 sm:auto-rows-[1fr] max-h-96 sm:max-h-none">
 			<TaskColumn
 				label="Pending"
 				icon={Clock}
