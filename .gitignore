@@ -13,5 +13,7 @@ dist/
 .env.worker.prod
 .env.worker.dev
 
-# Go server UI assets
+# Go server UI assets — only track the placeholder for go:embed
 !internal/frontend/dist/
+internal/frontend/dist/*
+!internal/frontend/dist/placeholder.html

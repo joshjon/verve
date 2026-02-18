@@ -122,6 +122,7 @@ ui-build:
 
 ui-build-go:
 	cd ui && BUILD_PATH="../internal/frontend/dist" VITE_API_URL="" pnpm build
+	git checkout -- internal/frontend/dist/placeholder.html
 
 # Deploy to Fly.io (builds UI into Go binary, then deploys)
 deploy: ui-build-go
