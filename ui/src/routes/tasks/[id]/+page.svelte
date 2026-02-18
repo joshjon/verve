@@ -1167,12 +1167,10 @@
 			<!-- Not Ready Banner -->
 			{#if !task.ready && task.status === 'pending'}
 				<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 flex items-center gap-4 flex-wrap">
-					<div class="flex items-center gap-2.5 flex-1 min-w-0">
-						<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
-						<div>
-							<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
-							<p class="text-xs text-muted-foreground mt-0.5">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
-						</div>
+					<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
+					<div>
+						<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
+						<p class="text-xs text-muted-foreground mt-0.5">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
 					</div>
 					<Button
 						size="sm"
