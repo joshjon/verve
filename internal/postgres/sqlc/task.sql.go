@@ -508,7 +508,6 @@ const manualRetryTask = `-- name: ManualRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
   retry_reason = $2, retry_context = NULL,
   close_reason = NULL, consecutive_failures = 0,
-  pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
   started_at = NULL, updated_at = NOW()
 WHERE id = $1 AND status = 'failed'
 `
