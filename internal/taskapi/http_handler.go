@@ -388,8 +388,22 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 				return jsonError(c, err)
 			}
 		}
-		if err := h.store.UpdateTaskStatus(ctx, id, task.StatusFailed); err != nil {
-			return jsonError(c, err)
+		// Check if this task already has a PR or branch from a previous
+		// attempt (e.g. feedback retry). If so, return it to review
+		// instead of marking as failed — the existing PR still needs
+		// attention regardless of whether this attempt succeeded.
+		t, readErr := h.store.ReadTask(ctx, id)
+		if readErr != nil {
+			return jsonError(c, readErr)
+		}
+		if req.PrereqFailed == "" && (t.PRNumber > 0 || t.BranchName != "") {
+			if err := h.store.UpdateTaskStatus(ctx, id, task.StatusReview); err != nil {
+				return jsonError(c, err)
+			}
+		} else {
+			if err := h.store.UpdateTaskStatus(ctx, id, task.StatusFailed); err != nil {
+				return jsonError(c, err)
+			}
 		}
 	case req.PullRequestURL != "":
 		if err := h.store.SetTaskPullRequest(ctx, id, req.PullRequestURL, req.PRNumber); err != nil {

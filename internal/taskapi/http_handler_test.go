@@ -607,6 +607,71 @@ func TestCompleteTask_Failure(t *testing.T) {
 	assert.Equal(t, task.StatusFailed, tsk.Status)
 }
 
+func TestCompleteTask_FailureWithExistingPR_ReviewInsteadOfFailed(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	tsk.PRNumber = 10
+	tsk.PullRequestURL = "https://github.com/org/repo/pull/10"
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"exit code 1"}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusReview, tsk.Status, "expected review (not failed) when task has existing PR")
+}
+
+func TestCompleteTask_FailureWithExistingBranch_ReviewInsteadOfFailed(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	tsk.BranchName = "verve/task-tsk_123"
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"exit code 1"}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusReview, tsk.Status, "expected review (not failed) when task has existing branch")
+}
+
+func TestCompleteTask_FailureWithPrereqFailed_FailedEvenWithPR(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	tsk.PRNumber = 10
+	tsk.PullRequestURL = "https://github.com/org/repo/pull/10"
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"prereq_failed":"missing deps"}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusFailed, tsk.Status, "expected failed when prereq_failed is set")
+}
+
 func TestCompleteTask_SuccessWithPR(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()
