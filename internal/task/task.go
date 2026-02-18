@@ -27,6 +27,7 @@ type Task struct {
 	DependsOn           []string  `json:"depends_on,omitempty"`
 	CloseReason         string    `json:"close_reason,omitempty"`
 	Attempt             int       `json:"attempt"`
+	AttemptBase         int       `json:"attempt_base"`
 	MaxAttempts         int       `json:"max_attempts"`
 	RetryReason         string    `json:"retry_reason,omitempty"`
 	AcceptanceCriteria  []string  `json:"acceptance_criteria"`

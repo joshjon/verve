@@ -52,13 +52,13 @@
 		<span class="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
 			{task.id}
 		</span>
-		{#if task.attempt > 1}
+		{#if task.attempt - task.attempt_base > 1}
 			<span
 				class="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5"
-				title="Retry attempt {task.attempt} of {task.max_attempts}"
+				title="Retry attempt {task.attempt - task.attempt_base} of {task.max_attempts}"
 			>
 				<RefreshCw class="w-3 h-3" />
-				#{task.attempt}
+				#{task.attempt - task.attempt_base}
 			</span>
 		{/if}
 		{#if !task.ready && task.status === 'pending'}

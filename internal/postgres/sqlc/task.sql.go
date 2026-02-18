@@ -123,7 +123,7 @@ func (q *Queries) DeleteTaskLogs(ctx context.Context, taskID string) error {
 
 const feedbackRetryTask = `-- name: FeedbackRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
-  max_attempts = max_attempts + 1,
+  attempt_base = attempt,
   retry_reason = $2, retry_context = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = NOW()
@@ -155,7 +155,7 @@ func (q *Queries) HasTasksForRepo(ctx context.Context, repoID string) (bool, err
 }
 
 const listPendingTasks = `-- name: ListPendingTasks :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE status = 'pending' AND ready = true ORDER BY created_at ASC
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE status = 'pending' AND ready = true ORDER BY created_at ASC
 `
 
 func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
@@ -193,6 +193,7 @@ func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -205,7 +206,7 @@ func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
 }
 
 const listPendingTasksByRepos = `-- name: ListPendingTasksByRepos :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE status = 'pending' AND ready = true AND repo_id = ANY($1::text[]) ORDER BY created_at ASC
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE status = 'pending' AND ready = true AND repo_id = ANY($1::text[]) ORDER BY created_at ASC
 `
 
 func (q *Queries) ListPendingTasksByRepos(ctx context.Context, dollar_1 []string) ([]*Task, error) {
@@ -243,6 +244,7 @@ func (q *Queries) ListPendingTasksByRepos(ctx context.Context, dollar_1 []string
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -255,7 +257,7 @@ func (q *Queries) ListPendingTasksByRepos(ctx context.Context, dollar_1 []string
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task ORDER BY created_at DESC
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task ORDER BY created_at DESC
 `
 
 func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
@@ -293,6 +295,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -305,7 +308,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 }
 
 const listTasksByRepo = `-- name: ListTasksByRepo :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE repo_id = $1 ORDER BY created_at DESC
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE repo_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error) {
@@ -343,6 +346,7 @@ func (q *Queries) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, 
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -355,7 +359,7 @@ func (q *Queries) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, 
 }
 
 const listTasksInReview = `-- name: ListTasksInReview :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE status = 'review'
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE status = 'review'
 `
 
 func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
@@ -393,6 +397,7 @@ func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -405,7 +410,7 @@ func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 }
 
 const listTasksInReviewByRepo = `-- name: ListTasksInReviewByRepo :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE repo_id = $1 AND status = 'review'
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE repo_id = $1 AND status = 'review'
 `
 
 func (q *Queries) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error) {
@@ -443,6 +448,7 @@ func (q *Queries) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -455,7 +461,7 @@ func (q *Queries) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([
 }
 
 const listTasksInReviewNoPR = `-- name: ListTasksInReviewNoPR :many
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_number IS NULL
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_number IS NULL
 `
 
 func (q *Queries) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
@@ -493,6 +499,7 @@ func (q *Queries) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
 			&i.Model,
 			&i.StartedAt,
 			&i.Ready,
+			&i.AttemptBase,
 		); err != nil {
 			return nil, err
 		}
@@ -506,6 +513,7 @@ func (q *Queries) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
 
 const manualRetryTask = `-- name: ManualRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
+  attempt_base = attempt,
   retry_reason = $2, retry_context = NULL,
   close_reason = NULL, consecutive_failures = 0,
   pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
@@ -527,7 +535,7 @@ func (q *Queries) ManualRetryTask(ctx context.Context, arg ManualRetryTaskParams
 }
 
 const readTask = `-- name: ReadTask :one
-SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE id = $1
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE id = $1
 `
 
 func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
@@ -559,6 +567,7 @@ func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
 		&i.Model,
 		&i.StartedAt,
 		&i.Ready,
+		&i.AttemptBase,
 	)
 	return &i, err
 }
@@ -743,6 +752,7 @@ UPDATE task SET
   description = $3,
   acceptance_criteria_list = $4,
   attempt = 1,
+  attempt_base = 0,
   max_attempts = 5,
   retry_reason = NULL,
   retry_context = NULL,

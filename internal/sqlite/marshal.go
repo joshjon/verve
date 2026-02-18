@@ -29,6 +29,7 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 		t.CloseReason = *in.CloseReason
 	}
 	t.Attempt = int(in.Attempt)
+	t.AttemptBase = int(in.AttemptBase)
 	t.MaxAttempts = int(in.MaxAttempts)
 	if in.RetryReason != nil {
 		t.RetryReason = *in.RetryReason

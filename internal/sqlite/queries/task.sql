@@ -78,6 +78,7 @@ SELECT * FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_nu
 
 -- name: ManualRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
+  attempt_base = attempt,
   retry_reason = ?, retry_context = NULL,
   close_reason = NULL, consecutive_failures = 0,
   pull_request_url = NULL, pr_number = NULL, branch_name = NULL,
@@ -86,7 +87,7 @@ WHERE id = ? AND status = 'failed';
 
 -- name: FeedbackRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = attempt + 1,
-  max_attempts = max_attempts + 1,
+  attempt_base = attempt,
   retry_reason = ?, retry_context = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -123,6 +124,7 @@ UPDATE task SET
   description = ?,
   acceptance_criteria_list = ?,
   attempt = 1,
+  attempt_base = 0,
   max_attempts = 5,
   retry_reason = NULL,
   retry_context = NULL,
