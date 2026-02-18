@@ -744,36 +744,38 @@
 				</Card.Root>
 			{/if}
 
-			<!-- Not Ready Banner -->
-			{#if !task.ready && task.status === 'pending'}
-				<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 space-y-3">
-					<div class="flex items-center gap-2.5">
-						<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
-						<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
-					</div>
-					<p class="text-xs text-muted-foreground">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
-					<Button
-						size="sm"
-						onclick={handleToggleReady}
-						disabled={togglingReady}
-						class="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
-					>
-						{#if togglingReady}
-							<Loader2 class="w-4 h-4 animate-spin" />
-							Updating...
-						{:else}
-							<PlayCircle class="w-4 h-4" />
-							Mark as Ready
-						{/if}
-					</Button>
-				</div>
-			{/if}
 		</div>
 
 		<!-- Two-column layout -->
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 			<!-- Left column: Task details -->
 			<div class="space-y-6">
+				<!-- Not Ready Banner -->
+				{#if !task.ready && task.status === 'pending'}
+					<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 flex items-center justify-between gap-4">
+						<div class="space-y-1.5">
+							<div class="flex items-center gap-2.5">
+								<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
+								<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
+							</div>
+							<p class="text-xs text-muted-foreground">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
+						</div>
+						<Button
+							size="sm"
+							onclick={handleToggleReady}
+							disabled={togglingReady}
+							class="gap-1.5 shrink-0 bg-green-700 hover:bg-green-800 dark:bg-green-800 dark:hover:bg-green-900 text-white"
+						>
+							{#if togglingReady}
+								<Loader2 class="w-4 h-4 animate-spin" />
+								Updating...
+							{:else}
+								<PlayCircle class="w-4 h-4" />
+								Mark as Ready
+							{/if}
+						</Button>
+					</div>
+				{/if}
 				<!-- Task Details (unified card) -->
 				<div class="rounded-xl border bg-card shadow-sm overflow-hidden">
 					<!-- Header -->
