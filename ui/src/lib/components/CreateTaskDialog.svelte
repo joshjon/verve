@@ -166,23 +166,25 @@
 							placeholder="e.g., Add Fibonacci function with unit tests"
 							disabled={loading}
 						/>
-						<p class="text-xs text-muted-foreground mt-1 text-right">{title.length}/150</p>
-						<label
-							for="not-ready"
-							class="flex items-start gap-2 cursor-pointer mt-2 mb-1"
-						>
-							<input
-								id="not-ready"
-								type="checkbox"
-								bind:checked={notReady}
-								class="w-3.5 h-3.5 rounded border-input accent-primary mt-0.5"
-								disabled={loading}
-							/>
-							<div>
-								<span class="text-sm">Mark as not ready</span>
-								<span class="block text-xs text-muted-foreground">Agent will not receive task until marked as ready</span>
-							</div>
-						</label>
+						<div class="flex items-center justify-between mt-1">
+							<label
+								for="not-ready"
+								class="flex items-start gap-2 cursor-pointer"
+							>
+								<input
+									id="not-ready"
+									type="checkbox"
+									bind:checked={notReady}
+									class="w-3.5 h-3.5 rounded border-input accent-primary mt-0.5"
+									disabled={loading}
+								/>
+								<div>
+									<span class="text-sm">Mark as not ready</span>
+									<span class="block text-xs text-muted-foreground">Agent will not receive task until marked as ready</span>
+								</div>
+							</label>
+							<p class="text-xs text-muted-foreground text-right self-start">{title.length}/150</p>
+						</div>
 					</div>
 
 					<div>
