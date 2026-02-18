@@ -48,35 +48,57 @@
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
 	import { AnsiUp } from 'ansi_up';
-	const ansi = new AnsiUp();
 
-	function colorizeLogs(html: string): string {
-		// Split on HTML tags so we only colorize text nodes, not tag attributes
-		let result = html.replace(/([^<]+)|(<[^>]*>)/g, (match, text, tag) => {
+	function colorizeLineHtml(html: string): string {
+		// Colorize a single line's HTML by only modifying text nodes, not tag attributes
+		return html.replace(/([^<]+)|(<[^>]*>)/g, (match, text, tag) => {
 			if (tag) return tag;
 			return text
 				// Bracketed prefixes: [agent], [error], [info], [warn], [system], etc.
 				.replace(/\[([a-zA-Z_-]+)\]/g, '<span class=log-bracket>[$1]</span>')
 				// Lines starting with $ or > (command prompts)
-				.replace(/^([\$>]\s)(.*)$/gm, '<span class=log-prompt>$1</span><span class=log-cmd>$2</span>')
+				.replace(/^([\$>]\s)(.*)$/, '<span class=log-prompt>$1</span><span class=log-cmd>$2</span>')
 				// File paths (word with slashes and optional extension)
 				.replace(/(?<!\w)((?:\.{0,2}\/)?(?:[\w.-]+\/)+[\w.-]+)(?!\w)/g, '<span class=log-path>$1</span>')
 				// URLs
 				.replace(/(https?:\/\/[^\s<]+)/g, '<span class=log-url>$1</span>')
 				// Numbers (standalone)
-				.replace(/(?<=\s|^|\(|:)(\d+\.?\d*)(?=\s|$|\)|,|;)/gm, '<span class=log-num>$1</span>')
+				.replace(/(?<=\s|^|\(|:)(\d+\.?\d*)(?=\s|$|\)|,|;)/g, '<span class=log-num>$1</span>')
 				// Quoted strings
 				.replace(/("|')(.*?)(\1)/g, '<span class=log-str>$1$2$3</span>');
 		});
+	}
 
-		// Highlight [claude] lines: wrap entire lines containing the [claude] prefix
-		// with a distinct visual treatment so they stand out from other log output.
-		result = result.replace(
-			/^(.*<span class=log-bracket>\[claude\]<\/span>.*)$/gm,
-			'<span class=log-claude-line>$1</span>'
-		);
+	function colorizeLogs(lines: string[]): string {
+		// Process each log line individually through AnsiUp and colorization.
+		// This prevents ANSI span tags from crossing line boundaries, which
+		// would break the regex-based syntax highlighting for multiline output.
+		// A fresh AnsiUp instance is created per render to avoid stale state
+		// when the full log set is re-derived after new lines are appended.
+		const ansi = new AnsiUp();
+		let inClaudeBlock = false;
+		const colorizedLines: string[] = [];
 
-		return result;
+		for (const line of lines) {
+			const lineHtml = colorizeLineHtml(ansi.ansi_to_html(line));
+
+			// Detect [claude] lines and continuation lines (lines without a bracket prefix)
+			const isClaudeLine = lineHtml.includes('<span class=log-bracket>[claude]</span>');
+			const hasBracketPrefix = lineHtml.includes('<span class=log-bracket>');
+
+			if (isClaudeLine) {
+				inClaudeBlock = true;
+				colorizedLines.push('<span class=log-claude-line>' + lineHtml + '</span>');
+			} else if (inClaudeBlock && !hasBracketPrefix) {
+				// Continuation of a claude block (no new bracket prefix)
+				colorizedLines.push('<span class=log-claude-line>' + lineHtml + '</span>');
+			} else {
+				inClaudeBlock = false;
+				colorizedLines.push(lineHtml);
+			}
+		}
+
+		return colorizedLines.join('\n');
 	}
 
 	// Configure marked for safe rendering
@@ -249,7 +271,7 @@
 
 	// Per-attempt log tracking
 	const logs = $derived(logsByAttempt[activeAttemptTab] ?? []);
-	const renderedLogs = $derived(logs.length > 0 ? colorizeLogs(ansi.ansi_to_html(logs.join('\n'))) : '');
+	const renderedLogs = $derived(logs.length > 0 ? colorizeLogs(logs) : '');
 	const attemptNumbers = $derived.by(() => {
 		const nums = new Set(Object.keys(logsByAttempt).map(Number));
 		if (task) {
