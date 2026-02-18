@@ -78,7 +78,10 @@ commit_and_push() {
         git push --force-with-lease origin "${BRANCH}"
     else
         log_agent "Pushing branch to origin..."
-        git push -u origin "${BRANCH}"
+        if ! git push -u origin "${BRANCH}" 2>&1; then
+            log_agent "Push was rejected (branch may already exist on remote), retrying with --force-with-lease..."
+            git push --force-with-lease -u origin "${BRANCH}"
+        fi
     fi
     log_agent "Branch pushed successfully: ${BRANCH}"
 }
