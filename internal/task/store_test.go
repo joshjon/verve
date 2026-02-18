@@ -359,6 +359,15 @@ func (m *mockRepository) RemoveDependency(_ context.Context, id TaskID, depID st
 	return nil
 }
 
+func (m *mockRepository) SetReady(_ context.Context, id TaskID, ready bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if t, ok := m.tasks[id.String()]; ok {
+		t.Ready = ready
+	}
+	return nil
+}
+
 func (m *mockRepository) BeginTxFunc(ctx context.Context, fn func(context.Context, tx.Tx, Repository) error) error {
 	return fn(ctx, nil, m)
 }
@@ -374,7 +383,7 @@ func TestStore_CreateTask_Success(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "sonnet")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "sonnet", true)
 	err := store.CreateTask(context.Background(), tsk)
 	require.NoError(t, err)
 	assert.Equal(t, 1, repo.createCalls)
@@ -385,7 +394,7 @@ func TestStore_CreateTask_InvalidDependencyID(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", []string{"not-a-valid-id"}, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", []string{"not-a-valid-id"}, nil, 0, false, "", true)
 	err := store.CreateTask(context.Background(), tsk)
 	assert.Error(t, err, "expected error for invalid dependency ID")
 }
@@ -397,7 +406,7 @@ func TestStore_CreateTask_DependencyNotFound(t *testing.T) {
 	store := NewStore(repo, broker)
 
 	depID := NewTaskID()
-	tsk := NewTask("repo_123", "title", "desc", []string{depID.String()}, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", []string{depID.String()}, nil, 0, false, "", true)
 	err := store.CreateTask(context.Background(), tsk)
 	assert.Error(t, err, "expected error for missing dependency")
 }
@@ -408,7 +417,7 @@ func TestStore_CreateTask_NotifiesPending(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	err := store.CreateTask(context.Background(), tsk)
 	require.NoError(t, err)
 
@@ -429,7 +438,7 @@ func TestStore_CreateTask_PublishesEvent(t *testing.T) {
 	ch := broker.Subscribe()
 	defer broker.Unsubscribe(ch)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	err := store.CreateTask(context.Background(), tsk)
 	require.NoError(t, err)
 
@@ -449,7 +458,7 @@ func TestStore_RetryTask_MaxAttempts(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Attempt = 5
 	tsk.MaxAttempts = 5
 	tsk.Status = StatusReview
@@ -468,7 +477,7 @@ func TestStore_RetryTask_BudgetExceeded(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 5.0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 5.0, false, "", true)
 	tsk.CostUSD = 6.0
 	tsk.Status = StatusReview
 	repo.tasks[tsk.ID.String()] = tsk
@@ -485,7 +494,7 @@ func TestStore_RetryTask_CircuitBreaker(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Status = StatusReview
 	tsk.ConsecutiveFailures = 1
 	tsk.RetryReason = "ci_failure:tests: CI tests failed"
@@ -505,7 +514,7 @@ func TestStore_RetryTask_DifferentCategory(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Status = StatusReview
 	tsk.ConsecutiveFailures = 1
 	tsk.RetryReason = "ci_failure:tests: CI tests failed"
@@ -527,7 +536,7 @@ func TestStore_ManualRetryTask(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Status = StatusFailed
 	repo.tasks[tsk.ID.String()] = tsk
 
@@ -541,7 +550,7 @@ func TestStore_ManualRetryTask_NotFailed(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Status = StatusRunning
 	repo.tasks[tsk.ID.String()] = tsk
 
@@ -555,7 +564,7 @@ func TestStore_FeedbackRetryTask_BudgetExceeded(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 5.0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 5.0, false, "", true)
 	tsk.CostUSD = 6.0
 	tsk.Status = StatusReview
 	repo.tasks[tsk.ID.String()] = tsk
@@ -573,7 +582,7 @@ func TestStore_FeedbackRetryTask_IgnoresMaxAttempts(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Attempt = 5
 	tsk.MaxAttempts = 5
 	tsk.Status = StatusReview
@@ -663,7 +672,7 @@ func TestStore_ClaimPendingTask_Success(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 	repo.taskStatuses[tsk.ID.String()] = StatusPending
 
@@ -679,7 +688,7 @@ func TestStore_ClaimPendingTask_WithRepoFilter(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 	repo.taskStatuses[tsk.ID.String()] = StatusPending
 
@@ -696,7 +705,7 @@ func TestStore_AppendTaskLogs(t *testing.T) {
 	ch := broker.Subscribe()
 	defer broker.Unsubscribe(ch)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.AppendTaskLogs(context.Background(), tsk.ID, 1, []string{"line 1", "line 2"})
@@ -727,7 +736,7 @@ func TestStore_WaitForPending(t *testing.T) {
 	}
 
 	// Create a task to trigger notification
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	_ = store.CreateTask(context.Background(), tsk)
 
 	select {
@@ -743,7 +752,7 @@ func TestStore_CloseTask(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.CloseTask(context.Background(), tsk.ID, "no longer needed")
@@ -758,7 +767,7 @@ func TestStore_UpdateTaskStatus(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.UpdateTaskStatus(context.Background(), tsk.ID, StatusFailed)
@@ -772,7 +781,7 @@ func TestStore_SetTaskPullRequest(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Status = StatusRunning
 	repo.tasks[tsk.ID.String()] = tsk
 
@@ -788,10 +797,10 @@ func TestStore_RemoveDependency_Success(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	dep := NewTask("repo_123", "dep", "dep desc", nil, nil, 0, false, "")
+	dep := NewTask("repo_123", "dep", "dep desc", nil, nil, 0, false, "", true)
 	repo.tasks[dep.ID.String()] = dep
 
-	tsk := NewTask("repo_123", "title", "desc", []string{dep.ID.String()}, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", []string{dep.ID.String()}, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.RemoveDependency(context.Background(), tsk.ID, dep.ID.String())
@@ -804,7 +813,7 @@ func TestStore_RemoveDependency_InvalidDepID(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 
 	err := store.RemoveDependency(context.Background(), tsk.ID, "not-a-valid-id")
@@ -816,10 +825,10 @@ func TestStore_RemoveDependency_NotifiesPending(t *testing.T) {
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
-	dep := NewTask("repo_123", "dep", "dep desc", nil, nil, 0, false, "")
+	dep := NewTask("repo_123", "dep", "dep desc", nil, nil, 0, false, "", true)
 	repo.tasks[dep.ID.String()] = dep
 
-	tsk := NewTask("repo_123", "title", "desc", []string{dep.ID.String()}, nil, 0, false, "")
+	tsk := NewTask("repo_123", "title", "desc", []string{dep.ID.String()}, nil, 0, false, "", true)
 	repo.tasks[tsk.ID.String()] = tsk
 
 	// Drain any existing notification

@@ -19,6 +19,12 @@ type CreateTaskRequest struct {
 	MaxCostUSD         float64  `json:"max_cost_usd,omitempty"`
 	SkipPR             bool     `json:"skip_pr,omitempty"`
 	Model              string   `json:"model,omitempty"`
+	NotReady           bool     `json:"not_ready,omitempty"`
+}
+
+// SetReadyRequest is the request body for toggling a task's ready state.
+type SetReadyRequest struct {
+	Ready bool `json:"ready"`
 }
 
 // DefaultModelRequest is the request body for setting the default model.

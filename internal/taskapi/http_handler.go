@@ -56,6 +56,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/:id/sync", h.SyncTaskStatus)
 	g.GET("/tasks/:id/checks", h.GetTaskChecks)
 	g.DELETE("/tasks/:id/dependency", h.RemoveDependency)
+	g.PUT("/tasks/:id/ready", h.SetReady)
 
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
@@ -258,7 +259,7 @@ func (h *HTTPHandler) CreateTask(c echo.Context) error {
 	if model == "" {
 		model = "sonnet"
 	}
-	t := task.NewTask(repoID.String(), req.Title, req.Description, req.DependsOn, req.AcceptanceCriteria, req.MaxCostUSD, req.SkipPR, model)
+	t := task.NewTask(repoID.String(), req.Title, req.Description, req.DependsOn, req.AcceptanceCriteria, req.MaxCostUSD, req.SkipPR, model, !req.NotReady)
 	if err := h.store.CreateTask(c.Request().Context(), t); err != nil {
 		return jsonError(c, err)
 	}
@@ -626,6 +627,32 @@ func (h *HTTPHandler) RemoveDependency(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	if err := h.store.RemoveDependency(ctx, id, req.DependsOn); err != nil {
+		return jsonError(c, err)
+	}
+
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// SetReady handles PUT /tasks/:id/ready
+// Toggles whether a task is ready to be picked up by workers.
+func (h *HTTPHandler) SetReady(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	var req SetReadyRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+
+	ctx := c.Request().Context()
+
+	if err := h.store.SetReady(ctx, id, req.Ready); err != nil {
 		return jsonError(c, err)
 	}
 

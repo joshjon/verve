@@ -44,6 +44,7 @@ type Querier interface {
 	SetBranchName(ctx context.Context, arg SetBranchNameParams) error
 	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error
 	SetConsecutiveFailures(ctx context.Context, arg SetConsecutiveFailuresParams) error
+	SetReady(ctx context.Context, arg SetReadyParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	TaskExists(ctx context.Context, id string) (bool, error)
