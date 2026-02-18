@@ -39,7 +39,8 @@
 		Send,
 		Timer,
 		PauseCircle,
-		PlayCircle
+		PlayCircle,
+		RotateCcw
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -88,6 +89,11 @@
 	let showFeedbackForm = $state(false);
 	let feedbackText = $state('');
 	let togglingReady = $state(false);
+	let startingOver = $state(false);
+	let showStartOverForm = $state(false);
+	let startOverTitle = $state('');
+	let startOverDescription = $state('');
+	let startOverCriteria = $state('');
 	let removingDep = $state<string | null>(null);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
@@ -217,6 +223,7 @@
 	});
 
 	const canClose = $derived(task && !['closed', 'merged', 'failed'].includes(task.status));
+	const canStartOver = $derived(task?.status === 'review' || task?.status === 'failed');
 	const canRetry = $derived(task?.status === 'failed');
 	const canProvideFeedback = $derived(task?.status === 'review');
 	const isRetrying = $derived(task?.pull_request_url && (task?.status === 'running' || task?.status === 'pending'));
@@ -457,6 +464,37 @@
 		}
 	}
 
+	function openStartOverForm() {
+		if (!task) return;
+		startOverTitle = task.title;
+		startOverDescription = task.description;
+		startOverCriteria = (task.acceptance_criteria ?? []).join('\n');
+		showStartOverForm = true;
+		showCloseForm = false;
+	}
+
+	async function handleStartOver() {
+		if (!task || startingOver) return;
+		startingOver = true;
+		try {
+			const updates: { title?: string; description?: string; acceptance_criteria?: string[] } = {};
+			if (startOverTitle !== task.title) updates.title = startOverTitle;
+			if (startOverDescription !== task.description) updates.description = startOverDescription;
+			const newCriteria = startOverCriteria.split('\n').map((s) => s.trim()).filter(Boolean);
+			const oldCriteria = task.acceptance_criteria ?? [];
+			if (JSON.stringify(newCriteria) !== JSON.stringify(oldCriteria)) updates.acceptance_criteria = newCriteria;
+			task = await client.startOverTask(task.id, Object.keys(updates).length > 0 ? updates : undefined);
+			showStartOverForm = false;
+			logsByAttempt = {};
+			activeAttemptTab = 1;
+			lastLogCount = 0;
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			startingOver = false;
+		}
+	}
+
 	function formatDuration(ms: number): string {
 		const seconds = Math.floor(ms / 1000);
 		if (seconds < 60) return `${seconds}s`;
@@ -563,6 +601,20 @@
 							<span class="hidden sm:inline">Mark Not Ready</span>
 						</Button>
 					{/if}
+					{#if canStartOver}
+						{#if showStartOverForm}
+							<Button size="sm" variant="ghost" onclick={() => (showStartOverForm = false)} class="gap-1">
+								<X class="w-4 h-4" />
+								Cancel
+							</Button>
+						{:else}
+							<Button size="sm" variant="outline" onclick={openStartOverForm} class="gap-1">
+								<RotateCcw class="w-4 h-4" />
+								<span class="hidden sm:inline">Start Over</span>
+								<span class="sm:hidden">Restart</span>
+							</Button>
+						{/if}
+					{/if}
 					{#if canClose}
 						{#if showCloseForm}
 							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">
@@ -614,6 +666,77 @@
 									{:else}
 										<XCircle class="w-4 h-4" />
 										Close Task
+									{/if}
+								</Button>
+							</div>
+						</div>
+					</Card.Content>
+				</Card.Root>
+			{/if}
+
+			<!-- Start Over Form (full width, above columns) -->
+			{#if showStartOverForm}
+				<Card.Root class="border-amber-500/30 bg-amber-500/5">
+					<Card.Header class="pb-0 gap-0">
+						<Card.Title class="text-base flex items-center gap-2">
+							<RotateCcw class="w-4 h-4 text-amber-500" />
+							Start Over
+						</Card.Title>
+						<p class="text-sm text-muted-foreground mt-1">
+							This will clear all logs, agent data, cost, and close the PR if one exists. The task will be placed back to pending for a fresh attempt.
+						</p>
+					</Card.Header>
+					<Card.Content>
+						<div class="space-y-4">
+							<div>
+								<label for="start-over-title" class="text-sm font-medium mb-2 block">
+									Title
+								</label>
+								<input
+									id="start-over-title"
+									type="text"
+									bind:value={startOverTitle}
+									class="w-full border rounded-lg p-3 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+									placeholder="Task title"
+									disabled={startingOver}
+									maxlength={150}
+								/>
+							</div>
+							<div>
+								<label for="start-over-description" class="text-sm font-medium mb-2 block">
+									Description
+								</label>
+								<textarea
+									id="start-over-description"
+									bind:value={startOverDescription}
+									class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+									placeholder="Describe what the agent should do..."
+									disabled={startingOver}
+								></textarea>
+							</div>
+							<div>
+								<label for="start-over-criteria" class="text-sm font-medium mb-2 block">
+									Acceptance Criteria <span class="text-muted-foreground font-normal">(one per line)</span>
+								</label>
+								<textarea
+									id="start-over-criteria"
+									bind:value={startOverCriteria}
+									class="w-full border rounded-lg p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+									placeholder="Each line becomes a criterion..."
+									disabled={startingOver}
+								></textarea>
+							</div>
+							<div class="flex justify-end gap-2">
+								<Button variant="outline" onclick={() => (showStartOverForm = false)} disabled={startingOver}>
+									Cancel
+								</Button>
+								<Button onclick={handleStartOver} disabled={startingOver || !startOverTitle.trim()} class="gap-2 bg-amber-600 hover:bg-amber-700 text-white">
+									{#if startingOver}
+										<Loader2 class="w-4 h-4 animate-spin" />
+										Restarting...
+									{:else}
+										<RotateCcw class="w-4 h-4" />
+										Confirm Start Over
 									{/if}
 								</Button>
 							</div>

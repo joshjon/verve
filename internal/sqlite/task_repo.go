@@ -384,6 +384,16 @@ func (r *TaskRepository) UpdatePendingTask(ctx context.Context, id task.TaskID, 
 	return rows > 0, tagTaskErr(err)
 }
 
+func (r *TaskRepository) StartOverTask(ctx context.Context, id task.TaskID, params task.StartOverTaskParams) (bool, error) {
+	rows, err := r.db.StartOverTask(ctx, sqlc.StartOverTaskParams{
+		Title:                  params.Title,
+		Description:            params.Description,
+		AcceptanceCriteriaList: marshalJSONStrings(params.AcceptanceCriteria),
+		ID:                     id.String(),
+	})
+	return rows > 0, tagTaskErr(err)
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {

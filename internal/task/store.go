@@ -280,6 +280,35 @@ func (s *Store) UpdatePendingTask(ctx context.Context, id TaskID, params UpdateP
 	return nil
 }
 
+// StartOverTask resets a task from review or failed back to pending, clearing
+// all metadata (logs, PR, branch, agent status, cost) and optionally updating
+// the task details (title, description, acceptance criteria). Returns the task
+// before reset so the caller can close the PR if needed.
+func (s *Store) StartOverTask(ctx context.Context, id TaskID, params StartOverTaskParams) (*Task, error) {
+	// Read the task before reset so we can return PR info for cleanup.
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	ok, err := s.repo.StartOverTask(ctx, id, params)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil // task was not in review or failed status
+	}
+
+	// Delete all logs for a clean slate.
+	if err := s.repo.DeleteTaskLogs(ctx, id); err != nil {
+		return nil, err
+	}
+
+	s.notifyPending()
+	s.publishTaskUpdated(ctx, id)
+	return t, nil
+}
+
 // ClaimPendingTask finds a pending task with all dependencies met and claims it
 // by setting its status to running. When repoIDs is non-empty, only tasks
 // belonging to those repos are considered. The read-check-claim flow is wrapped

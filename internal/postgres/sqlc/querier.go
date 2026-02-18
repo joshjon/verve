@@ -47,6 +47,7 @@ type Querier interface {
 	SetReady(ctx context.Context, arg SetReadyParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
+	StartOverTask(ctx context.Context, arg StartOverTaskParams) (int64, error)
 	TaskExists(ctx context.Context, id string) (bool, error)
 	UpdatePendingTask(ctx context.Context, arg UpdatePendingTaskParams) (int64, error)
 	UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error

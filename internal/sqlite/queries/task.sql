@@ -115,3 +115,24 @@ UPDATE task SET
   ready = ?,
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'pending';
+
+-- name: StartOverTask :execrows
+UPDATE task SET
+  status = 'pending',
+  title = ?,
+  description = ?,
+  acceptance_criteria_list = ?,
+  attempt = 1,
+  max_attempts = 5,
+  retry_reason = NULL,
+  retry_context = NULL,
+  close_reason = NULL,
+  agent_status = NULL,
+  consecutive_failures = 0,
+  cost_usd = 0,
+  pull_request_url = NULL,
+  pr_number = NULL,
+  branch_name = NULL,
+  started_at = NULL,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status IN ('review', 'failed');
