@@ -166,9 +166,8 @@ func (s *Store) ManualRetryTask(ctx context.Context, id TaskID, instructions str
 //
 // Feedback retries (manual change requests) do not count towards the max retry
 // attempts because they represent user-driven iteration rather than failure recovery.
-// The attempt counter is reset to 1 so that any subsequent automated failure
-// retries (e.g. CI failures caused by the requested changes) get a fresh retry
-// budget rather than being blocked by attempts consumed before the feedback.
+// Both attempt and max_attempts are incremented so the attempt number is unique
+// for log tabbing while keeping the retry budget unchanged.
 func (s *Store) FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) error {
 	t, err := s.repo.ReadTask(ctx, id)
 	if err != nil {
