@@ -736,6 +736,48 @@ func (q *Queries) SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequest
 	return err
 }
 
+const startOverTask = `-- name: StartOverTask :execrows
+UPDATE task SET
+  status = 'pending',
+  title = $2,
+  description = $3,
+  acceptance_criteria_list = $4,
+  attempt = 1,
+  max_attempts = 5,
+  retry_reason = NULL,
+  retry_context = NULL,
+  close_reason = NULL,
+  agent_status = NULL,
+  consecutive_failures = 0,
+  cost_usd = 0,
+  pull_request_url = NULL,
+  pr_number = NULL,
+  branch_name = NULL,
+  started_at = NULL,
+  updated_at = NOW()
+WHERE id = $1 AND status IN ('review', 'failed')
+`
+
+type StartOverTaskParams struct {
+	ID                     string   `json:"id"`
+	Title                  string   `json:"title"`
+	Description            string   `json:"description"`
+	AcceptanceCriteriaList []string `json:"acceptance_criteria_list"`
+}
+
+func (q *Queries) StartOverTask(ctx context.Context, arg StartOverTaskParams) (int64, error) {
+	result, err := q.db.Exec(ctx, startOverTask,
+		arg.ID,
+		arg.Title,
+		arg.Description,
+		arg.AcceptanceCriteriaList,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const taskExists = `-- name: TaskExists :one
 SELECT EXISTS(SELECT 1 FROM task WHERE id = $1)
 `

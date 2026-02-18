@@ -167,6 +167,22 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async startOverTask(
+		id: string,
+		updates?: { title?: string; description?: string; acceptance_criteria?: string[] }
+	): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/start-over`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(updates ?? {})
+		});
+		if (!res.ok) {
+			const body = await res.json().catch(() => null);
+			throw new Error(body?.error || 'Failed to start over');
+		}
+		return res.json();
+	}
+
 	async setReady(id: string, ready: boolean): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}/ready`, {
 			method: 'PUT',

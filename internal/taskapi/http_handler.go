@@ -52,6 +52,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
 	g.POST("/tasks/:id/retry", h.RetryTask)
+	g.POST("/tasks/:id/start-over", h.StartOverTask)
 	g.POST("/tasks/:id/feedback", h.FeedbackTask)
 	g.POST("/tasks/:id/sync", h.SyncTaskStatus)
 	g.GET("/tasks/:id/checks", h.GetTaskChecks)
@@ -669,6 +670,85 @@ func (h *HTTPHandler) RetryTask(c echo.Context) error {
 
 	if err := h.store.ManualRetryTask(ctx, id, req.Instructions); err != nil {
 		return jsonError(c, err)
+	}
+
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// StartOverTask handles POST /tasks/:id/start-over
+// Resets a task in review or failed status back to pending with fresh metadata.
+// Clears all logs, PR info, agent status, cost, and retry state.
+// Optionally updates title, description, and acceptance criteria.
+// If the task had an open PR, it is closed on GitHub and the branch deleted.
+func (h *HTTPHandler) StartOverTask(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	var req StartOverRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+
+	ctx := c.Request().Context()
+
+	// Read existing task to merge fields
+	existing, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
+	params := task.StartOverTaskParams{
+		Title:              existing.Title,
+		Description:        existing.Description,
+		AcceptanceCriteria: existing.AcceptanceCriteria,
+	}
+	if req.Title != nil {
+		if *req.Title == "" {
+			return c.JSON(http.StatusBadRequest, errorResponse("title required"))
+		}
+		if len(*req.Title) > 150 {
+			return c.JSON(http.StatusBadRequest, errorResponse("title must be 150 characters or less"))
+		}
+		params.Title = *req.Title
+	}
+	if req.Description != nil {
+		params.Description = *req.Description
+	}
+	if req.AcceptanceCriteria != nil {
+		params.AcceptanceCriteria = req.AcceptanceCriteria
+	}
+	if params.AcceptanceCriteria == nil {
+		params.AcceptanceCriteria = []string{}
+	}
+
+	prev, err := h.store.StartOverTask(ctx, id, params)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	if prev == nil {
+		return c.JSON(http.StatusConflict, errorResponse("task is not in review or failed status"))
+	}
+
+	// Close the corresponding GitHub PR and delete its branch if it had one.
+	if prev.PRNumber > 0 && prev.Status != task.StatusMerged {
+		if gh := h.githubClient(); gh != nil {
+			repoID, parseErr := repo.ParseRepoID(prev.RepoID)
+			if parseErr == nil {
+				r, readErr := h.repoStore.ReadRepo(ctx, repoID)
+				if readErr == nil {
+					branch, closeErr := gh.ClosePR(ctx, r.Owner, r.Name, prev.PRNumber)
+					if closeErr == nil && branch != "" {
+						_ = gh.DeleteBranch(ctx, r.Owner, r.Name, branch)
+					}
+				}
+			}
+		}
 	}
 
 	t, err := h.store.ReadTask(ctx, id)

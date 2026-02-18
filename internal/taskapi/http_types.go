@@ -84,6 +84,14 @@ type FeedbackRequest struct {
 	Feedback string `json:"feedback"`
 }
 
+// StartOverRequest is the request body for starting a task over from scratch.
+// All fields are optional — only provided fields are updated; others keep their current values.
+type StartOverRequest struct {
+	Title              *string  `json:"title,omitempty"`
+	Description        *string  `json:"description,omitempty"`
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+}
+
 // RemoveDependencyRequest is the request body for removing a dependency from a task.
 type RemoveDependencyRequest struct {
 	DependsOn string `json:"depends_on"`

@@ -78,6 +78,13 @@ type UpdatePendingTaskParams struct {
 	Ready              bool
 }
 
+// StartOverTaskParams holds the fields that can be updated when starting a task over.
+type StartOverTaskParams struct {
+	Title              string
+	Description        string
+	AcceptanceCriteria []string
+}
+
 // NewTask creates a new Task with a generated TaskID and pending status.
 func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []string, maxCostUSD float64, skipPR bool, model string, ready bool) *Task {
 	now := time.Now()

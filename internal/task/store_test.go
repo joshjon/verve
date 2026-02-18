@@ -391,6 +391,35 @@ func (m *mockRepository) UpdatePendingTask(_ context.Context, id TaskID, params 
 	return true, nil
 }
 
+func (m *mockRepository) StartOverTask(_ context.Context, id TaskID, params StartOverTaskParams) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id.String()]
+	if !ok {
+		return false, errors.New("task not found")
+	}
+	if t.Status != StatusReview && t.Status != StatusFailed {
+		return false, nil
+	}
+	t.Status = StatusPending
+	t.Title = params.Title
+	t.Description = params.Description
+	t.AcceptanceCriteria = params.AcceptanceCriteria
+	t.Attempt = 1
+	t.MaxAttempts = 5
+	t.RetryReason = ""
+	t.RetryContext = ""
+	t.CloseReason = ""
+	t.AgentStatus = ""
+	t.ConsecutiveFailures = 0
+	t.CostUSD = 0
+	t.PullRequestURL = ""
+	t.PRNumber = 0
+	t.BranchName = ""
+	t.StartedAt = nil
+	return true, nil
+}
+
 func (m *mockRepository) BeginTxFunc(ctx context.Context, fn func(context.Context, tx.Tx, Repository) error) error {
 	return fn(ctx, nil, m)
 }

@@ -117,3 +117,24 @@ UPDATE task SET
   ready = $9,
   updated_at = NOW()
 WHERE id = $1 AND status = 'pending';
+
+-- name: StartOverTask :execrows
+UPDATE task SET
+  status = 'pending',
+  title = $2,
+  description = $3,
+  acceptance_criteria_list = $4,
+  attempt = 1,
+  max_attempts = 5,
+  retry_reason = NULL,
+  retry_context = NULL,
+  close_reason = NULL,
+  agent_status = NULL,
+  consecutive_failures = 0,
+  cost_usd = 0,
+  pull_request_url = NULL,
+  pr_number = NULL,
+  branch_name = NULL,
+  started_at = NULL,
+  updated_at = NOW()
+WHERE id = $1 AND status IN ('review', 'failed');
