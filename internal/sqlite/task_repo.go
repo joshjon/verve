@@ -117,7 +117,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	if len(repoIDs) == 0 {
 		return nil, nil
 	}
-	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready FROM task WHERE status = 'pending' AND ready = 1 AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
+	query := "SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, attempt_base FROM task WHERE status = 'pending' AND ready = 1 AND repo_id IN (?" + strings.Repeat(",?", len(repoIDs)-1) + ") ORDER BY created_at ASC"
 	args := make([]any, len(repoIDs))
 	for i, id := range repoIDs {
 		args[i] = id
@@ -130,7 +130,7 @@ func (r *TaskRepository) ListPendingTasksByRepos(ctx context.Context, repoIDs []
 	var tasks []*task.Task
 	for rows.Next() {
 		var t sqlc.Task
-		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.AcceptanceCriteria, &t.AgentStatus, &t.RetryContext, &t.ConsecutiveFailures, &t.CostUsd, &t.MaxCostUsd, &t.CreatedAt, &t.UpdatedAt, &t.SkipPr, &t.BranchName, &t.Title, &t.AcceptanceCriteriaList, &t.Model, &t.StartedAt, &t.Ready); err != nil {
+		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.PullRequestUrl, &t.PrNumber, &t.DependsOn, &t.CloseReason, &t.Attempt, &t.MaxAttempts, &t.RetryReason, &t.AcceptanceCriteria, &t.AgentStatus, &t.RetryContext, &t.ConsecutiveFailures, &t.CostUsd, &t.MaxCostUsd, &t.CreatedAt, &t.UpdatedAt, &t.SkipPr, &t.BranchName, &t.Title, &t.AcceptanceCriteriaList, &t.Model, &t.StartedAt, &t.Ready, &t.AttemptBase); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, unmarshalTask(&t))

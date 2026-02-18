@@ -12,6 +12,7 @@ export interface Task {
 	depends_on?: string[];
 	close_reason?: string;
 	attempt: number;
+	attempt_base: number;
 	max_attempts: number;
 	retry_reason?: string;
 	acceptance_criteria: string[];

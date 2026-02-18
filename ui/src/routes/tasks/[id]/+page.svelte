@@ -1228,14 +1228,14 @@
 				</div>
 
 			<!-- Agent Insights -->
-				{#if parsedAgentStatus || task.attempt > 1}
+				{#if parsedAgentStatus || task.attempt - task.attempt_base > 1}
 					<div class="px-5 py-4 border-b space-y-4">
-						{#if task.attempt > 1}
+						{#if task.attempt - task.attempt_base > 1}
 							<div class="space-y-2">
 								<div class="flex items-center gap-2">
 									<span class="text-sm font-medium">Last Retry</span>
 									<Badge variant="outline" class="text-xs {['review', 'merged'].includes(task.status) ? 'border-green-500/50 text-green-600 dark:text-green-400' : ''}">
-										Attempt {task.attempt}/{task.max_attempts}
+										Attempt {task.attempt - task.attempt_base}/{task.max_attempts}
 									</Badge>
 								</div>
 								{#if task.consecutive_failures >= 2 && !['review', 'merged'].includes(task.status)}

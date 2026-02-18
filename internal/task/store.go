@@ -108,7 +108,7 @@ func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason strin
 		return s.UpdateTaskStatus(ctx, id, StatusFailed)
 	}
 
-	if t.Attempt >= t.MaxAttempts {
+	if (t.Attempt - t.AttemptBase) >= t.MaxAttempts {
 		return s.UpdateTaskStatus(ctx, id, StatusFailed)
 	}
 
@@ -164,10 +164,9 @@ func (s *Store) ManualRetryTask(ctx context.Context, id TaskID, instructions str
 // can iterate on its solution based on the user's feedback. Unlike ManualRetryTask,
 // it preserves the existing PR/branch so the agent pushes fixes to the same branch.
 //
-// Feedback retries (manual change requests) do not count towards the max retry
-// attempts because they represent user-driven iteration rather than failure recovery.
-// Both attempt and max_attempts are incremented so the attempt number is unique
-// for log tabbing while keeping the retry budget unchanged.
+// Feedback retries (manual change requests) reset the retry cycle by updating
+// attempt_base so the retry budget starts fresh. The attempt counter still
+// increments (for unique log tabs) but the cycle-relative attempt resets to 1.
 func (s *Store) FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) error {
 	t, err := s.repo.ReadTask(ctx, id)
 	if err != nil {
