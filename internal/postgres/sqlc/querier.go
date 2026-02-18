@@ -12,11 +12,14 @@ import (
 
 type Querier interface {
 	AddTaskCost(ctx context.Context, arg AddTaskCostParams) error
+	AppendSessionLog(ctx context.Context, arg AppendSessionLogParams) error
 	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
 	ClaimTask(ctx context.Context, id string) (int64, error)
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
+	CreateEpic(ctx context.Context, arg CreateEpicParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	CreateTask(ctx context.Context, arg CreateTaskParams) error
+	DeleteEpic(ctx context.Context, id string) error
 	DeleteGitHubToken(ctx context.Context) error
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteSetting(ctx context.Context, key string) error
@@ -24,6 +27,8 @@ type Querier interface {
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
 	Heartbeat(ctx context.Context, id string) error
+	ListEpics(ctx context.Context) ([]*Epic, error)
+	ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	ListPendingTasksByRepos(ctx context.Context, dollar_1 []string) ([]*Task, error)
 	ListRepos(ctx context.Context) ([]*Repo, error)
@@ -35,6 +40,7 @@ type Querier interface {
 	ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error)
 	ManualRetryTask(ctx context.Context, arg ManualRetryTaskParams) (int64, error)
+	ReadEpic(ctx context.Context, id string) (*Epic, error)
 	ReadGitHubToken(ctx context.Context) (string, error)
 	ReadRepo(ctx context.Context, id string) (*Repo, error)
 	ReadRepoByFullName(ctx context.Context, fullName string) (*Repo, error)
@@ -49,12 +55,16 @@ type Querier interface {
 	SetBranchName(ctx context.Context, arg SetBranchNameParams) error
 	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error
 	SetConsecutiveFailures(ctx context.Context, arg SetConsecutiveFailuresParams) error
+	SetEpicTaskIDs(ctx context.Context, arg SetEpicTaskIDsParams) error
 	SetReady(ctx context.Context, arg SetReadyParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	StartOverTask(ctx context.Context, arg StartOverTaskParams) (int64, error)
 	TaskExists(ctx context.Context, id string) (bool, error)
+	UpdateEpic(ctx context.Context, arg UpdateEpicParams) error
+	UpdateEpicStatus(ctx context.Context, arg UpdateEpicStatusParams) error
 	UpdatePendingTask(ctx context.Context, arg UpdatePendingTaskParams) (int64, error)
+	UpdateProposedTasks(ctx context.Context, arg UpdateProposedTasksParams) error
 	UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error
 	UpsertGitHubToken(ctx context.Context, arg UpsertGitHubTokenParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

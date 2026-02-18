@@ -37,6 +37,7 @@ type Task struct {
 	MaxCostUSD          float64   `json:"max_cost_usd,omitempty"`
 	SkipPR              bool      `json:"skip_pr"`
 	Ready               bool      `json:"ready"`
+	EpicID              string     `json:"epic_id,omitempty"`
 	Model               string     `json:"model,omitempty"`
 	BranchName          string     `json:"branch_name,omitempty"`
 	StartedAt           *time.Time `json:"started_at,omitempty"`

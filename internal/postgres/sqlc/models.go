@@ -81,6 +81,21 @@ func AllTaskStatusValues() []TaskStatus {
 	}
 }
 
+type Epic struct {
+	ID             string             `json:"id"`
+	RepoID         string             `json:"repo_id"`
+	Title          string             `json:"title"`
+	Description    string             `json:"description"`
+	Status         string             `json:"status"`
+	ProposedTasks  []byte             `json:"proposed_tasks"`
+	TaskIds        []string           `json:"task_ids"`
+	PlanningPrompt *string            `json:"planning_prompt"`
+	SessionLog     []string           `json:"session_log"`
+	NotReady       bool               `json:"not_ready"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type GithubToken struct {
 	ID             string             `json:"id"`
 	EncryptedToken string             `json:"encrypted_token"`
@@ -129,6 +144,7 @@ type Task struct {
 	StartedAt              pgtype.Timestamptz `json:"started_at"`
 	Ready                  bool               `json:"ready"`
 	LastHeartbeatAt        pgtype.Timestamptz `json:"last_heartbeat_at"`
+	EpicID                 *string            `json:"epic_id"`
 }
 
 type TaskLog struct {

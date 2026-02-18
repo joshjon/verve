@@ -1,0 +1,271 @@
+package epicapi
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/joshjon/kit/errtag"
+	"github.com/labstack/echo/v4"
+
+	"verve/internal/epic"
+	"verve/internal/repo"
+)
+
+// HTTPHandler handles epic HTTP requests.
+type HTTPHandler struct {
+	store     *epic.Store
+	repoStore *repo.Store
+}
+
+// NewHTTPHandler creates a new HTTPHandler.
+func NewHTTPHandler(store *epic.Store, repoStore *repo.Store) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore}
+}
+
+// Register adds the epic endpoints to the provided Echo router group.
+func (h *HTTPHandler) Register(g *echo.Group) {
+	// Epic CRUD (repo-scoped)
+	g.POST("/repos/:repo_id/epics", h.CreateEpic)
+	g.GET("/repos/:repo_id/epics", h.ListEpicsByRepo)
+
+	// Epic operations (globally unique IDs)
+	g.GET("/epics/:id", h.GetEpic)
+	g.DELETE("/epics/:id", h.DeleteEpic)
+
+	// Planning session
+	g.POST("/epics/:id/plan", h.StartPlanning)
+	g.PUT("/epics/:id/proposed-tasks", h.UpdateProposedTasks)
+	g.POST("/epics/:id/session-message", h.SendSessionMessage)
+	g.POST("/epics/:id/finish-planning", h.FinishPlanning)
+
+	// Confirmation
+	g.POST("/epics/:id/confirm", h.ConfirmEpic)
+	g.POST("/epics/:id/close", h.CloseEpic)
+}
+
+// CreateEpic handles POST /repos/:repo_id/epics
+func (h *HTTPHandler) CreateEpic(c echo.Context) error {
+	repoID, err := repo.ParseRepoID(c.Param("repo_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
+	}
+
+	var req CreateEpicRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.Title == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("title required"))
+	}
+	if len(req.Title) > 200 {
+		return c.JSON(http.StatusBadRequest, errorResponse("title must be 200 characters or less"))
+	}
+
+	e := epic.NewEpic(repoID.String(), req.Title, req.Description)
+	if err := h.store.CreateEpic(c.Request().Context(), e); err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusCreated, e)
+}
+
+// ListEpicsByRepo handles GET /repos/:repo_id/epics
+func (h *HTTPHandler) ListEpicsByRepo(c echo.Context) error {
+	repoID, err := repo.ParseRepoID(c.Param("repo_id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid repo ID"))
+	}
+
+	epics, err := h.store.ListEpicsByRepo(c.Request().Context(), repoID.String())
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, epics)
+}
+
+// GetEpic handles GET /epics/:id
+func (h *HTTPHandler) GetEpic(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	e, err := h.store.ReadEpic(c.Request().Context(), id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+// DeleteEpic handles DELETE /epics/:id
+func (h *HTTPHandler) DeleteEpic(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	if err := h.store.DeleteEpic(c.Request().Context(), id); err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, statusOK())
+}
+
+// StartPlanning handles POST /epics/:id/plan
+func (h *HTTPHandler) StartPlanning(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	var req StartPlanningRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.Prompt == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("prompt required"))
+	}
+
+	ctx := c.Request().Context()
+	if err := h.store.StartPlanning(ctx, id, req.Prompt); err != nil {
+		return jsonError(c, err)
+	}
+
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+// UpdateProposedTasks handles PUT /epics/:id/proposed-tasks
+func (h *HTTPHandler) UpdateProposedTasks(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	var req UpdateProposedTasksRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+
+	ctx := c.Request().Context()
+	if err := h.store.UpdateProposedTasks(ctx, id, req.Tasks); err != nil {
+		return jsonError(c, err)
+	}
+
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+// SendSessionMessage handles POST /epics/:id/session-message
+func (h *HTTPHandler) SendSessionMessage(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	var req SessionMessageRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if req.Message == "" {
+		return c.JSON(http.StatusBadRequest, errorResponse("message required"))
+	}
+
+	ctx := c.Request().Context()
+	if err := h.store.AppendSessionLog(ctx, id, []string{"user: " + req.Message}); err != nil {
+		return jsonError(c, err)
+	}
+
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+// FinishPlanning handles POST /epics/:id/finish-planning
+func (h *HTTPHandler) FinishPlanning(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	ctx := c.Request().Context()
+	if err := h.store.FinishPlanning(ctx, id); err != nil {
+		return jsonError(c, err)
+	}
+
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+// ConfirmEpic handles POST /epics/:id/confirm
+func (h *HTTPHandler) ConfirmEpic(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	var req ConfirmEpicRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+
+	ctx := c.Request().Context()
+	if err := h.store.ConfirmEpic(ctx, id, req.NotReady); err != nil {
+		return jsonError(c, err)
+	}
+
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+// CloseEpic handles POST /epics/:id/close
+func (h *HTTPHandler) CloseEpic(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	ctx := c.Request().Context()
+	if err := h.store.CloseEpic(ctx, id); err != nil {
+		return jsonError(c, err)
+	}
+
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, e)
+}
+
+func jsonError(c echo.Context, err error) error {
+	code := http.StatusInternalServerError
+	msg := "internal server error"
+
+	var tagger errtag.Tagger
+	if errors.As(err, &tagger) {
+		code = tagger.Code()
+		msg = tagger.Msg()
+	}
+
+	return c.JSON(code, errorResponse(msg))
+}
+
+func errorResponse(msg string) map[string]string {
+	return map[string]string{"error": msg}
+}
+
+func statusOK() map[string]string {
+	return map[string]string{"status": "ok"}
+}

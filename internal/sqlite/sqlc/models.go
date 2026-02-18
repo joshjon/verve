@@ -8,6 +8,21 @@ import (
 	"time"
 )
 
+type Epic struct {
+	ID             string
+	RepoID         string
+	Title          string
+	Description    string
+	Status         string
+	ProposedTasks  string
+	TaskIds        string
+	PlanningPrompt *string
+	SessionLog     string
+	NotReady       int64
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type GithubToken struct {
 	ID             string
 	EncryptedToken string
@@ -57,6 +72,7 @@ type Task struct {
 	StartedAt              *time.Time
 	Ready                  int64
 	LastHeartbeatAt        *string
+	EpicID                 *string
 }
 
 type TaskLog struct {
