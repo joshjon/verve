@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Badge } from '$lib/components/ui/badge';
-	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu, Info } from 'lucide-svelte';
+	import { FileText, Link2, Search, X, Loader2, Sparkles, ChevronDown, ChevronRight, Target, DollarSign, GitBranch, Plus, Type, Cpu, PauseCircle } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -299,6 +299,30 @@
 					</div>
 				</div>
 
+				<hr class="border-border" />
+
+				<label
+					for="not-ready"
+					class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors {notReady ? 'border-orange-500/40 bg-orange-500/5' : ''}"
+				>
+					<input
+						id="not-ready"
+						type="checkbox"
+						bind:checked={notReady}
+						class="w-4 h-4 rounded border-input accent-primary"
+						disabled={loading}
+					/>
+					<div class="flex-1">
+						<div class="text-sm font-medium flex items-center gap-1.5">
+							<PauseCircle class="w-3.5 h-3.5 text-orange-500" />
+							Not ready
+						</div>
+						<p class="text-xs text-muted-foreground mt-0.5">
+							Add this task for tracking only. It won't be picked up by agents until marked as ready.
+						</p>
+					</div>
+				</label>
+
 				<div>
 					<button
 						type="button"
@@ -382,21 +406,7 @@
 					</div>
 				{/if}
 			</div>
-			<Dialog.Footer class="gap-2 sm:justify-between">
-				<label for="not-ready" class="flex items-center gap-1.5 cursor-pointer select-none mr-auto">
-					<input
-						id="not-ready"
-						type="checkbox"
-						bind:checked={notReady}
-						class="w-3.5 h-3.5 rounded border-input accent-primary"
-						disabled={loading}
-					/>
-					<span class="text-sm text-muted-foreground">Not ready</span>
-					<span title="Add this task for tracking only. It won't be picked up by agents until marked as ready.">
-						<Info class="w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors" />
-					</span>
-				</label>
-				<div class="flex gap-2">
+			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={handleClose} disabled={loading}>
 					Cancel
 				</Button>
@@ -409,7 +419,6 @@
 						Create Task
 					{/if}
 				</Button>
-				</div>
 			</Dialog.Footer>
 		</form>
 	</Dialog.Content>
