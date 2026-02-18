@@ -170,7 +170,6 @@
 							id="edit-title"
 							type="text"
 							bind:value={editTitle}
-							autofocus
 							maxlength={150}
 							class="w-full border rounded-lg p-3 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
 							placeholder="Task title"

@@ -52,6 +52,9 @@ func unmarshalTask(in *sqlc.Task) *task.Task {
 	if in.BranchName != nil {
 		t.BranchName = *in.BranchName
 	}
+	if in.EpicID != nil {
+		t.EpicID = *in.EpicID
+	}
 	if in.StartedAt.Valid {
 		t.StartedAt = &in.StartedAt.Time
 	}

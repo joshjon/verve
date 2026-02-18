@@ -1,6 +1,7 @@
 import { API_BASE_URL } from './config/api';
 import type { Task } from './models/task';
 import type { Repo, GitHubRepo } from './models/repo';
+import type { Epic, ProposedTask } from './models/epic';
 
 export class VerveClient {
 	private baseUrl: string;
@@ -289,6 +290,114 @@ export class VerveClient {
 		if (!res.ok) {
 			throw new Error('Failed to delete default model');
 		}
+	}
+
+	// --- Epic APIs ---
+
+	async listEpicsByRepo(repoId: string): Promise<Epic[]> {
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/epics`);
+		if (!res.ok) {
+			throw new Error('Failed to fetch epics');
+		}
+		return res.json();
+	}
+
+	async createEpic(repoId: string, title: string, description: string): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/epics`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ title, description })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to create epic');
+		}
+		return res.json();
+	}
+
+	async getEpic(id: string): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}`);
+		if (!res.ok) {
+			throw new Error('Epic not found');
+		}
+		return res.json();
+	}
+
+	async deleteEpic(id: string): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}`, {
+			method: 'DELETE'
+		});
+		if (!res.ok) {
+			throw new Error('Failed to delete epic');
+		}
+	}
+
+	async startPlanning(id: string, prompt: string): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/plan`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ prompt })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to start planning');
+		}
+		return res.json();
+	}
+
+	async updateProposedTasks(id: string, tasks: ProposedTask[]): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/proposed-tasks`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ tasks })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to update proposed tasks');
+		}
+		return res.json();
+	}
+
+	async sendSessionMessage(id: string, message: string): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/session-message`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ message })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to send message');
+		}
+		return res.json();
+	}
+
+	async finishPlanning(id: string): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/finish-planning`, {
+			method: 'POST'
+		});
+		if (!res.ok) {
+			throw new Error('Failed to finish planning');
+		}
+		return res.json();
+	}
+
+	async confirmEpic(id: string, notReady?: boolean): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/confirm`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ not_ready: notReady ?? false })
+		});
+		if (!res.ok) {
+			const body = await res.json().catch(() => null);
+			throw new Error(body?.error || 'Failed to confirm epic');
+		}
+		return res.json();
+	}
+
+	async closeEpic(id: string): Promise<Epic> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/close`, {
+			method: 'POST'
+		});
+		if (!res.ok) {
+			throw new Error('Failed to close epic');
+		}
+		return res.json();
 	}
 
 	// --- SSE URLs ---

@@ -1,0 +1,199 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+
+	"github.com/joshjon/kit/errtag"
+	sqlite3 "modernc.org/sqlite/lib"
+
+	"verve/internal/epic"
+	"verve/internal/sqlite/sqlc"
+)
+
+var _ epic.Repository = (*EpicRepository)(nil)
+
+// EpicRepository implements epic.Repository using SQLite.
+type EpicRepository struct {
+	db *sqlc.Queries
+}
+
+// NewEpicRepository creates a new EpicRepository backed by the given SQLite DB.
+func NewEpicRepository(db DB) *EpicRepository {
+	return &EpicRepository{
+		db: sqlc.New(db),
+	}
+}
+
+func (r *EpicRepository) CreateEpic(ctx context.Context, e *epic.Epic) error {
+	proposedJSON, _ := json.Marshal(e.ProposedTasks)
+	taskIDsJSON, _ := json.Marshal(e.TaskIDs)
+	sessionLogJSON, _ := json.Marshal(e.SessionLog)
+	var prompt *string
+	if e.PlanningPrompt != "" {
+		prompt = &e.PlanningPrompt
+	}
+	var notReady int64
+	if e.NotReady {
+		notReady = 1
+	}
+	err := r.db.CreateEpic(ctx, sqlc.CreateEpicParams{
+		ID:             e.ID.String(),
+		RepoID:         e.RepoID,
+		Title:          e.Title,
+		Description:    e.Description,
+		Status:         string(e.Status),
+		ProposedTasks:  string(proposedJSON),
+		TaskIds:        string(taskIDsJSON),
+		PlanningPrompt: prompt,
+		SessionLog:     string(sessionLogJSON),
+		NotReady:       notReady,
+		CreatedAt:      e.CreatedAt,
+		UpdatedAt:      e.UpdatedAt,
+	})
+	return tagEpicErr(err)
+}
+
+func (r *EpicRepository) ReadEpic(ctx context.Context, id epic.EpicID) (*epic.Epic, error) {
+	row, err := r.db.ReadEpic(ctx, id.String())
+	if err != nil {
+		return nil, tagEpicErr(err)
+	}
+	return unmarshalEpic(row), nil
+}
+
+func (r *EpicRepository) ListEpics(ctx context.Context) ([]*epic.Epic, error) {
+	rows, err := r.db.ListEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
+func (r *EpicRepository) ListEpicsByRepo(ctx context.Context, repoID string) ([]*epic.Epic, error) {
+	rows, err := r.db.ListEpicsByRepo(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
+func (r *EpicRepository) UpdateEpic(ctx context.Context, e *epic.Epic) error {
+	proposedJSON, _ := json.Marshal(e.ProposedTasks)
+	taskIDsJSON, _ := json.Marshal(e.TaskIDs)
+	sessionLogJSON, _ := json.Marshal(e.SessionLog)
+	var prompt *string
+	if e.PlanningPrompt != "" {
+		prompt = &e.PlanningPrompt
+	}
+	var notReady int64
+	if e.NotReady {
+		notReady = 1
+	}
+	return tagEpicErr(r.db.UpdateEpic(ctx, sqlc.UpdateEpicParams{
+		Title:          e.Title,
+		Description:    e.Description,
+		Status:         string(e.Status),
+		ProposedTasks:  string(proposedJSON),
+		TaskIds:        string(taskIDsJSON),
+		PlanningPrompt: prompt,
+		SessionLog:     string(sessionLogJSON),
+		NotReady:       notReady,
+		ID:             e.ID.String(),
+	}))
+}
+
+func (r *EpicRepository) UpdateEpicStatus(ctx context.Context, id epic.EpicID, status epic.Status) error {
+	return tagEpicErr(r.db.UpdateEpicStatus(ctx, sqlc.UpdateEpicStatusParams{
+		Status: string(status),
+		ID:     id.String(),
+	}))
+}
+
+func (r *EpicRepository) UpdateProposedTasks(ctx context.Context, id epic.EpicID, tasks []epic.ProposedTask) error {
+	proposedJSON, _ := json.Marshal(tasks)
+	return tagEpicErr(r.db.UpdateProposedTasks(ctx, sqlc.UpdateProposedTasksParams{
+		ProposedTasks: string(proposedJSON),
+		ID:            id.String(),
+	}))
+}
+
+func (r *EpicRepository) SetTaskIDs(ctx context.Context, id epic.EpicID, taskIDs []string) error {
+	taskIDsJSON, _ := json.Marshal(taskIDs)
+	return tagEpicErr(r.db.SetEpicTaskIDs(ctx, sqlc.SetEpicTaskIDsParams{
+		TaskIds: string(taskIDsJSON),
+		ID:      id.String(),
+	}))
+}
+
+func (r *EpicRepository) AppendSessionLog(ctx context.Context, id epic.EpicID, lines []string) error {
+	// SQLite doesn't support array_append, so read-modify-write
+	existing, err := r.db.ReadEpic(ctx, id.String())
+	if err != nil {
+		return tagEpicErr(err)
+	}
+	var existingLog []string
+	_ = json.Unmarshal([]byte(existing.SessionLog), &existingLog)
+	existingLog = append(existingLog, lines...)
+	logJSON, _ := json.Marshal(existingLog)
+	return tagEpicErr(r.db.AppendSessionLog(ctx, sqlc.AppendSessionLogParams{
+		SessionLog: string(logJSON),
+		ID:         id.String(),
+	}))
+}
+
+func (r *EpicRepository) DeleteEpic(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.DeleteEpic(ctx, id.String()))
+}
+
+func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
+	e := &epic.Epic{
+		ID:          epic.MustParseEpicID(in.ID),
+		RepoID:      in.RepoID,
+		Title:       in.Title,
+		Description: in.Description,
+		Status:      epic.Status(in.Status),
+		NotReady:    in.NotReady != 0,
+		CreatedAt:   in.CreatedAt,
+		UpdatedAt:   in.UpdatedAt,
+	}
+	if in.PlanningPrompt != nil {
+		e.PlanningPrompt = *in.PlanningPrompt
+	}
+	_ = json.Unmarshal([]byte(in.ProposedTasks), &e.ProposedTasks)
+	if e.ProposedTasks == nil {
+		e.ProposedTasks = []epic.ProposedTask{}
+	}
+	_ = json.Unmarshal([]byte(in.TaskIds), &e.TaskIDs)
+	if e.TaskIDs == nil {
+		e.TaskIDs = []string{}
+	}
+	_ = json.Unmarshal([]byte(in.SessionLog), &e.SessionLog)
+	if e.SessionLog == nil {
+		e.SessionLog = []string{}
+	}
+	return e
+}
+
+func unmarshalEpicList(in []*sqlc.Epic) []*epic.Epic {
+	out := make([]*epic.Epic, len(in))
+	for i := range in {
+		out[i] = unmarshalEpic(in[i])
+	}
+	return out
+}
+
+func tagEpicErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return errtag.Tag[epic.ErrTagEpicNotFound](err)
+	}
+	if isSQLiteErrCode(err, sqlite3.SQLITE_CONSTRAINT, sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
+		return errtag.Tag[epic.ErrTagEpicConflict](err)
+	}
+	return err
+}

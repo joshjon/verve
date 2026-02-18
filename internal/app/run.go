@@ -14,6 +14,8 @@ import (
 	"github.com/joshjon/kit/sqlitedb"
 	"github.com/labstack/echo/v4"
 
+	"verve/internal/epic"
+	"verve/internal/epicapi"
 	"verve/internal/frontend"
 	"verve/internal/github"
 	"verve/internal/githubtoken"
@@ -30,6 +32,7 @@ import (
 type stores struct {
 	task        *task.Store
 	repo        *repo.Store
+	epic        *epic.Store
 	githubToken *githubtoken.Service
 	setting     *setting.Service
 }
@@ -111,7 +114,11 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	settingRepo := postgres.NewSettingRepository(pool)
 	settingService := setting.NewService(settingRepo)
 
-	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
+	epicRepo := postgres.NewEpicRepository(pool)
+	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
+	epicStore := epic.NewStore(epicRepo, taskCreator)
+
+	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
 func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, func(), error) {
@@ -147,7 +154,11 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, 
 	settingRepo := sqlite.NewSettingRepository(db)
 	settingService := setting.NewService(settingRepo)
 
-	return stores{task: taskStore, repo: repoStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
+	epicRepo := sqlite.NewEpicRepository(db)
+	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
+	epicStore := epic.NewStore(epicRepo, taskCreator)
+
+	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
 }
 
 func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
@@ -174,6 +185,7 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	}
 
 	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken, s.setting))
+	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo))
 
 	// Background PR sync.
 	go backgroundSync(ctx, logger, s, 30*time.Second)

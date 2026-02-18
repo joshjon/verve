@@ -351,6 +351,208 @@ const MOCK_TASK_LOGS: Record<string, Record<number, string[]>> = {
 	tsk_failed01: SAMPLE_LOGS_FAILED
 };
 
+// --- Mock Epic Data ---
+
+// Epic in draft state — no planning session started yet.
+const MOCK_EPIC_DRAFT = {
+	id: 'epc_draft01',
+	repo_id: 'repo_mock01',
+	title: 'Implement user authentication system',
+	description:
+		'Build a complete authentication system with JWT tokens, login/signup pages, password reset flow, and role-based access control. Should integrate with the existing Express API and use PostgreSQL for user storage.',
+	status: 'draft',
+	proposed_tasks: [],
+	task_ids: [],
+	session_log: [],
+	not_ready: false,
+	created_at: '2025-06-01T09:00:00Z',
+	updated_at: '2025-06-01T09:00:00Z'
+};
+
+// Epic in planning state — agent has proposed tasks and there's an active session.
+const MOCK_EPIC_PLANNING = {
+	id: 'epc_planning01',
+	repo_id: 'repo_mock01',
+	title: 'Add real-time notifications',
+	description:
+		'Implement a real-time notification system using WebSockets. Users should receive notifications for task completions, PR reviews, and system alerts. Include a notification bell in the header with an unread count badge.',
+	status: 'planning',
+	proposed_tasks: [
+		{
+			temp_id: 'tmp_01',
+			title: 'Set up WebSocket server infrastructure',
+			description:
+				'Create a WebSocket server using ws library integrated with the Express app. Handle connection lifecycle, authentication via JWT, and heartbeat pings.',
+			depends_on_temp_ids: [],
+			acceptance_criteria: [
+				'WebSocket server accepts connections on /ws',
+				'Connections require valid JWT token',
+				'Heartbeat ping/pong every 30s'
+			]
+		},
+		{
+			temp_id: 'tmp_02',
+			title: 'Create notification data model and API',
+			description:
+				'Design the notifications table in PostgreSQL with fields for type, message, read status, and user association. Add REST endpoints for listing and marking notifications as read.',
+			depends_on_temp_ids: [],
+			acceptance_criteria: [
+				'Notifications table with proper indexes',
+				'GET /notifications returns paginated results',
+				'PATCH /notifications/:id/read marks as read'
+			]
+		},
+		{
+			temp_id: 'tmp_03',
+			title: 'Implement notification dispatch service',
+			description:
+				'Create a service that listens for system events (task complete, PR review, etc.) and dispatches notifications to the correct users via WebSocket and database persistence.',
+			depends_on_temp_ids: ['tmp_01', 'tmp_02'],
+			acceptance_criteria: [
+				'Dispatches on task_completed event',
+				'Dispatches on pr_review_requested event',
+				'Falls back to database if user offline'
+			]
+		},
+		{
+			temp_id: 'tmp_04',
+			title: 'Build notification bell UI component',
+			description:
+				'Add a notification bell icon to the app header with unread count badge. Clicking opens a dropdown with recent notifications. Each notification is clickable and navigates to the relevant resource.',
+			depends_on_temp_ids: ['tmp_02', 'tmp_03'],
+			acceptance_criteria: [
+				'Bell icon shows unread count',
+				'Dropdown lists last 20 notifications',
+				'Clicking notification navigates to resource',
+				'Mark as read on click'
+			]
+		},
+		{
+			temp_id: 'tmp_05',
+			title: 'Add notification preferences page',
+			description:
+				'Create a settings page where users can configure which notification types they want to receive and their preferred delivery method (in-app, email, or both).',
+			depends_on_temp_ids: ['tmp_03'],
+			acceptance_criteria: [
+				'Settings page lists all notification types',
+				'Toggle for in-app and email per type',
+				'Preferences persist across sessions'
+			]
+		}
+	],
+	task_ids: [],
+	planning_prompt:
+		'Break this into small, independently testable tasks. Each task should be completable in one PR. Start with the backend infrastructure, then the API layer, and finally the UI components.',
+	session_log: [
+		'agent: Analyzing the epic requirements for real-time notifications...',
+		'agent: I\'ve identified 5 tasks that build on each other. The WebSocket server and data model can be worked on in parallel, then the dispatch service ties them together.',
+		'user: Can you add a task for notification preferences/settings?',
+		'agent: Good idea — I\'ve added task 5 for a notification preferences page that depends on the dispatch service.',
+		'agent: The dependency graph is: tasks 1 & 2 are independent → task 3 depends on both → tasks 4 & 5 depend on task 3.'
+	],
+	not_ready: false,
+	created_at: '2025-06-01T10:00:00Z',
+	updated_at: '2025-06-01T10:30:00Z'
+};
+
+// Epic in ready state — planning finished, tasks proposed, ready to confirm.
+const MOCK_EPIC_READY = {
+	id: 'epc_ready01',
+	repo_id: 'repo_mock01',
+	title: 'Migrate database to PostgreSQL',
+	description:
+		'Migrate the application from SQLite to PostgreSQL for production readiness. Update all query files, connection handling, and deployment configuration.',
+	status: 'ready',
+	proposed_tasks: [
+		{
+			temp_id: 'tmp_r01',
+			title: 'Set up PostgreSQL schema and migrations',
+			description:
+				'Create the initial PostgreSQL schema matching the current SQLite tables. Use golang-migrate for migration files.',
+			depends_on_temp_ids: [],
+			acceptance_criteria: ['All tables created', 'Migrations run cleanly']
+		},
+		{
+			temp_id: 'tmp_r02',
+			title: 'Update repository layer for pgx',
+			description:
+				'Replace database/sql calls with pgx/v5 in all repository implementations. Update query parameter placeholders from ? to $N.',
+			depends_on_temp_ids: ['tmp_r01'],
+			acceptance_criteria: ['All queries use pgx', 'Parameter placeholders updated']
+		},
+		{
+			temp_id: 'tmp_r03',
+			title: 'Add connection pooling and health checks',
+			description: 'Configure pgxpool with proper connection limits and add a /health endpoint that verifies database connectivity.',
+			depends_on_temp_ids: ['tmp_r02'],
+			acceptance_criteria: ['Pool configured with limits', 'Health endpoint responds']
+		}
+	],
+	task_ids: [],
+	planning_prompt: 'Keep it to 3 focused tasks. We need a clean migration path.',
+	session_log: [
+		'agent: I\'ll break the PostgreSQL migration into 3 sequential tasks.',
+		'agent: Each task builds on the previous one — schema first, then query layer, then operational concerns.',
+		'user: Looks good, let\'s go with this plan.'
+	],
+	not_ready: false,
+	created_at: '2025-06-01T08:00:00Z',
+	updated_at: '2025-06-01T09:00:00Z'
+};
+
+// Epic in active state — tasks have been created and are being worked on.
+const MOCK_EPIC_ACTIVE = {
+	id: 'epc_active01',
+	repo_id: 'repo_mock01',
+	title: 'Add CI/CD pipeline',
+	description:
+		'Set up continuous integration and deployment with GitHub Actions. Include linting, testing, building, and auto-deployment to staging.',
+	status: 'active',
+	proposed_tasks: [
+		{
+			temp_id: 'tmp_a01',
+			title: 'Create CI workflow for linting and tests',
+			description: 'GitHub Actions workflow that runs on every PR.',
+			depends_on_temp_ids: [],
+			acceptance_criteria: ['Workflow triggers on PR']
+		},
+		{
+			temp_id: 'tmp_a02',
+			title: 'Add build and Docker image workflow',
+			description: 'Build the Go binary and Docker image on main branch pushes.',
+			depends_on_temp_ids: ['tmp_a01'],
+			acceptance_criteria: ['Image pushed to registry']
+		},
+		{
+			temp_id: 'tmp_a03',
+			title: 'Set up staging auto-deploy',
+			description: 'Deploy to staging environment automatically on successful builds.',
+			depends_on_temp_ids: ['tmp_a02'],
+			acceptance_criteria: ['Staging updated on merge to main']
+		}
+	],
+	task_ids: ['tsk_pending01', 'tsk_running01', 'tsk_review01'],
+	planning_prompt: 'Set up a standard CI/CD pipeline with GitHub Actions.',
+	session_log: [
+		'agent: I\'ll set up CI/CD in 3 stages: lint/test, build, deploy.',
+		'user: Perfect, confirm it.'
+	],
+	not_ready: false,
+	created_at: '2025-05-28T12:00:00Z',
+	updated_at: '2025-06-01T10:00:00Z'
+};
+
+// All mock epics, used by the dashboard's epic list.
+const MOCK_EPICS = [MOCK_EPIC_DRAFT, MOCK_EPIC_PLANNING, MOCK_EPIC_READY, MOCK_EPIC_ACTIVE];
+
+// Map of epic ID to full epic object for detail pages.
+const MOCK_EPIC_MAP: Record<string, typeof MOCK_EPIC_DRAFT> = {
+	epc_draft01: MOCK_EPIC_DRAFT,
+	epc_planning01: MOCK_EPIC_PLANNING,
+	epc_ready01: MOCK_EPIC_READY,
+	epc_active01: MOCK_EPIC_ACTIVE
+};
+
 // Intercept all API calls so the UI renders with mock data instead of hitting a real server.
 // Routes are registered most-specific first because Playwright matches in FIFO order.
 async function setupMockAPI(page: import('@playwright/test').Page) {
@@ -450,6 +652,48 @@ async function setupMockAPI(page: import('@playwright/test').Page) {
 		const task = MOCK_TASKS.find((t) => t.id === taskId);
 		if (task) {
 			return route.fulfill({ json: task });
+		}
+		return route.fulfill({ status: 404, json: { error: 'not found' } });
+	});
+
+	// --- Epic API mocks ---
+
+	// List epics for a repo (must be before generic /repos/* catch-all).
+	await page.route('**/api/v1/repos/*/epics', (route) => {
+		if (route.request().method() === 'POST') {
+			// Create epic — return a new draft epic.
+			return route.fulfill({ json: MOCK_EPIC_DRAFT });
+		}
+		return route.fulfill({ json: MOCK_EPICS });
+	});
+
+	// Epic sub-resource routes (must be before the generic /epics/* catch-all).
+	await page.route('**/api/v1/epics/*/plan', (route) =>
+		route.fulfill({ json: MOCK_EPIC_PLANNING })
+	);
+	await page.route('**/api/v1/epics/*/proposed-tasks', (route) =>
+		route.fulfill({ json: MOCK_EPIC_READY })
+	);
+	await page.route('**/api/v1/epics/*/session-message', (route) =>
+		route.fulfill({ json: MOCK_EPIC_PLANNING })
+	);
+	await page.route('**/api/v1/epics/*/finish-planning', (route) =>
+		route.fulfill({ json: MOCK_EPIC_READY })
+	);
+	await page.route('**/api/v1/epics/*/confirm', (route) =>
+		route.fulfill({ json: MOCK_EPIC_ACTIVE })
+	);
+	await page.route('**/api/v1/epics/*/close', (route) =>
+		route.fulfill({ json: { ...MOCK_EPIC_DRAFT, status: 'closed' } })
+	);
+
+	// Individual epic detail (generic catch-all for /epics/*).
+	await page.route('**/api/v1/epics/*', (route) => {
+		const url = route.request().url();
+		const epicId = url.split('/epics/')[1]?.split('/')[0]?.split('?')[0];
+		const epic = epicId ? MOCK_EPIC_MAP[epicId] : undefined;
+		if (epic) {
+			return route.fulfill({ json: epic });
 		}
 		return route.fulfill({ status: 404, json: { error: 'not found' } });
 	});
@@ -582,6 +826,81 @@ test.describe('UI Screenshots', () => {
 		const dialog = page.locator('[role="dialog"]');
 		await dialog.screenshot({
 			path: `screenshots/create-task-dialog-${testInfo.project.name}.png`
+		});
+	});
+
+	// --- Epic Screenshots ---
+
+	test('create epic dialog', async ({ page }, testInfo) => {
+		await page.setViewportSize({ width: 1280, height: 1600 });
+		await setupMockAPI(page);
+		await page.goto('/');
+
+		// Wait for dashboard to load.
+		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
+			timeout: 5000
+		}).catch(() => {});
+		await page.waitForTimeout(1000);
+
+		// Click the "New Epic" button to open the dialog.
+		const createButton = page.getByRole('button', { name: /new epic/i });
+		await createButton.click();
+
+		// Wait for dialog to appear and settle.
+		await page.waitForTimeout(1000);
+
+		// Screenshot the dialog element directly.
+		const dialog = page.locator('[role="dialog"]');
+		await dialog.screenshot({
+			path: `screenshots/create-epic-dialog-${testInfo.project.name}.png`
+		});
+	});
+
+	test('epic detail - draft', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto('/epics/epc_draft01');
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/epic-draft-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('epic detail - planning with proposed tasks', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto('/epics/epc_planning01');
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/epic-planning-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('epic detail - ready with confirm section', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto('/epics/epc_ready01');
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/epic-ready-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('epic detail - active with created tasks', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto('/epics/epc_active01');
+
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/epic-active-${testInfo.project.name}.png`,
+			fullPage: true
 		});
 	});
 });

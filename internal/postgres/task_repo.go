@@ -64,6 +64,10 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 	if t.Model != "" {
 		model = &t.Model
 	}
+	var epicID *string
+	if t.EpicID != "" {
+		epicID = &t.EpicID
+	}
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
 		ID:                    t.ID.String(),
 		RepoID:                t.RepoID,
@@ -78,6 +82,7 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 		SkipPr:                t.SkipPR,
 		Model:                 model,
 		Ready:                 t.Ready,
+		EpicID:                epicID,
 		CreatedAt:             pgTimestamptz(t.CreatedAt),
 		UpdatedAt:             pgTimestamptz(t.UpdatedAt),
 	})
