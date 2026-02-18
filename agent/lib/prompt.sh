@@ -41,6 +41,20 @@ ${PREVIOUS_STATUS}
 === End Notes ==="
         fi
 
+        # Include git log of previous commits so Claude knows what's been done
+        local previous_commits
+        previous_commits=$(git log --oneline "${DEFAULT_BRANCH}..HEAD" 2>/dev/null | head -20)
+        if [ -n "$previous_commits" ]; then
+            prompt+="
+
+=== Previous Commits on This Branch ===
+${previous_commits}
+=== End Previous Commits ===
+
+The above commits are from a previous attempt and are already applied to the working tree.
+Review these changes before continuing — do not redo work that is already complete."
+        fi
+
         prompt+="
 
 Original task: ${task_title_or_desc}"
@@ -69,6 +83,9 @@ ${ACCEPTANCE_CRITERIA}"
     fi
 
     prompt+='
+
+As you work, periodically save your progress by running: git add -A && git commit -m "wip: <brief description>"
+This ensures your work can be recovered if the session is interrupted.
 
 IMPORTANT: Before you finish, output a status line in this exact format on its own line:
 VERVE_STATUS:{"files_modified":[],"tests_status":"pass|fail|skip","confidence":"high|medium|low","blockers":[],"criteria_met":[],"notes":"Any context for future retry attempts"}'

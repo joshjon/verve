@@ -128,6 +128,7 @@ type Task struct {
 	Model                  *string            `json:"model"`
 	StartedAt              pgtype.Timestamptz `json:"started_at"`
 	Ready                  bool               `json:"ready"`
+	LastHeartbeatAt        pgtype.Timestamptz `json:"last_heartbeat_at"`
 }
 
 type TaskLog struct {

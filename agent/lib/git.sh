@@ -52,6 +52,25 @@ setup_branch() {
     fi
 }
 
+push_wip() {
+    set +e  # Don't exit on errors in cleanup
+    cd /workspace/repo 2>/dev/null || return 0
+
+    git add -A 2>/dev/null
+    if ! git diff --cached --quiet 2>/dev/null; then
+        git commit -m "wip: agent interrupted" 2>/dev/null || return 0
+    fi
+
+    # Push if there are unpushed commits
+    if git rev-parse "origin/${BRANCH}" >/dev/null 2>&1; then
+        if git log "origin/${BRANCH}..HEAD" --oneline 2>/dev/null | grep -q .; then
+            git push --force-with-lease origin "${BRANCH}" 2>/dev/null || true
+        fi
+    else
+        git push -u origin "${BRANCH}" 2>/dev/null || true
+    fi
+}
+
 commit_and_push() {
     log_agent "Checking for changes..."
     git add -A

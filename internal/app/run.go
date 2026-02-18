@@ -178,6 +178,13 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	// Background PR sync.
 	go backgroundSync(ctx, logger, s, 30*time.Second)
 
+	// Background stale task reaper.
+	taskTimeout := cfg.TaskTimeout
+	if taskTimeout == 0 {
+		taskTimeout = 5 * time.Minute
+	}
+	go backgroundReaper(ctx, logger, s, 1*time.Minute, taskTimeout)
+
 	return Serve(ctx, logger, srv)
 }
 
@@ -205,6 +212,26 @@ func Serve(ctx context.Context, logger log.Logger, srv *server.Server) error {
 	case <-ctx.Done():
 		logger.Info("server stopped")
 		return nil
+	}
+}
+
+func backgroundReaper(ctx context.Context, logger log.Logger, s stores, interval, timeout time.Duration) {
+	logger = logger.With("component", "task_reaper")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			count, err := s.task.TimeoutStaleTasks(ctx, timeout)
+			if err != nil {
+				logger.Error("failed to timeout stale tasks", "error", err)
+			} else if count > 0 {
+				logger.Info("timed out stale tasks", "count", count)
+			}
+		}
 	}
 }
 

@@ -21,9 +21,11 @@ type Querier interface {
 	DeleteTaskLogs(ctx context.Context, taskID string) error
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (int64, error)
+	Heartbeat(ctx context.Context, id string) error
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	ListRepos(ctx context.Context) ([]*Repo, error)
 	ListSettings(ctx context.Context) ([]*ListSettingsRow, error)
+	ListStaleTasks(ctx context.Context, lastHeartbeatAt *string) ([]*Task, error)
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)

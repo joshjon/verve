@@ -41,6 +41,18 @@
 - **Dockerfile generation**: Claude generates a suggested Dockerfile tailored to the project when prerequisites are missing, displayed in the UI with a copy button
 - **No wasted tokens**: Checks run before Claude, so API costs are not incurred on prerequisite failures (only the Dockerfile generation call is made)
 
+## WIP Commit Preservation
+
+- **Exit trap**: Agent pushes uncommitted work to the branch on failure via `push_wip()`
+- **Periodic WIP commits**: Agent prompted to make intermediate commits for recovery
+- **Previous progress context**: Retried agents receive git log of previous commits to avoid redoing work
+
+## Heartbeat & Stale Task Recovery
+
+- **Worker heartbeats**: Workers send `POST /tasks/:id/heartbeat` every 30 seconds during execution
+- **Background reaper**: Server detects running tasks with no heartbeat and marks them as failed
+- **Configurable timeout**: `TASK_TIMEOUT` env var (default: 5 minutes) controls stale detection threshold
+
 ## Worker
 
 - **Long-poll task claiming**: Atomic status transitions prevent duplicate claims

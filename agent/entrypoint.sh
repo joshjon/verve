@@ -12,6 +12,16 @@ source "${LIB_DIR}/prompt.sh"
 source "${LIB_DIR}/claude.sh"
 source "${LIB_DIR}/dryrun.sh"
 
+# ── Failure trap ─────────────────────────────────────────────────────
+cleanup_on_failure() {
+    local exit_code=$?
+    if [ "$exit_code" -ne 0 ] && [ -n "${BRANCH:-}" ]; then
+        log_agent "Agent exiting with error — pushing work-in-progress to branch"
+        push_wip
+    fi
+}
+trap cleanup_on_failure EXIT
+
 # ── Banner ──────────────────────────────────────────────────────────
 log_header "Verve Agent Starting"
 echo "Task ID: ${TASK_ID}"

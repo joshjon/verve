@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"time"
 
 	"github.com/joshjon/kit/tx"
 )
@@ -65,4 +66,8 @@ type TaskRepository interface {
 	// state. Optionally updates title, description, and acceptance criteria.
 	// Returns false if the task was not in review or failed status.
 	StartOverTask(ctx context.Context, id TaskID, params StartOverTaskParams) (bool, error)
+	// Heartbeat updates the last heartbeat time for a running task.
+	Heartbeat(ctx context.Context, id TaskID) error
+	// ListStaleTasks returns running tasks whose last heartbeat is before the given time.
+	ListStaleTasks(ctx context.Context, before time.Time) ([]*Task, error)
 }

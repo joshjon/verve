@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joshjon/kit/log"
 
@@ -29,6 +30,15 @@ func main() {
 			Database: os.Getenv("POSTGRES_DATABASE"),
 		},
 		CorsOrigins: []string{"http://localhost:5173", "http://localhost:8080"},
+	}
+
+	if v := os.Getenv("TASK_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			logger.Error("invalid TASK_TIMEOUT", "value", v, "error", err)
+			os.Exit(1)
+		}
+		cfg.TaskTimeout = d
 	}
 
 	if cfg.EncryptionKey == "" {

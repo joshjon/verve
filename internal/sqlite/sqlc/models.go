@@ -56,6 +56,7 @@ type Task struct {
 	Model                  *string
 	StartedAt              *time.Time
 	Ready                  int64
+	LastHeartbeatAt        *string
 }
 
 type TaskLog struct {

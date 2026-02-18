@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/joshjon/kit/tx"
 )
@@ -390,6 +391,30 @@ func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, attempt int, logs
 	return nil
 }
 
+
+// Heartbeat updates the last heartbeat time for a running task.
+func (s *Store) Heartbeat(ctx context.Context, id TaskID) error {
+	return s.repo.Heartbeat(ctx, id)
+}
+
+// TimeoutStaleTasks fails running tasks whose heartbeat has expired.
+func (s *Store) TimeoutStaleTasks(ctx context.Context, timeout time.Duration) (int, error) {
+	threshold := time.Now().Add(-timeout)
+	tasks, err := s.repo.ListStaleTasks(ctx, threshold)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, t := range tasks {
+		_ = s.repo.SetCloseReason(ctx, t.ID, "Worker timeout: no heartbeat received")
+		if err := s.repo.UpdateTaskStatus(ctx, t.ID, StatusFailed); err != nil {
+			continue
+		}
+		count++
+		s.publishTaskUpdated(ctx, t.ID)
+	}
+	return count, nil
+}
 
 // UpdateTaskStatus updates a task's status.
 func (s *Store) UpdateTaskStatus(ctx context.Context, id TaskID, status Status) error {

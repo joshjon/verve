@@ -49,6 +49,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.GET("/tasks/:id", h.GetTask)
 	g.GET("/tasks/:id/logs", h.StreamLogs)
 	g.POST("/tasks/:id/logs", h.AppendLogs)
+	g.POST("/tasks/:id/heartbeat", h.Heartbeat)
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
 	g.POST("/tasks/:id/retry", h.RetryTask)
@@ -435,6 +436,18 @@ func (h *HTTPHandler) AppendLogs(c echo.Context) error {
 	}
 
 	if err := h.store.AppendTaskLogs(c.Request().Context(), id, attempt, req.Logs); err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, statusOK())
+}
+
+// Heartbeat handles POST /tasks/:id/heartbeat
+func (h *HTTPHandler) Heartbeat(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+	if err := h.store.Heartbeat(c.Request().Context(), id); err != nil {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, statusOK())

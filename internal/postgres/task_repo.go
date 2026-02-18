@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"math"
+	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joshjon/kit/errtag"
 	"github.com/joshjon/kit/tx"
@@ -350,6 +352,18 @@ func (r *TaskRepository) StartOverTask(ctx context.Context, id task.TaskID, para
 		AcceptanceCriteriaList: params.AcceptanceCriteria,
 	})
 	return rows > 0, tagTaskErr(err)
+}
+
+func (r *TaskRepository) Heartbeat(ctx context.Context, id task.TaskID) error {
+	return tagTaskErr(r.db.Heartbeat(ctx, id.String()))
+}
+
+func (r *TaskRepository) ListStaleTasks(ctx context.Context, before time.Time) ([]*task.Task, error) {
+	rows, err := r.db.ListStaleTasks(ctx, pgtype.Timestamptz{Time: before, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
 }
 
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {

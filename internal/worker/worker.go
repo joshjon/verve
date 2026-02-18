@@ -406,8 +406,16 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		PreviousStatus:       task.AgentStatus,
 	}
 
+	// Start heartbeat goroutine
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go w.heartbeatLoop(heartbeatCtx, task.ID)
+
 	// Run the agent with streaming logs
 	result := w.docker.RunAgent(ctx, agentCfg, onLog)
+
+	// Stop heartbeat before completing the task
+	cancelHeartbeat()
 
 	// Stop the streamer and flush remaining logs
 	streamer.Stop()
@@ -463,6 +471,38 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs 
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
 	}
+	return nil
+}
+
+func (w *Worker) heartbeatLoop(ctx context.Context, taskID string) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Send initial heartbeat immediately
+	_ = w.sendHeartbeat(ctx, taskID)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = w.sendHeartbeat(ctx, taskID)
+		}
+	}
+}
+
+func (w *Worker) sendHeartbeat(ctx context.Context, taskID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		w.config.APIURL+"/api/v1/tasks/"+taskID+"/heartbeat", http.NoBody)
+	if err != nil {
+		return err
+	}
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
 	return nil
 }
 

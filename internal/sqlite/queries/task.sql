@@ -135,3 +135,9 @@ UPDATE task SET
   started_at = NULL,
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status IN ('review', 'failed');
+
+-- name: Heartbeat :exec
+UPDATE task SET last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status = 'running';
+
+-- name: ListStaleTasks :many
+SELECT * FROM task WHERE status = 'running' AND last_heartbeat_at IS NOT NULL AND last_heartbeat_at < ? ORDER BY started_at;
