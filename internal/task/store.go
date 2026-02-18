@@ -161,6 +161,8 @@ func (s *Store) ManualRetryTask(ctx context.Context, id TaskID, instructions str
 // FeedbackRetryTask transitions a task in review back to pending so the agent
 // can iterate on its solution based on the user's feedback. Unlike ManualRetryTask,
 // it preserves the existing PR/branch so the agent pushes fixes to the same branch.
+// Feedback retries (manual change requests) do not count towards the max retry
+// attempts because they represent user-driven iteration rather than failure recovery.
 func (s *Store) FeedbackRetryTask(ctx context.Context, id TaskID, feedback string) error {
 	t, err := s.repo.ReadTask(ctx, id)
 	if err != nil {
@@ -169,10 +171,6 @@ func (s *Store) FeedbackRetryTask(ctx context.Context, id TaskID, feedback strin
 
 	// Budget check
 	if t.MaxCostUSD > 0 && t.CostUSD >= t.MaxCostUSD {
-		return s.UpdateTaskStatus(ctx, id, StatusFailed)
-	}
-
-	if t.Attempt >= t.MaxAttempts {
 		return s.UpdateTaskStatus(ctx, id, StatusFailed)
 	}
 

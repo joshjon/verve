@@ -559,8 +559,9 @@ func TestStore_FeedbackRetryTask_BudgetExceeded(t *testing.T) {
 	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to budget exceeded")
 }
 
-func TestStore_FeedbackRetryTask_MaxAttempts(t *testing.T) {
+func TestStore_FeedbackRetryTask_IgnoresMaxAttempts(t *testing.T) {
 	repo := newMockRepo()
+	repo.feedbackRetryResult = true
 	broker := NewBroker(nil)
 	store := NewStore(repo, broker)
 
@@ -574,7 +575,9 @@ func TestStore_FeedbackRetryTask_MaxAttempts(t *testing.T) {
 	err := store.FeedbackRetryTask(context.Background(), tsk.ID, "fix the tests")
 	require.NoError(t, err)
 
-	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to max attempts")
+	// Feedback retries should NOT be blocked by max attempts since they
+	// represent user-driven iteration, not failure recovery.
+	assert.NotEqual(t, StatusFailed, tsk.Status, "feedback should not fail task at max attempts")
 }
 
 func TestStore_ClaimPendingTask_NoPending(t *testing.T) {
