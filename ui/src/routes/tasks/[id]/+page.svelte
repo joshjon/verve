@@ -746,17 +746,17 @@
 
 			<!-- Not Ready Banner -->
 			{#if !task.ready && task.status === 'pending'}
-				<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 flex items-center gap-4 flex-wrap">
-					<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
-					<div>
+				<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 space-y-3">
+					<div class="flex items-center gap-2.5">
+						<PauseCircle class="w-5 h-5 text-orange-500 shrink-0" />
 						<span class="text-sm font-medium text-orange-600 dark:text-orange-400">Not Ready</span>
-						<p class="text-xs text-muted-foreground mt-0.5">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
 					</div>
+					<p class="text-xs text-muted-foreground">This task is paused for tracking only. Agents will not pick it up until it is marked as ready.</p>
 					<Button
 						size="sm"
 						onclick={handleToggleReady}
 						disabled={togglingReady}
-						class="gap-1.5 bg-green-600 hover:bg-green-700 text-white shrink-0"
+						class="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
 					>
 						{#if togglingReady}
 							<Loader2 class="w-4 h-4 animate-spin" />
