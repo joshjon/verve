@@ -119,7 +119,7 @@ func (q *Queries) DeleteTaskLogs(ctx context.Context, taskID string) error {
 }
 
 const feedbackRetryTask = `-- name: FeedbackRetryTask :execrows
-UPDATE task SET status = 'pending',
+UPDATE task SET status = 'pending', attempt = 1,
   retry_reason = ?, agent_status = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
