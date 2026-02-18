@@ -86,7 +86,7 @@ WHERE id = ? AND status = 'failed';
 
 -- name: FeedbackRetryTask :execrows
 UPDATE task SET status = 'pending', attempt = 1,
-  retry_reason = ?, agent_status = NULL,
+  retry_reason = ?, retry_context = NULL, agent_status = NULL,
   consecutive_failures = 0,
   started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'review';

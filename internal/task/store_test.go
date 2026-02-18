@@ -329,6 +329,7 @@ func (m *mockRepository) FeedbackRetryTask(_ context.Context, id TaskID, _ strin
 		if t, ok := m.tasks[id.String()]; ok {
 			t.Attempt = 1
 			t.ConsecutiveFailures = 0
+			t.RetryContext = ""
 		}
 		m.mu.Unlock()
 	}
@@ -619,6 +620,27 @@ func TestStore_FeedbackRetryTask_ResetsAttemptCounter(t *testing.T) {
 	// the requested changes) a fresh retry budget.
 	assert.Equal(t, 1, tsk.Attempt, "attempt should be reset to 1 after feedback retry")
 	assert.Equal(t, 0, tsk.ConsecutiveFailures, "consecutive failures should be reset after feedback retry")
+}
+
+func TestStore_FeedbackRetryTask_ClearsRetryContext(t *testing.T) {
+	repo := newMockRepo()
+	repo.feedbackRetryResult = true
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusReview
+	tsk.RetryContext = "CI failure logs from previous attempt..."
+	tsk.RetryReason = "ci_failure:tests: Tests failed"
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusReview
+
+	err := store.FeedbackRetryTask(context.Background(), tsk.ID, "please fix the formatting")
+	require.NoError(t, err)
+
+	// After feedback retry, the CI failure context should be cleared because
+	// the user's change request supersedes the previous CI failure info.
+	assert.Empty(t, tsk.RetryContext, "retry context should be cleared after feedback retry")
 }
 
 func TestStore_FeedbackRetryTask_ThenAutomatedRetryGetsFullBudget(t *testing.T) {
