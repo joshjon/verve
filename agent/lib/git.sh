@@ -64,6 +64,10 @@ commit_and_push() {
         log_agent "No new changes to commit"
     fi
 
+    # Fetch latest default branch so the comparison is accurate (on retries
+    # only the task branch may have been fetched, leaving origin/DEFAULT_BRANCH stale).
+    git fetch origin "${DEFAULT_BRANCH}" 2>/dev/null || true
+
     # Check for any commits ahead of the default branch
     local changes
     changes=$(git log "origin/${DEFAULT_BRANCH}..HEAD" --oneline 2>/dev/null)
