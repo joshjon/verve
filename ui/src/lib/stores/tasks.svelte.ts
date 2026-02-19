@@ -58,6 +58,10 @@ class TaskStore {
 		this.tasks = [];
 		this.error = null;
 	}
+
+	deleteTask(taskId: string) {
+		this.tasks = this.tasks.filter(t => t.id !== taskId);
+	}
 }
 
 export const taskStore = new TaskStore();
