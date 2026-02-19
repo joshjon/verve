@@ -124,12 +124,14 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	if workType == workTypeEpic {
 		// Epic-specific env vars
+		// Normalize API URL for host networking (convert Docker hostnames to localhost)
+		apiURL := normalizeAPIURLForHostNetwork(cfg.APIURL)
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
 			"EPIC_TITLE="+cfg.EpicTitle,
 			"EPIC_DESCRIPTION="+cfg.EpicDescription,
 			"EPIC_PLANNING_PROMPT="+cfg.EpicPlanningPrompt,
-			"API_URL="+cfg.APIURL,
+			"API_URL="+apiURL,
 		)
 	} else {
 		// Task-specific env vars
@@ -324,4 +326,29 @@ func readLines(reader io.Reader, onLine func(string)) {
 			break
 		}
 	}
+}
+
+// normalizeAPIURLForHostNetwork converts Docker service hostnames to localhost
+// for containers running in host network mode. This is needed because host
+// networking bypasses Docker's DNS, so hostnames like "server" won't resolve.
+func normalizeAPIURLForHostNetwork(apiURL string) string {
+	// Common Docker Compose service names that should be converted to localhost
+	replacements := map[string]string{
+		"http://server:":    "http://localhost:",
+		"https://server:":   "https://localhost:",
+		"http://api:":       "http://localhost:",
+		"https://api:":      "https://localhost:",
+		"http://backend:":   "http://localhost:",
+		"https://backend:":  "https://localhost:",
+		"http://verve:":     "http://localhost:",
+		"https://verve:":    "https://localhost:",
+	}
+
+	for old, new := range replacements {
+		if len(apiURL) >= len(old) && apiURL[:len(old)] == old {
+			return new + apiURL[len(old):]
+		}
+	}
+
+	return apiURL
 }
