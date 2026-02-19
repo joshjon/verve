@@ -148,7 +148,7 @@ func TestConfig_Defaults(t *testing.T) {
 
 func TestPollResponse(t *testing.T) {
 	resp := PollResponse{
-		Task: Task{
+		Task: &Task{
 			ID:          "tsk_123",
 			Title:       "test task",
 			Description: "do something",

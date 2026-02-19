@@ -165,7 +165,7 @@ func (r *EpicRepository) EpicHeartbeat(ctx context.Context, id epic.EpicID) erro
 	return tagEpicErr(r.db.EpicHeartbeat(ctx, id.String()))
 }
 
-func (r *EpicRepository) SetEpicFeedback(ctx context.Context, id epic.EpicID, feedback string, feedbackType string) error {
+func (r *EpicRepository) SetEpicFeedback(ctx context.Context, id epic.EpicID, feedback, feedbackType string) error {
 	return tagEpicErr(r.db.SetEpicFeedback(ctx, sqlc.SetEpicFeedbackParams{
 		Feedback:     &feedback,
 		FeedbackType: &feedbackType,

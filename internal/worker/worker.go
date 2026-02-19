@@ -14,6 +14,8 @@ import (
 	"github.com/joshjon/kit/log"
 )
 
+const workTypeEpic = "epic"
+
 // Config holds the worker configuration
 type Config struct {
 	APIURL               string
@@ -159,7 +161,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		// Dispatch based on work type
 		executeFunc := func(p *PollResponse) {
 			switch p.Type {
-			case "epic":
+			case workTypeEpic:
 				w.logger.Info("claimed epic",
 					"epic_id", p.Epic.ID,
 					"repo", p.RepoFullName,
@@ -492,7 +494,7 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 	epicLogger.Info("starting epic planning", "title", ep.Title)
 
 	agentCfg := AgentConfig{
-		WorkType:             "epic",
+		WorkType:             workTypeEpic,
 		EpicID:               ep.ID,
 		EpicTitle:            ep.Title,
 		EpicDescription:      ep.Description,
@@ -518,11 +520,12 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 
 	cancelHeartbeat()
 
-	if result.Error != nil {
+	switch {
+	case result.Error != nil:
 		epicLogger.Error("epic planning failed", "error", result.Error)
-	} else if result.Success {
+	case result.Success:
 		epicLogger.Info("epic planning container exited successfully")
-	} else {
+	default:
 		epicLogger.Error("epic planning container failed", "exit_code", result.ExitCode)
 	}
 }
