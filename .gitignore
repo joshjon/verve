@@ -5,6 +5,7 @@ bin/
 tmp/
 local/
 dist/
+data/
 
 .env.server
 .env.worker
