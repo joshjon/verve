@@ -10,7 +10,10 @@
 		headerBg,
 		iconClass,
 		tasks,
-		headerAction
+		headerAction,
+		selectionMode = false,
+		selectedTaskIds = new Set<string>(),
+		toggleTaskSelection = (_id: string) => {}
 	}: {
 		label: string;
 		icon: ComponentType<Icon>;
@@ -18,6 +21,9 @@
 		iconClass: string;
 		tasks: Task[];
 		headerAction?: Snippet;
+		selectionMode?: boolean;
+		selectedTaskIds?: Set<string>;
+		toggleTaskSelection?: (id: string) => void;
 	} = $props();
 </script>
 
@@ -38,7 +44,12 @@
 	</div>
 	<div class="space-y-2 sm:flex-1 overflow-y-auto p-2">
 		{#each tasks as task (task.id)}
-			<TaskCard {task} />
+			<TaskCard
+				{task}
+				{selectionMode}
+				selected={selectedTaskIds.has(task.id)}
+				onToggleSelect={() => toggleTaskSelection(task.id)}
+			/>
 		{/each}
 		{#if tasks.length === 0}
 			<div class="flex flex-col items-center justify-center py-3 sm:py-8 text-muted-foreground">

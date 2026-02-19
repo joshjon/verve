@@ -530,6 +530,19 @@ func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
 	return nil
 }
 
+// DeleteTask deletes a task and its associated logs.
+func (s *Store) DeleteTask(ctx context.Context, id TaskID) error {
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.DeleteTask(ctx, id); err != nil {
+		return err
+	}
+	s.broker.Publish(ctx, Event{Type: EventTaskDeleted, RepoID: t.RepoID, TaskID: id})
+	return nil
+}
+
 // WaitForPending returns a channel that signals when a pending task might be available.
 func (s *Store) WaitForPending() <-chan struct{} {
 	s.pendingMu.Lock()

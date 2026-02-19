@@ -233,6 +233,15 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async deleteTask(id: string): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}`, {
+			method: 'DELETE'
+		});
+		if (!res.ok) {
+			throw new Error('Failed to delete task');
+		}
+	}
+
 	// --- Settings APIs ---
 
 	async getGitHubTokenStatus(): Promise<{ configured: boolean; fine_grained?: boolean }> {

@@ -60,6 +60,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.DELETE("/tasks/:id/dependency", h.RemoveDependency)
 	g.PUT("/tasks/:id/ready", h.SetReady)
 	g.PATCH("/tasks/:id", h.UpdateTask)
+	g.DELETE("/tasks/:id", h.DeleteTask)
 
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
@@ -1045,6 +1046,21 @@ func writeSSE(w *echo.Response, event string, data any) error {
 	}
 	w.Flush()
 	return nil
+}
+
+// DeleteTask handles DELETE /tasks/:id
+func (h *HTTPHandler) DeleteTask(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	ctx := c.Request().Context()
+
+	if err := h.store.DeleteTask(ctx, id); err != nil {
+		return jsonError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 // jsonError maps errtag-tagged errors to appropriate HTTP status codes.

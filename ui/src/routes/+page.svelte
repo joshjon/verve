@@ -15,12 +15,20 @@
 		Clock,
 		Play,
 		Eye,
-		XCircle
+		XCircle,
+		CheckSquare,
+		X,
+		Trash2
 	} from 'lucide-svelte';
 
 	let openCreate = $state(false);
 	let syncing = $state(false);
 	let syncResult = $state<{ synced: number; merged: number } | null>(null);
+	let selectionMode = $state(false);
+	let selectedTaskIds = $state(new Set<string>());
+	let showDeleteConfirm = $state(false);
+	let deleting = $state(false);
+	let deleteError = $state<string | null>(null);
 
 	// Track current EventSource so we can reconnect when repo changes.
 	let currentES: EventSource | null = null;
@@ -107,6 +115,53 @@
 		...taskStore.tasksByStatus.merged,
 		...taskStore.tasksByStatus.closed
 	]);
+
+	function toggleSelectionMode() {
+		selectionMode = !selectionMode;
+		if (!selectionMode) {
+			selectedTaskIds.clear();
+		}
+	}
+
+	function toggleTaskSelection(taskId: string) {
+		if (selectedTaskIds.has(taskId)) {
+			selectedTaskIds.delete(taskId);
+		} else {
+			selectedTaskIds.add(taskId);
+		}
+		selectedTaskIds = new Set(selectedTaskIds);
+	}
+
+	function cancelSelection() {
+		selectionMode = false;
+		selectedTaskIds.clear();
+	}
+
+	function confirmDelete() {
+		showDeleteConfirm = true;
+	}
+
+	async function executeBulkDelete() {
+		deleting = true;
+		deleteError = null;
+		const tasksToDelete = Array.from(selectedTaskIds);
+
+		try {
+			await Promise.all(tasksToDelete.map(id => client.deleteTask(id)));
+			selectedTaskIds.clear();
+			selectionMode = false;
+			showDeleteConfirm = false;
+		} catch (e) {
+			deleteError = (e as Error).message;
+		} finally {
+			deleting = false;
+		}
+	}
+
+	function cancelDelete() {
+		showDeleteConfirm = false;
+		deleteError = null;
+	}
 </script>
 
 <div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col">
@@ -145,14 +200,31 @@
 						<span>Synced {syncResult.synced} PRs, {syncResult.merged} merged</span>
 					</div>
 				{/if}
-				<Button variant="outline" onclick={syncPRs} disabled={syncing} class="gap-2">
-					<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
-					<span class="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync PRs'}</span>
-				</Button>
-				<Button onclick={() => (openCreate = true)} class="gap-2">
-					<Plus class="w-4 h-4" />
-					New Task
-				</Button>
+				{#if selectionMode}
+					<Button variant="outline" onclick={cancelSelection} class="gap-2">
+						<X class="w-4 h-4" />
+						Cancel
+					</Button>
+					{#if selectedTaskIds.size > 0}
+						<Button variant="destructive" onclick={confirmDelete} class="gap-2">
+							<Trash2 class="w-4 h-4" />
+							Delete {selectedTaskIds.size} {selectedTaskIds.size === 1 ? 'Task' : 'Tasks'}
+						</Button>
+					{/if}
+				{:else}
+					<Button variant="outline" onclick={toggleSelectionMode} class="gap-2">
+						<CheckSquare class="w-4 h-4" />
+						<span class="hidden sm:inline">Bulk Delete</span>
+					</Button>
+					<Button variant="outline" onclick={syncPRs} disabled={syncing} class="gap-2">
+						<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
+						<span class="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync PRs'}</span>
+					</Button>
+					<Button onclick={() => (openCreate = true)} class="gap-2">
+						<Plus class="w-4 h-4" />
+						New Task
+					</Button>
+				{/if}
 			</div>
 		</header>
 
@@ -183,6 +255,9 @@
 				iconClass="text-amber-600 dark:text-amber-400"
 				tasks={taskStore.tasksByStatus.pending}
 				headerAction={pendingAction}
+				{selectionMode}
+				{selectedTaskIds}
+				{toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="Running"
@@ -190,6 +265,9 @@
 				headerBg="bg-blue-500/10"
 				iconClass="text-blue-600 dark:text-blue-400"
 				tasks={taskStore.tasksByStatus.running}
+				{selectionMode}
+				{selectedTaskIds}
+				{toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="In Review"
@@ -197,6 +275,9 @@
 				headerBg="bg-purple-500/10"
 				iconClass="text-purple-600 dark:text-purple-400"
 				tasks={taskStore.tasksByStatus.review}
+				{selectionMode}
+				{selectedTaskIds}
+				{toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="Done"
@@ -204,6 +285,9 @@
 				headerBg="bg-green-500/10"
 				iconClass="text-green-600 dark:text-green-400"
 				tasks={doneTasks}
+				{selectionMode}
+				{selectedTaskIds}
+				{toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="Failed"
@@ -211,6 +295,9 @@
 				headerBg="bg-red-500/10"
 				iconClass="text-red-600 dark:text-red-400"
 				tasks={taskStore.tasksByStatus.failed}
+				{selectionMode}
+				{selectedTaskIds}
+				{toggleTaskSelection}
 			/>
 		</div>
 	{:else}
@@ -230,4 +317,47 @@
 
 {#if hasRepo}
 	<CreateTaskDialog bind:open={openCreate} onCreated={() => {}} />
+{/if}
+
+{#if showDeleteConfirm}
+	<div
+		class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+		onclick={cancelDelete}
+		onkeydown={(e) => e.key === 'Escape' && cancelDelete()}
+		role="button"
+		tabindex="-1"
+	>
+		<div
+			class="bg-background border rounded-lg p-6 max-w-md w-full mx-4"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			tabindex="-1"
+		>
+			<h2 class="text-xl font-bold mb-3">Confirm Bulk Delete</h2>
+			<p class="text-muted-foreground mb-1">
+				Are you sure you want to delete {selectedTaskIds.size} {selectedTaskIds.size === 1
+					? 'task'
+					: 'tasks'}?
+			</p>
+			<p class="text-muted-foreground text-sm mb-4">This action cannot be undone.</p>
+			{#if deleteError}
+				<div class="bg-destructive/10 text-destructive p-3 rounded-md mb-4 text-sm">
+					{deleteError}
+				</div>
+			{/if}
+			<div class="flex gap-3 justify-end">
+				<Button variant="outline" onclick={cancelDelete} disabled={deleting}>Cancel</Button>
+				<Button variant="destructive" onclick={executeBulkDelete} disabled={deleting} class="gap-2">
+					{#if deleting}
+						<RefreshCw class="w-4 h-4 animate-spin" />
+						Deleting...
+					{:else}
+						<Trash2 class="w-4 h-4" />
+						Delete
+					{/if}
+				</Button>
+			</div>
+		</div>
+	</div>
 {/if}

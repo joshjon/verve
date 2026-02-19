@@ -320,6 +320,10 @@ func (r *TaskRepository) DeleteTaskLogs(ctx context.Context, id task.TaskID) err
 	return tagTaskErr(r.db.DeleteTaskLogs(ctx, id.String()))
 }
 
+func (r *TaskRepository) DeleteTask(ctx context.Context, id task.TaskID) error {
+	return tagTaskErr(r.db.DeleteTask(ctx, id.String()))
+}
+
 func (r *TaskRepository) RemoveDependency(ctx context.Context, id task.TaskID, depID string) error {
 	return tagTaskErr(r.db.RemoveDependency(ctx, sqlc.RemoveDependencyParams{
 		ID:          id.String(),

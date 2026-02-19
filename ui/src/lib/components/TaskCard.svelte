@@ -5,14 +5,34 @@
 	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2, PauseCircle } from 'lucide-svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
 
-	let { task }: { task: Task } = $props();
+	let {
+		task,
+		selectionMode = false,
+		selected = false,
+		onToggleSelect = () => {}
+	}: {
+		task: Task;
+		selectionMode?: boolean;
+		selected?: boolean;
+		onToggleSelect?: () => void;
+	} = $props();
 
-	function handleClick() {
-		goto(`/tasks/${task.id}`);
+	function handleClick(e: MouseEvent) {
+		if (selectionMode) {
+			e.preventDefault();
+			onToggleSelect();
+		} else {
+			goto(`/tasks/${task.id}`);
+		}
 	}
 
 	function handlePRClick(e: MouseEvent) {
 		e.stopPropagation();
+	}
+
+	function handleCheckboxClick(e: MouseEvent) {
+		e.stopPropagation();
+		onToggleSelect();
 	}
 
 	const hasDependencies = $derived(task.depends_on && task.depends_on.length > 0);
@@ -25,13 +45,27 @@
 </script>
 
 <Card.Root
-	class="group p-3 cursor-pointer bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md"
+	class="group p-3 cursor-pointer bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md {selected
+		? 'ring-2 ring-primary'
+		: ''}"
 	onclick={handleClick}
 	role="button"
 	tabindex={0}
 >
 	<div class="flex items-start justify-between gap-2">
-		<p class="font-medium text-sm line-clamp-2 flex-1">{task.title || task.description}</p>
+		{#if selectionMode}
+			<div class="flex items-start gap-2 flex-1">
+				<input
+					type="checkbox"
+					checked={selected}
+					onclick={handleCheckboxClick}
+					class="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+				/>
+				<p class="font-medium text-sm line-clamp-2 flex-1">{task.title || task.description}</p>
+			</div>
+		{:else}
+			<p class="font-medium text-sm line-clamp-2 flex-1">{task.title || task.description}</p>
+		{/if}
 		{#if task.status === 'merged'}
 			<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-300 bg-green-500/15 px-2 py-0.5 rounded-full border border-green-500/20 shrink-0">
 				<GitMerge class="w-3 h-3" />
