@@ -96,7 +96,7 @@ _epic_run_planning() {
     fi
 
     local task_count
-    task_count=$(echo "$tasks_json" | jq 'length')
+    task_count=$(printf '%s\n' "$tasks_json" | jq 'length')
     log_agent "Generated ${task_count} proposed tasks"
 
     # Submit proposed tasks to server
@@ -176,19 +176,27 @@ Order tasks by dependency (tasks with no dependencies first). Be thorough but pr
 _extract_proposed_tasks() {
     local output="$1"
 
-    # Try to extract from ```verve-tasks code block
+    # Extract content from the first ```verve-tasks code block.
+    # We can't use sed range matching because JSON string values may
+    # contain triple backticks (e.g. ```sql in task descriptions),
+    # which would prematurely terminate the range. Instead, use awk
+    # to track state: start capturing after the opening marker, and
+    # only stop at a line that is exactly ``` (the closing fence).
     local tasks
-    tasks=$(echo "$output" | sed -n '/```verve-tasks/,/```/p' | sed '1d;$d')
+    tasks=$(printf '%s\n' "$output" | awk '
+        /^```verve-tasks/ { if (!found) { capturing=1; found=1 }; next }
+        capturing && /^```[[:space:]]*$/ { capturing=0; next }
+        capturing { print }
+    ')
 
     if [ -n "$tasks" ]; then
-        echo "$tasks" | jq '.' 2>/dev/null && return
-    fi
-
-    # Fallback: try to extract any JSON array from the output
-    tasks=$(echo "$output" | grep -o '\[.*\]' | jq '.' 2>/dev/null)
-    if [ -n "$tasks" ]; then
-        echo "$tasks"
-        return
+        # Validate that extracted content is a single JSON array
+        local validated
+        validated=$(printf '%s\n' "$tasks" | jq -e 'if type == "array" then . else error("not an array") end' 2>/dev/null)
+        if [ -n "$validated" ]; then
+            printf '%s\n' "$validated"
+            return
+        fi
     fi
 
     echo "[]"
@@ -197,8 +205,15 @@ _extract_proposed_tasks() {
 _epic_propose_tasks() {
     local tasks_json="$1"
 
+    # Write the tasks JSON to a temp file and use jq's --slurpfile to
+    # avoid shell argument size limits and special character issues.
+    local tasks_file
+    tasks_file=$(mktemp /tmp/epic_tasks.XXXXXX)
+    printf '%s\n' "$tasks_json" > "$tasks_file"
+
     local body
-    body=$(jq -n --argjson tasks "$tasks_json" '{"tasks": $tasks}')
+    body=$(jq -n --slurpfile tasks "$tasks_file" '{"tasks": $tasks[0]}')
+    rm -f "$tasks_file"
 
     local response
     response=$(curl -s -w "\n%{http_code}" -X POST \
