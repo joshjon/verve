@@ -177,14 +177,23 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		containerName += cfg.TaskID
 	}
 
+	hostConfig := &container.HostConfig{
+		AutoRemove: false, // We'll remove it manually after getting logs
+	}
+
+	// Epic planning containers need to call back to the API server, so they
+	// need host networking to reach whatever address API_URL points at (which
+	// is often localhost or a hostname only resolvable on the host).
+	if workType == "epic" {
+		hostConfig.NetworkMode = "host"
+	}
+
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
 			Image: d.agentImage,
 			Env:   env,
 		},
-		&container.HostConfig{
-			AutoRemove: false, // We'll remove it manually after getting logs
-		},
+		hostConfig,
 		nil, nil,
 		containerName,
 	)
