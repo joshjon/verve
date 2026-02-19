@@ -75,4 +75,5 @@ type TaskRepository interface {
 	Heartbeat(ctx context.Context, id TaskID) error
 	// ListStaleTasks returns running tasks whose last heartbeat is before the given time.
 	ListStaleTasks(ctx context.Context, before time.Time) ([]*Task, error)
+	DeleteTask(ctx context.Context, id TaskID) error
 }
