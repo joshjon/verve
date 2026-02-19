@@ -53,8 +53,24 @@
 - **Background reaper**: Server detects running tasks with no heartbeat and marks them as failed
 - **Configurable timeout**: `TASK_TIMEOUT` env var (default: 5 minutes) controls stale detection threshold
 
+## Epics
+
+- **AI-powered task planning**: Create an epic with a title and description; an AI agent analyzes the codebase and generates a task breakdown
+- **Worker-side planning**: Epic planning runs on worker infrastructure (user's network) — same as task execution, so code never leaves the user's environment
+- **Iterative feedback loop**: Send feedback to the planning agent to refine the task breakdown; agent re-plans in real-time
+- **Proposed task editing**: Edit, add, or remove proposed tasks before confirming
+- **Task dependencies**: Proposed tasks include `depends_on` relationships, preserved when creating real tasks
+- **Acceptance criteria**: Each proposed task includes testable acceptance criteria
+- **Epic confirmation**: Confirm an epic to create all proposed tasks at once, with optional "hold" mode
+- **Separate epics dashboard**: Dedicated epics view accessible via sidebar navigation
+- **Planning status indicators**: UI shows "Waiting for worker..." (unclaimed) vs "Agent is planning..." (claimed and active)
+- **Session log**: Real-time planning session log showing system messages and user feedback
+- **Idle timeout**: Agent containers released after 15 minutes of inactivity
+- **Priority scheduling**: Epics are claimed before tasks in the unified work queue
+
 ## Worker
 
+- **Unified work queue**: Single poll endpoint (`/api/v1/agent/poll`) claims both epics and tasks, with epics having higher priority
 - **Long-poll task claiming**: Atomic status transitions prevent duplicate claims
 - **Server-managed credentials**: Workers receive GitHub token and repo info from the API server per-task — no local token or repo configuration needed
 - **HTTPS transport security**: Tokens sent over HTTPS (TLS); worker warns on startup if API URL is plain HTTP
@@ -62,6 +78,7 @@
 - **Sequential mode**: Single-task execution for network-restricted environments
 - **Graceful shutdown**: Waits for active tasks to complete before stopping
 - **Marker protocol**: Parses structured markers from agent output (`VERVE_PR_CREATED`, `VERVE_STATUS`, `VERVE_COST`, `VERVE_PREREQ_FAILED`)
+- **Epic planning support**: Workers run long-lived agent containers for epic planning with heartbeats and feedback polling
 
 ## Log Streaming
 
@@ -90,10 +107,12 @@
 
 ## API
 
-- **RESTful endpoints**: Full CRUD for tasks and repos under `/api/v1`
-- **Long-poll**: `GET /tasks/poll` holds connection for up to 30 seconds
+- **RESTful endpoints**: Full CRUD for tasks, epics, and repos under `/api/v1`
+- **Agent API**: Dedicated `/api/v1/agent/` endpoints for worker/agent communication
+- **Unified poll**: `GET /agent/poll` claims epics (priority) or tasks with 30-second long-poll
 - **SSE events**: `GET /events` streams `task_created`, `task_updated`, `logs_appended`
-- **Task operations**: Create, list, get, close, complete, sync, append logs
+- **Task operations**: Create, list, get, close, complete, sync, append logs, retry, feedback
+- **Epic operations**: Create, list, get, confirm, close, propose tasks, poll feedback, send messages
 - **Repo operations**: List, add, remove, list available from GitHub
 
 ## Database
@@ -114,10 +133,14 @@
 
 ## UI
 
+- **Sidebar navigation**: Tasks and Epics separated into dedicated dashboards via sidebar menu
 - **Kanban dashboard**: Six status columns with task count badges
+- **Epics dashboard**: Grid of epic cards with status filtering, separate from tasks
 - **Real-time updates**: SSE-driven live task state changes
 - **Task detail page**: Description (markdown), status, retries, logs, agent status, cost, dependencies, PR link, acceptance criteria, prerequisite failures
+- **Epic detail page**: Proposed tasks with inline editing, planning session log, confirm/close actions, worker status indicators
 - **Create task dialog**: Description, acceptance criteria, dependency search/selection, max cost budget, model selection
+- **Create epic dialog**: Title, description, optional planning prompt
 - **Settings management**: Server-wide default model configuration via API and UI
 - **Task cards**: Preview with retry count, cost, dependency count, consecutive failure warnings
 - **Repository management**: Selector dropdown, add from GitHub with search, remove repos

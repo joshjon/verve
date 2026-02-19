@@ -12,6 +12,15 @@ source "${LIB_DIR}/prompt.sh"
 source "${LIB_DIR}/claude.sh"
 source "${LIB_DIR}/dryrun.sh"
 
+# ── Branch on work type ─────────────────────────────────────────────
+if [ "${WORK_TYPE}" = "epic" ]; then
+    source "${LIB_DIR}/epic_plan.sh"
+    run_epic_planning
+    exit $?
+fi
+
+# ── Task execution (default) ────────────────────────────────────────
+
 # ── Failure trap ─────────────────────────────────────────────────────
 cleanup_on_failure() {
     local exit_code=$?

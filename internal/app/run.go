@@ -14,6 +14,7 @@ import (
 	"github.com/joshjon/kit/sqlitedb"
 	"github.com/labstack/echo/v4"
 
+	"verve/internal/agentapi"
 	"verve/internal/epic"
 	"verve/internal/epicapi"
 	"verve/internal/frontend"
@@ -79,7 +80,7 @@ func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKe
 		} else {
 			logger.Warn("Postgres not configured, using in-memory SQLite (data will not persist)")
 		}
-		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey)
+		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey, logger)
 	}
 	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey)
 }
@@ -116,12 +117,12 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 
 	epicRepo := postgres.NewEpicRepository(pool)
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
-	epicStore := epic.NewStore(epicRepo, taskCreator)
+	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, func(), error) {
+func initSQLite(ctx context.Context, dir string, encryptionKey []byte, logger log.Logger) (stores, func(), error) {
 	var opts []sqlitedb.OpenOption
 	if dir != "" {
 		opts = append(opts, sqlitedb.WithDir(dir), sqlitedb.WithDBName("verve"))
@@ -156,7 +157,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, 
 
 	epicRepo := sqlite.NewEpicRepository(db)
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
-	epicStore := epic.NewStore(epicRepo, taskCreator)
+	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
 }
@@ -164,7 +165,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, 
 func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	opts := []server.Option{
 		server.WithLogger(logger),
-		server.WithRequestTimeout(server.DefaultRequestTimeout, "/api/v1/events", "/api/v1/tasks/:id/logs"),
+		server.WithRequestTimeout(server.DefaultRequestTimeout, "/api/v1/events", "/api/v1/tasks/:id/logs", "/api/v1/agent/poll", "/api/v1/agent/epics/:id/poll-feedback"),
 	}
 	if len(cfg.CorsOrigins) > 0 {
 		opts = append(opts, server.WithCORS(cfg.CorsOrigins...))
@@ -186,6 +187,7 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 
 	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken, s.setting))
 	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo))
+	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken))
 
 	// Background PR sync.
 	go backgroundSync(ctx, logger, s, 30*time.Second)
@@ -196,6 +198,9 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 		taskTimeout = 5 * time.Minute
 	}
 	go backgroundReaper(ctx, logger, s, 1*time.Minute, taskTimeout)
+
+	// Background stale epic reaper.
+	go backgroundEpicReaper(ctx, logger, s, 1*time.Minute, 15*time.Minute)
 
 	return Serve(ctx, logger, srv)
 }
@@ -242,6 +247,26 @@ func backgroundReaper(ctx context.Context, logger log.Logger, s stores, interval
 				logger.Error("failed to timeout stale tasks", "error", err)
 			} else if count > 0 {
 				logger.Info("timed out stale tasks", "count", count)
+			}
+		}
+	}
+}
+
+func backgroundEpicReaper(ctx context.Context, logger log.Logger, s stores, interval, timeout time.Duration) {
+	logger = logger.With("component", "epic_reaper")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			count, err := s.epic.TimeoutStaleEpics(ctx, timeout)
+			if err != nil {
+				logger.Error("failed to timeout stale epics", "error", err)
+			} else if count > 0 {
+				logger.Info("timed out stale epics", "count", count)
 			}
 		}
 	}

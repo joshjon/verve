@@ -302,11 +302,18 @@ export class VerveClient {
 		return res.json();
 	}
 
-	async createEpic(repoId: string, title: string, description: string): Promise<Epic> {
+	async createEpic(
+		repoId: string,
+		title: string,
+		description: string,
+		planningPrompt?: string
+	): Promise<Epic> {
+		const body: Record<string, unknown> = { title, description };
+		if (planningPrompt) body.planning_prompt = planningPrompt;
 		const res = await fetch(`${this.baseUrl}/repos/${repoId}/epics`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ title, description })
+			body: JSON.stringify(body)
 		});
 		if (!res.ok) {
 			throw new Error('Failed to create epic');

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/joshjon/kit/errtag"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -148,16 +149,60 @@ func (r *EpicRepository) DeleteEpic(ctx context.Context, id epic.EpicID) error {
 	return tagEpicErr(r.db.DeleteEpic(ctx, id.String()))
 }
 
+func (r *EpicRepository) ListPlanningEpics(ctx context.Context) ([]*epic.Epic, error) {
+	rows, err := r.db.ListPlanningEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
+func (r *EpicRepository) ClaimEpic(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.ClaimEpic(ctx, id.String()))
+}
+
+func (r *EpicRepository) EpicHeartbeat(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.EpicHeartbeat(ctx, id.String()))
+}
+
+func (r *EpicRepository) SetEpicFeedback(ctx context.Context, id epic.EpicID, feedback string, feedbackType string) error {
+	return tagEpicErr(r.db.SetEpicFeedback(ctx, sqlc.SetEpicFeedbackParams{
+		Feedback:     &feedback,
+		FeedbackType: &feedbackType,
+		ID:           id.String(),
+	}))
+}
+
+func (r *EpicRepository) ClearEpicFeedback(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.ClearEpicFeedback(ctx, id.String()))
+}
+
+func (r *EpicRepository) ReleaseEpicClaim(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.ReleaseEpicClaim(ctx, id.String()))
+}
+
+func (r *EpicRepository) ListStaleEpics(ctx context.Context, threshold time.Time) ([]*epic.Epic, error) {
+	rows, err := r.db.ListStaleEpics(ctx, &threshold)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
 func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
 	e := &epic.Epic{
-		ID:          epic.MustParseEpicID(in.ID),
-		RepoID:      in.RepoID,
-		Title:       in.Title,
-		Description: in.Description,
-		Status:      epic.Status(in.Status),
-		NotReady:    in.NotReady != 0,
-		CreatedAt:   in.CreatedAt,
-		UpdatedAt:   in.UpdatedAt,
+		ID:              epic.MustParseEpicID(in.ID),
+		RepoID:          in.RepoID,
+		Title:           in.Title,
+		Description:     in.Description,
+		Status:          epic.Status(in.Status),
+		NotReady:        in.NotReady != 0,
+		ClaimedAt:       in.ClaimedAt,
+		LastHeartbeatAt: in.LastHeartbeatAt,
+		Feedback:        in.Feedback,
+		FeedbackType:    in.FeedbackType,
+		CreatedAt:       in.CreatedAt,
+		UpdatedAt:       in.UpdatedAt,
 	}
 	if in.PlanningPrompt != nil {
 		e.PlanningPrompt = *in.PlanningPrompt

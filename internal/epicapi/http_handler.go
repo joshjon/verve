@@ -36,7 +36,6 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/epics/:id/plan", h.StartPlanning)
 	g.PUT("/epics/:id/proposed-tasks", h.UpdateProposedTasks)
 	g.POST("/epics/:id/session-message", h.SendSessionMessage)
-	g.POST("/epics/:id/finish-planning", h.FinishPlanning)
 
 	// Confirmation
 	g.POST("/epics/:id/confirm", h.ConfirmEpic)
@@ -62,9 +61,12 @@ func (h *HTTPHandler) CreateEpic(c echo.Context) error {
 	}
 
 	e := epic.NewEpic(repoID.String(), req.Title, req.Description)
+	e.PlanningPrompt = req.PlanningPrompt
+
 	if err := h.store.CreateEpic(c.Request().Context(), e); err != nil {
 		return jsonError(c, err)
 	}
+
 	return c.JSON(http.StatusCreated, e)
 }
 
@@ -180,22 +182,8 @@ func (h *HTTPHandler) SendSessionMessage(c echo.Context) error {
 		return jsonError(c, err)
 	}
 
-	e, err := h.store.ReadEpic(ctx, id)
-	if err != nil {
-		return jsonError(c, err)
-	}
-	return c.JSON(http.StatusOK, e)
-}
-
-// FinishPlanning handles POST /epics/:id/finish-planning
-func (h *HTTPHandler) FinishPlanning(c echo.Context) error {
-	id, err := epic.ParseEpicID(c.Param("id"))
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
-	}
-
-	ctx := c.Request().Context()
-	if err := h.store.FinishPlanning(ctx, id); err != nil {
+	// Signal the agent via feedback
+	if err := h.store.SetFeedback(ctx, id, req.Message, epic.FeedbackMessage); err != nil {
 		return jsonError(c, err)
 	}
 

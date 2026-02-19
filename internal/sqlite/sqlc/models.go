@@ -9,18 +9,22 @@ import (
 )
 
 type Epic struct {
-	ID             string
-	RepoID         string
-	Title          string
-	Description    string
-	Status         string
-	ProposedTasks  string
-	TaskIds        string
-	PlanningPrompt *string
-	SessionLog     string
-	NotReady       int64
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID              string
+	RepoID          string
+	Title           string
+	Description     string
+	Status          string
+	ProposedTasks   string
+	TaskIds         string
+	PlanningPrompt  *string
+	SessionLog      string
+	NotReady        int64
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ClaimedAt       *time.Time
+	LastHeartbeatAt *time.Time
+	Feedback        *string
+	FeedbackType    *string
 }
 
 type GithubToken struct {

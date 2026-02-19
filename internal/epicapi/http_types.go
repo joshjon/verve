@@ -4,8 +4,9 @@ import "verve/internal/epic"
 
 // CreateEpicRequest is the request body for creating an epic.
 type CreateEpicRequest struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	PlanningPrompt string `json:"planning_prompt,omitempty"`
 }
 
 // StartPlanningRequest is the request body for starting a planning session.

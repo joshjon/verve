@@ -42,9 +42,19 @@ type Task struct {
 	Model              string   `json:"model,omitempty"`
 }
 
-// PollResponse wraps a claimed task with credentials and repo info from the server.
+type Epic struct {
+	ID             string `json:"id"`
+	RepoID         string `json:"repo_id"`
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	PlanningPrompt string `json:"planning_prompt,omitempty"`
+}
+
+// PollResponse is a discriminated union returned by the unified poll endpoint.
 type PollResponse struct {
-	Task         Task   `json:"task"`
+	Type         string `json:"type"` // "task" or "epic"
+	Task         *Task  `json:"task,omitempty"`
+	Epic         *Epic  `json:"epic,omitempty"`
 	GitHubToken  string `json:"github_token"`
 	RepoFullName string `json:"repo_full_name"`
 }
@@ -118,58 +128,71 @@ func (w *Worker) Run(ctx context.Context) error {
 		// Try to acquire a semaphore slot (non-blocking check first)
 		select {
 		case w.semaphore <- struct{}{}:
-			// Got a slot, proceed to poll for task
+			// Got a slot, proceed to poll
 		default:
 			// All slots full, wait a bit before checking again
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 
-		poll, err := w.pollForTask(ctx)
+		poll, err := w.poll(ctx)
 		if err != nil {
 			// Release slot on error
 			<-w.semaphore
-			w.logger.Error("error polling for task", "error", err)
+			w.logger.Error("error polling for work", "error", err)
 			time.Sleep(w.pollInterval)
 			continue
 		}
 
 		if poll == nil {
-			// No task available, release slot and continue polling
+			// No work available, release slot and continue polling
 			<-w.semaphore
 			continue
 		}
 
-		// Track active task count for logging
+		// Track active count for logging
 		w.activeMu.Lock()
 		w.activeTasks++
 		activeCount := w.activeTasks
 		w.activeMu.Unlock()
 
-		w.logger.Info("claimed task",
-			"task_id", poll.Task.ID,
-			"repo", poll.RepoFullName,
-			"active", activeCount,
-			"max_concurrent", w.maxConcurrent,
-			"description", poll.Task.Description,
-		)
+		// Dispatch based on work type
+		executeFunc := func(p *PollResponse) {
+			switch p.Type {
+			case "epic":
+				w.logger.Info("claimed epic",
+					"epic_id", p.Epic.ID,
+					"repo", p.RepoFullName,
+					"active", activeCount,
+					"title", p.Epic.Title,
+				)
+				w.executeEpicPlanning(ctx, p.Epic, p.GitHubToken, p.RepoFullName)
+			default:
+				w.logger.Info("claimed task",
+					"task_id", p.Task.ID,
+					"repo", p.RepoFullName,
+					"active", activeCount,
+					"max_concurrent", w.maxConcurrent,
+					"description", p.Task.Description,
+				)
+				w.executeTask(ctx, p.Task, p.GitHubToken, p.RepoFullName)
+			}
+		}
 
-		// Execute task - use goroutine only if concurrent execution is enabled
 		if w.maxConcurrent > 1 {
 			w.wg.Add(1)
 			go func(p *PollResponse) {
 				defer w.wg.Done()
 				defer func() {
-					<-w.semaphore // Release semaphore slot
+					<-w.semaphore
 					w.activeMu.Lock()
 					w.activeTasks--
 					w.activeMu.Unlock()
 				}()
-				w.executeTask(ctx, &p.Task, p.GitHubToken, p.RepoFullName)
+				executeFunc(p)
 			}(poll)
 		} else {
-			// Sequential execution - simpler, more compatible with restricted networks
-			w.executeTask(ctx, &poll.Task, poll.GitHubToken, poll.RepoFullName)
+			executeFunc(poll)
 			<-w.semaphore
 			w.activeMu.Lock()
 			w.activeTasks--
@@ -178,8 +201,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) pollForTask(ctx context.Context) (*PollResponse, error) {
-	pollURL := w.config.APIURL + "/api/v1/tasks/poll"
+func (w *Worker) poll(ctx context.Context) (*PollResponse, error) {
+	pollURL := w.config.APIURL + "/api/v1/agent/poll"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, http.NoBody)
 	if err != nil {
@@ -398,6 +421,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 
 	// Create agent config from worker config + server-provided credentials
 	agentCfg := AgentConfig{
+		WorkType:             "task",
 		TaskID:               task.ID,
 		TaskTitle:            task.Title,
 		TaskDescription:      task.Description,
@@ -418,7 +442,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	// Start heartbeat goroutine
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
-	go w.heartbeatLoop(heartbeatCtx, task.ID)
+	go w.taskHeartbeatLoop(heartbeatCtx, task.ID)
 
 	// Run the agent with streaming logs
 	result := w.docker.RunAgent(ctx, agentCfg, onLog)
@@ -463,9 +487,49 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	}
 }
 
+func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken, repoFullName string) {
+	epicLogger := w.logger.With("epic_id", ep.ID)
+	epicLogger.Info("starting epic planning", "title", ep.Title)
+
+	agentCfg := AgentConfig{
+		WorkType:             "epic",
+		EpicID:               ep.ID,
+		EpicTitle:            ep.Title,
+		EpicDescription:      ep.Description,
+		EpicPlanningPrompt:   ep.PlanningPrompt,
+		APIURL:               w.config.APIURL,
+		GitHubToken:          githubToken,
+		GitHubRepo:           repoFullName,
+		AnthropicAPIKey:      w.config.AnthropicAPIKey,
+		ClaudeCodeOAuthToken: w.config.ClaudeCodeOAuthToken,
+	}
+
+	// Start heartbeat goroutine
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go w.epicHeartbeatLoop(heartbeatCtx, ep.ID)
+
+	// Log callback for epic planning
+	onLog := func(line string) {
+		epicLogger.Debug("epic agent output", "line", line)
+	}
+
+	result := w.docker.RunAgent(ctx, agentCfg, onLog)
+
+	cancelHeartbeat()
+
+	if result.Error != nil {
+		epicLogger.Error("epic planning failed", "error", result.Error)
+	} else if result.Success {
+		epicLogger.Info("epic planning container exited successfully")
+	} else {
+		epicLogger.Error("epic planning container failed", "exit_code", result.ExitCode)
+	}
+}
+
 func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs []string) error {
 	body, _ := json.Marshal(map[string]any{"logs": logs, "attempt": attempt})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/tasks/"+taskID+"/logs", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/agent/tasks/"+taskID+"/logs", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -484,26 +548,57 @@ func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs 
 	return nil
 }
 
-func (w *Worker) heartbeatLoop(ctx context.Context, taskID string) {
+func (w *Worker) taskHeartbeatLoop(ctx context.Context, taskID string) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	// Send initial heartbeat immediately
-	_ = w.sendHeartbeat(ctx, taskID)
+	_ = w.sendTaskHeartbeat(ctx, taskID)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = w.sendHeartbeat(ctx, taskID)
+			_ = w.sendTaskHeartbeat(ctx, taskID)
 		}
 	}
 }
 
-func (w *Worker) sendHeartbeat(ctx context.Context, taskID string) error {
+func (w *Worker) sendTaskHeartbeat(ctx context.Context, taskID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		w.config.APIURL+"/api/v1/tasks/"+taskID+"/heartbeat", http.NoBody)
+		w.config.APIURL+"/api/v1/agent/tasks/"+taskID+"/heartbeat", http.NoBody)
+	if err != nil {
+		return err
+	}
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+func (w *Worker) epicHeartbeatLoop(ctx context.Context, epicID string) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	_ = w.sendEpicHeartbeat(ctx, epicID)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = w.sendEpicHeartbeat(ctx, epicID)
+		}
+	}
+}
+
+func (w *Worker) sendEpicHeartbeat(ctx context.Context, epicID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		w.config.APIURL+"/api/v1/agent/epics/"+epicID+"/heartbeat", http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -545,7 +640,7 @@ func (w *Worker) completeTask(ctx context.Context, taskID string, success bool, 
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/tasks/"+taskID+"/complete", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/agent/tasks/"+taskID+"/complete", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

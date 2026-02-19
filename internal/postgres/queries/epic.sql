@@ -42,3 +42,50 @@ WHERE id = $1;
 
 -- name: DeleteEpic :exec
 DELETE FROM epic WHERE id = $1;
+
+-- name: ListPlanningEpics :many
+SELECT * FROM epic
+WHERE status = 'planning' AND claimed_at IS NULL
+ORDER BY created_at ASC;
+
+-- name: ClaimEpic :exec
+UPDATE epic SET
+  claimed_at = NOW(),
+  last_heartbeat_at = NOW(),
+  updated_at = NOW()
+WHERE id = $1 AND status = 'planning' AND claimed_at IS NULL;
+
+-- name: EpicHeartbeat :exec
+UPDATE epic SET
+  last_heartbeat_at = NOW(),
+  updated_at = NOW()
+WHERE id = $1;
+
+-- name: SetEpicFeedback :exec
+UPDATE epic SET
+  feedback = $2,
+  feedback_type = $3,
+  updated_at = NOW()
+WHERE id = $1;
+
+-- name: ClearEpicFeedback :exec
+UPDATE epic SET
+  feedback = NULL,
+  feedback_type = NULL,
+  updated_at = NOW()
+WHERE id = $1;
+
+-- name: ReleaseEpicClaim :exec
+UPDATE epic SET
+  claimed_at = NULL,
+  last_heartbeat_at = NULL,
+  status = 'planning',
+  updated_at = NOW()
+WHERE id = $1;
+
+-- name: ListStaleEpics :many
+SELECT * FROM epic
+WHERE claimed_at IS NOT NULL
+  AND last_heartbeat_at < $1
+  AND status IN ('planning', 'draft')
+ORDER BY last_heartbeat_at ASC;

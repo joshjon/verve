@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -127,16 +128,58 @@ func (r *EpicRepository) DeleteEpic(ctx context.Context, id epic.EpicID) error {
 	return tagEpicErr(r.db.DeleteEpic(ctx, id.String()))
 }
 
+func (r *EpicRepository) ListPlanningEpics(ctx context.Context) ([]*epic.Epic, error) {
+	rows, err := r.db.ListPlanningEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
+func (r *EpicRepository) ClaimEpic(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.ClaimEpic(ctx, id.String()))
+}
+
+func (r *EpicRepository) EpicHeartbeat(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.EpicHeartbeat(ctx, id.String()))
+}
+
+func (r *EpicRepository) SetEpicFeedback(ctx context.Context, id epic.EpicID, feedback string, feedbackType string) error {
+	return tagEpicErr(r.db.SetEpicFeedback(ctx, sqlc.SetEpicFeedbackParams{
+		ID:           id.String(),
+		Feedback:     &feedback,
+		FeedbackType: &feedbackType,
+	}))
+}
+
+func (r *EpicRepository) ClearEpicFeedback(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.ClearEpicFeedback(ctx, id.String()))
+}
+
+func (r *EpicRepository) ReleaseEpicClaim(ctx context.Context, id epic.EpicID) error {
+	return tagEpicErr(r.db.ReleaseEpicClaim(ctx, id.String()))
+}
+
+func (r *EpicRepository) ListStaleEpics(ctx context.Context, threshold time.Time) ([]*epic.Epic, error) {
+	rows, err := r.db.ListStaleEpics(ctx, pgTimestamptz(threshold))
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
 func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
 	e := &epic.Epic{
-		ID:          epic.MustParseEpicID(in.ID),
-		RepoID:      in.RepoID,
-		Title:       in.Title,
-		Description: in.Description,
-		Status:      epic.Status(in.Status),
-		TaskIDs:     in.TaskIds,
-		SessionLog:  in.SessionLog,
-		NotReady:    in.NotReady,
+		ID:           epic.MustParseEpicID(in.ID),
+		RepoID:       in.RepoID,
+		Title:        in.Title,
+		Description:  in.Description,
+		Status:       epic.Status(in.Status),
+		TaskIDs:      in.TaskIds,
+		SessionLog:   in.SessionLog,
+		NotReady:     in.NotReady,
+		Feedback:     in.Feedback,
+		FeedbackType: in.FeedbackType,
 	}
 	if in.PlanningPrompt != nil {
 		e.PlanningPrompt = *in.PlanningPrompt
@@ -156,6 +199,12 @@ func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
 	}
 	if in.UpdatedAt.Valid {
 		e.UpdatedAt = in.UpdatedAt.Time
+	}
+	if in.ClaimedAt.Valid {
+		e.ClaimedAt = &in.ClaimedAt.Time
+	}
+	if in.LastHeartbeatAt.Valid {
+		e.LastHeartbeatAt = &in.LastHeartbeatAt.Time
 	}
 	return e
 }

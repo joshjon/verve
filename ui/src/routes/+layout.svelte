@@ -9,6 +9,7 @@
 	import RepoSelector from '$lib/components/RepoSelector.svelte';
 	import VerveLogo from '$lib/components/VerveLogo.svelte';
 	import GitHubTokenDialog from '$lib/components/GitHubTokenDialog.svelte';
+	import Sidebar from '$lib/components/Sidebar.svelte';
 
 	let { children } = $props();
 	let openTokenDialog = $state(false);
@@ -87,15 +88,20 @@
 			</div>
 		</div>
 	</header>
-	<main class="flex-1 min-h-0 flex flex-col">
+	<div class="flex-1 min-h-0 flex">
 		{#if tokenConfigured}
-			{@render children()}
+			<Sidebar />
+			<main class="flex-1 min-h-0 flex flex-col overflow-auto">
+				{@render children()}
+			</main>
 		{:else if tokenConfigured === false}
-			<div class="flex items-center justify-center h-[60vh] text-muted-foreground text-sm">
-				Configure your GitHub token to get started.
-			</div>
+			<main class="flex-1 min-h-0 flex flex-col">
+				<div class="flex items-center justify-center h-[60vh] text-muted-foreground text-sm">
+					Configure your GitHub token to get started.
+				</div>
+			</main>
 		{/if}
-	</main>
+	</div>
 </div>
 
 <GitHubTokenDialog

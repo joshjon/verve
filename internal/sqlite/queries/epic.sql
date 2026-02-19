@@ -42,3 +42,50 @@ WHERE id = ?;
 
 -- name: DeleteEpic :exec
 DELETE FROM epic WHERE id = ?;
+
+-- name: ListPlanningEpics :many
+SELECT * FROM epic
+WHERE status = 'planning' AND claimed_at IS NULL
+ORDER BY created_at ASC;
+
+-- name: ClaimEpic :exec
+UPDATE epic SET
+  claimed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+  last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'planning' AND claimed_at IS NULL;
+
+-- name: EpicHeartbeat :exec
+UPDATE epic SET
+  last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?;
+
+-- name: SetEpicFeedback :exec
+UPDATE epic SET
+  feedback = ?,
+  feedback_type = ?,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?;
+
+-- name: ClearEpicFeedback :exec
+UPDATE epic SET
+  feedback = NULL,
+  feedback_type = NULL,
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?;
+
+-- name: ReleaseEpicClaim :exec
+UPDATE epic SET
+  claimed_at = NULL,
+  last_heartbeat_at = NULL,
+  status = 'planning',
+  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?;
+
+-- name: ListStaleEpics :many
+SELECT * FROM epic
+WHERE claimed_at IS NOT NULL
+  AND last_heartbeat_at < ?
+  AND status IN ('planning', 'draft')
+ORDER BY last_heartbeat_at ASC;

@@ -3,7 +3,10 @@ package epic
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
+
+	"github.com/joshjon/kit/log"
 )
 
 // TaskCreator creates tasks in the task system when an epic is confirmed.
@@ -15,16 +18,87 @@ type TaskCreator interface {
 type Store struct {
 	repo        Repository
 	taskCreator TaskCreator
+	logger      log.Logger
+
+	// Pending epic notification (same pattern as task.Store)
+	pendingMu sync.Mutex
+	pendingCh chan struct{}
+
+	// Per-epic feedback notification channels
+	feedbackMu    sync.Mutex
+	feedbackChans map[string]chan struct{}
 }
 
 // NewStore creates a new Store backed by the given Repository.
-func NewStore(repo Repository, taskCreator TaskCreator) *Store {
-	return &Store{repo: repo, taskCreator: taskCreator}
+func NewStore(repo Repository, taskCreator TaskCreator, logger log.Logger) *Store {
+	return &Store{
+		repo:          repo,
+		taskCreator:   taskCreator,
+		logger:        logger.With("component", "epic_store"),
+		pendingCh:     make(chan struct{}, 1),
+		feedbackChans: make(map[string]chan struct{}),
+	}
 }
 
-// CreateEpic creates a new epic in draft status.
+// WaitForPending returns a channel that signals when a planning epic might be available.
+func (s *Store) WaitForPending() <-chan struct{} {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	return s.pendingCh
+}
+
+func (s *Store) notifyPending() {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	select {
+	case s.pendingCh <- struct{}{}:
+	default:
+	}
+}
+
+// getFeedbackChan returns (or creates) the feedback notification channel for an epic.
+func (s *Store) getFeedbackChan(id string) chan struct{} {
+	s.feedbackMu.Lock()
+	defer s.feedbackMu.Unlock()
+	ch, ok := s.feedbackChans[id]
+	if !ok {
+		ch = make(chan struct{}, 1)
+		s.feedbackChans[id] = ch
+	}
+	return ch
+}
+
+func (s *Store) notifyFeedback(id string) {
+	s.feedbackMu.Lock()
+	ch, ok := s.feedbackChans[id]
+	s.feedbackMu.Unlock()
+	if ok {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// WaitForFeedback returns a channel that signals when feedback is available for an epic.
+func (s *Store) WaitForFeedback(id string) <-chan struct{} {
+	return s.getFeedbackChan(id)
+}
+
+// CleanupFeedbackChan removes the feedback channel for an epic (call when agent exits).
+func (s *Store) CleanupFeedbackChan(id string) {
+	s.feedbackMu.Lock()
+	defer s.feedbackMu.Unlock()
+	delete(s.feedbackChans, id)
+}
+
+// CreateEpic creates a new epic in planning status and notifies pending.
 func (s *Store) CreateEpic(ctx context.Context, epic *Epic) error {
-	return s.repo.CreateEpic(ctx, epic)
+	if err := s.repo.CreateEpic(ctx, epic); err != nil {
+		return err
+	}
+	s.notifyPending()
+	return nil
 }
 
 // ReadEpic reads an epic by ID.
@@ -42,7 +116,74 @@ func (s *Store) ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, er
 	return s.repo.ListEpicsByRepo(ctx, repoID)
 }
 
-// StartPlanning transitions an epic from draft to planning status.
+// ClaimPendingEpic finds an unclaimed planning epic and claims it atomically.
+func (s *Store) ClaimPendingEpic(ctx context.Context) (*Epic, error) {
+	epics, err := s.repo.ListPlanningEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range epics {
+		if err := s.repo.ClaimEpic(ctx, e.ID); err != nil {
+			continue
+		}
+		// Re-read to get updated claimed_at
+		return s.repo.ReadEpic(ctx, e.ID)
+	}
+	return nil, nil
+}
+
+// EpicHeartbeat updates the heartbeat timestamp for a claimed epic.
+func (s *Store) EpicHeartbeat(ctx context.Context, id EpicID) error {
+	return s.repo.EpicHeartbeat(ctx, id)
+}
+
+// SetFeedback stores user feedback and notifies the waiting agent.
+func (s *Store) SetFeedback(ctx context.Context, id EpicID, feedback string, feedbackType FeedbackType) error {
+	if err := s.repo.SetEpicFeedback(ctx, id, feedback, string(feedbackType)); err != nil {
+		return err
+	}
+	// If it's a message, transition back to planning status
+	if feedbackType == FeedbackMessage {
+		if err := s.repo.UpdateEpicStatus(ctx, id, StatusPlanning); err != nil {
+			return err
+		}
+	}
+	s.notifyFeedback(id.String())
+	return nil
+}
+
+// PollFeedback reads and clears pending feedback for an epic.
+// Returns nil values if no feedback is pending.
+func (s *Store) PollFeedback(ctx context.Context, id EpicID) (*string, *string, error) {
+	e, err := s.repo.ReadEpic(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if e.Feedback == nil && e.FeedbackType == nil {
+		return nil, nil, nil
+	}
+	feedback := e.Feedback
+	feedbackType := e.FeedbackType
+	if err := s.repo.ClearEpicFeedback(ctx, id); err != nil {
+		return nil, nil, err
+	}
+	return feedback, feedbackType, nil
+}
+
+// UpdateProposedTasks updates the proposed tasks and transitions to draft status.
+func (s *Store) UpdateProposedTasks(ctx context.Context, id EpicID, tasks []ProposedTask) error {
+	if err := s.repo.UpdateProposedTasks(ctx, id, tasks); err != nil {
+		return err
+	}
+	return s.repo.UpdateEpicStatus(ctx, id, StatusDraft)
+}
+
+// AppendSessionLog appends messages to the planning session log.
+func (s *Store) AppendSessionLog(ctx context.Context, id EpicID, lines []string) error {
+	return s.repo.AppendSessionLog(ctx, id, lines)
+}
+
+// StartPlanning transitions an epic back to planning status and notifies pending.
 func (s *Store) StartPlanning(ctx context.Context, id EpicID, prompt string) error {
 	e, err := s.repo.ReadEpic(ctx, id)
 	if err != nil {
@@ -54,25 +195,15 @@ func (s *Store) StartPlanning(ctx context.Context, id EpicID, prompt string) err
 	e.PlanningPrompt = prompt
 	e.Status = StatusPlanning
 	e.UpdatedAt = time.Now()
-	return s.repo.UpdateEpic(ctx, e)
-}
-
-// UpdateProposedTasks updates the proposed tasks for an epic in planning.
-func (s *Store) UpdateProposedTasks(ctx context.Context, id EpicID, tasks []ProposedTask) error {
-	return s.repo.UpdateProposedTasks(ctx, id, tasks)
-}
-
-// AppendSessionLog appends messages to the planning session log.
-func (s *Store) AppendSessionLog(ctx context.Context, id EpicID, lines []string) error {
-	return s.repo.AppendSessionLog(ctx, id, lines)
-}
-
-// FinishPlanning transitions from planning back to draft status, keeping proposed tasks.
-func (s *Store) FinishPlanning(ctx context.Context, id EpicID) error {
-	return s.repo.UpdateEpicStatus(ctx, id, StatusDraft)
+	if err := s.repo.UpdateEpic(ctx, e); err != nil {
+		return err
+	}
+	s.notifyPending()
+	return nil
 }
 
 // ConfirmEpic creates real tasks from proposed tasks and activates the epic.
+// Also signals the agent to exit via feedback.
 func (s *Store) ConfirmEpic(ctx context.Context, id EpicID, notReady bool) error {
 	e, err := s.repo.ReadEpic(ctx, id)
 	if err != nil {
@@ -126,12 +257,25 @@ func (s *Store) ConfirmEpic(ctx context.Context, id EpicID, notReady bool) error
 		status = StatusReady
 	}
 	e.NotReady = notReady
-	return s.repo.UpdateEpicStatus(ctx, id, status)
+	if err := s.repo.UpdateEpicStatus(ctx, id, status); err != nil {
+		return err
+	}
+
+	// Signal agent to exit
+	_ = s.repo.SetEpicFeedback(ctx, id, "", string(FeedbackConfirmed))
+	s.notifyFeedback(id.String())
+	return nil
 }
 
-// CloseEpic closes an epic.
+// CloseEpic closes an epic and signals the agent to exit.
 func (s *Store) CloseEpic(ctx context.Context, id EpicID) error {
-	return s.repo.UpdateEpicStatus(ctx, id, StatusClosed)
+	if err := s.repo.UpdateEpicStatus(ctx, id, StatusClosed); err != nil {
+		return err
+	}
+	// Signal agent to exit
+	_ = s.repo.SetEpicFeedback(ctx, id, "", string(FeedbackClosed))
+	s.notifyFeedback(id.String())
+	return nil
 }
 
 // DeleteEpic deletes an epic (only if in draft status).
@@ -144,4 +288,32 @@ func (s *Store) DeleteEpic(ctx context.Context, id EpicID) error {
 		return fmt.Errorf("can only delete epics in draft status")
 	}
 	return s.repo.DeleteEpic(ctx, id)
+}
+
+// ReleaseEpicClaim releases a worker's claim on an epic, making it available again.
+func (s *Store) ReleaseEpicClaim(ctx context.Context, id EpicID) error {
+	if err := s.repo.ReleaseEpicClaim(ctx, id); err != nil {
+		return err
+	}
+	s.notifyPending()
+	return nil
+}
+
+// TimeoutStaleEpics releases claimed epics whose heartbeat has expired.
+func (s *Store) TimeoutStaleEpics(ctx context.Context, timeout time.Duration) (int, error) {
+	threshold := time.Now().Add(-timeout)
+	epics, err := s.repo.ListStaleEpics(ctx, threshold)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, e := range epics {
+		_ = s.repo.AppendSessionLog(ctx, e.ID, []string{"system: Planning session timed out due to inactivity."})
+		if err := s.repo.ReleaseEpicClaim(ctx, e.ID); err != nil {
+			continue
+		}
+		count++
+		s.notifyPending()
+	}
+	return count, nil
 }

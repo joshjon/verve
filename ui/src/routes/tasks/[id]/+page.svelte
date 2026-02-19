@@ -578,7 +578,7 @@
 <div class="p-4 sm:p-6">
 	<Button variant="ghost" onclick={() => goto('/')} class="mb-4 sm:mb-6 gap-2 -ml-2">
 		<ArrowLeft class="w-4 h-4" />
-		<span class="hidden sm:inline">Back to Dashboard</span>
+		<span class="hidden sm:inline">Back to Tasks</span>
 		<span class="sm:hidden">Back</span>
 	</Button>
 

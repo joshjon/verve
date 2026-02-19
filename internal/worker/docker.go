@@ -68,21 +68,33 @@ type RunResult struct {
 
 // AgentConfig holds the configuration for running an agent
 type AgentConfig struct {
+	WorkType string // "task" or "epic"
+
+	// Task fields
 	TaskID               string
 	TaskTitle            string
 	TaskDescription      string
-	GitHubToken          string
-	GitHubRepo           string
-	AnthropicAPIKey      string
-	ClaudeCodeOAuthToken string // OAuth token (subscription-based, alternative to API key)
-	ClaudeModel          string
-	DryRun               bool
 	SkipPR               bool
 	Attempt              int
 	RetryReason          string
 	AcceptanceCriteria   []string
 	RetryContext         string
 	PreviousStatus       string
+
+	// Epic fields
+	EpicID             string
+	EpicTitle          string
+	EpicDescription    string
+	EpicPlanningPrompt string
+	APIURL             string // For epic agent to call back to server
+
+	// Common fields
+	GitHubToken          string
+	GitHubRepo           string
+	AnthropicAPIKey      string
+	ClaudeCodeOAuthToken string // OAuth token (subscription-based, alternative to API key)
+	ClaudeModel          string
+	DryRun               bool
 }
 
 // LogCallback is called for each log line from the container
@@ -91,49 +103,80 @@ type LogCallback func(line string)
 // RunAgent runs the agent container and streams logs via the callback in real-time.
 // The callback is called from a separate goroutine as logs arrive.
 func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogCallback) RunResult {
+	workType := cfg.WorkType
+	if workType == "" {
+		workType = "task"
+	}
+
 	// Create container with all required environment variables
 	env := []string{
-		"TASK_ID=" + cfg.TaskID,
-		"TASK_TITLE=" + cfg.TaskTitle,
-		"TASK_DESCRIPTION=" + cfg.TaskDescription,
+		"WORK_TYPE=" + workType,
 		"GITHUB_TOKEN=" + cfg.GitHubToken,
 		"GITHUB_REPO=" + cfg.GitHubRepo,
-		"CLAUDE_MODEL=" + cfg.ClaudeModel,
 	}
+
 	// Pass whichever auth method is configured (OAuth token takes precedence)
 	if cfg.ClaudeCodeOAuthToken != "" {
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+cfg.ClaudeCodeOAuthToken)
 	} else {
 		env = append(env, "ANTHROPIC_API_KEY="+cfg.AnthropicAPIKey)
 	}
-	if cfg.DryRun {
-		env = append(env, "DRY_RUN=true")
-	}
-	if cfg.SkipPR {
-		env = append(env, "SKIP_PR=true")
-	}
-	if cfg.Attempt > 1 {
+
+	if workType == "epic" {
+		// Epic-specific env vars
 		env = append(env,
-			fmt.Sprintf("ATTEMPT=%d", cfg.Attempt),
-			"RETRY_REASON="+cfg.RetryReason,
+			"EPIC_ID="+cfg.EpicID,
+			"EPIC_TITLE="+cfg.EpicTitle,
+			"EPIC_DESCRIPTION="+cfg.EpicDescription,
+			"EPIC_PLANNING_PROMPT="+cfg.EpicPlanningPrompt,
+			"API_URL="+cfg.APIURL,
 		)
-		if cfg.RetryContext != "" {
-			env = append(env, "RETRY_CONTEXT="+cfg.RetryContext)
+	} else {
+		// Task-specific env vars
+		env = append(env,
+			"TASK_ID="+cfg.TaskID,
+			"TASK_TITLE="+cfg.TaskTitle,
+			"TASK_DESCRIPTION="+cfg.TaskDescription,
+			"CLAUDE_MODEL="+cfg.ClaudeModel,
+		)
+		if cfg.DryRun {
+			env = append(env, "DRY_RUN=true")
 		}
-		if cfg.PreviousStatus != "" {
-			env = append(env, "PREVIOUS_STATUS="+cfg.PreviousStatus)
+		if cfg.SkipPR {
+			env = append(env, "SKIP_PR=true")
 		}
-	}
-	if len(cfg.AcceptanceCriteria) > 0 {
-		var ac string
-		for i, c := range cfg.AcceptanceCriteria {
-			if i > 0 {
-				ac += "\n"
+		if cfg.Attempt > 1 {
+			env = append(env,
+				fmt.Sprintf("ATTEMPT=%d", cfg.Attempt),
+				"RETRY_REASON="+cfg.RetryReason,
+			)
+			if cfg.RetryContext != "" {
+				env = append(env, "RETRY_CONTEXT="+cfg.RetryContext)
 			}
-			ac += fmt.Sprintf("%d. %s", i+1, c)
+			if cfg.PreviousStatus != "" {
+				env = append(env, "PREVIOUS_STATUS="+cfg.PreviousStatus)
+			}
 		}
-		env = append(env, "ACCEPTANCE_CRITERIA="+ac)
+		if len(cfg.AcceptanceCriteria) > 0 {
+			var ac string
+			for i, c := range cfg.AcceptanceCriteria {
+				if i > 0 {
+					ac += "\n"
+				}
+				ac += fmt.Sprintf("%d. %s", i+1, c)
+			}
+			env = append(env, "ACCEPTANCE_CRITERIA="+ac)
+		}
 	}
+
+	// Container name
+	containerName := "verve-agent-"
+	if workType == "epic" {
+		containerName += "epic-" + cfg.EpicID
+	} else {
+		containerName += cfg.TaskID
+	}
+
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
 			Image: d.agentImage,
@@ -143,7 +186,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			AutoRemove: false, // We'll remove it manually after getting logs
 		},
 		nil, nil,
-		"verve-agent-"+cfg.TaskID,
+		containerName,
 	)
 	if err != nil {
 		return RunResult{Error: fmt.Errorf("failed to create container: %w", err)}

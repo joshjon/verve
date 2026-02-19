@@ -6,12 +6,21 @@ import "time"
 type Status string
 
 const (
-	StatusDraft     Status = "draft"     // Planning session active, tasks being designed
-	StatusPlanning  Status = "planning"  // Agent is actively proposing/updating tasks
+	StatusDraft     Status = "draft"     // Agent proposed tasks, user reviewing
+	StatusPlanning  Status = "planning"  // Queued or claimed by worker, agent planning
 	StatusReady     Status = "ready"     // Planning complete, tasks confirmed but not started
 	StatusActive    Status = "active"    // Tasks are being picked up by agents
 	StatusCompleted Status = "completed" // All tasks finished
 	StatusClosed    Status = "closed"    // Manually closed
+)
+
+// FeedbackType classifies user feedback sent to the planning agent.
+type FeedbackType string
+
+const (
+	FeedbackMessage   FeedbackType = "message"   // User sent a feedback message
+	FeedbackConfirmed FeedbackType = "confirmed" // User confirmed the epic
+	FeedbackClosed    FeedbackType = "closed"    // User closed the epic
 )
 
 // ProposedTask represents a task proposed by the planning agent during
@@ -26,21 +35,25 @@ type ProposedTask struct {
 
 // Epic represents a large deliverable that contains multiple related tasks.
 type Epic struct {
-	ID             EpicID         `json:"id"`
-	RepoID         string         `json:"repo_id"`
-	Title          string         `json:"title"`
-	Description    string         `json:"description"`
-	Status         Status         `json:"status"`
-	ProposedTasks  []ProposedTask `json:"proposed_tasks"`
-	TaskIDs        []string       `json:"task_ids"`
-	PlanningPrompt string         `json:"planning_prompt,omitempty"`
-	SessionLog     []string       `json:"session_log,omitempty"`
-	NotReady       bool           `json:"not_ready"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID              EpicID         `json:"id"`
+	RepoID          string         `json:"repo_id"`
+	Title           string         `json:"title"`
+	Description     string         `json:"description"`
+	Status          Status         `json:"status"`
+	ProposedTasks   []ProposedTask `json:"proposed_tasks"`
+	TaskIDs         []string       `json:"task_ids"`
+	PlanningPrompt  string         `json:"planning_prompt,omitempty"`
+	SessionLog      []string       `json:"session_log"`
+	NotReady        bool           `json:"not_ready"`
+	ClaimedAt       *time.Time     `json:"claimed_at,omitempty"`
+	LastHeartbeatAt *time.Time     `json:"last_heartbeat_at,omitempty"`
+	Feedback        *string        `json:"feedback,omitempty"`
+	FeedbackType    *string        `json:"feedback_type,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
 }
 
-// NewEpic creates a new Epic with a generated EpicID and draft status.
+// NewEpic creates a new Epic in planning status, queued for a worker to claim.
 func NewEpic(repoID, title, description string) *Epic {
 	now := time.Now()
 	return &Epic{
@@ -48,7 +61,7 @@ func NewEpic(repoID, title, description string) *Epic {
 		RepoID:        repoID,
 		Title:         title,
 		Description:   description,
-		Status:        StatusDraft,
+		Status:        StatusPlanning,
 		ProposedTasks: []ProposedTask{},
 		TaskIDs:       []string{},
 		SessionLog:    []string{},

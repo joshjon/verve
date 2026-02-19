@@ -1,14 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { client } from '$lib/api-client';
 	import { taskStore } from '$lib/stores/tasks.svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
-	import { epicStore } from '$lib/stores/epics.svelte';
 	import TaskColumn from '$lib/components/TaskColumn.svelte';
 	import CreateTaskDialog from '$lib/components/CreateTaskDialog.svelte';
-	import CreateEpicDialog from '$lib/components/CreateEpicDialog.svelte';
-	import EpicCard from '$lib/components/EpicCard.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import {
 		Plus,
@@ -19,12 +15,10 @@
 		Clock,
 		Play,
 		Eye,
-		XCircle,
-		Layers
+		XCircle
 	} from 'lucide-svelte';
 
 	let openCreate = $state(false);
-	let openCreateEpic = $state(false);
 	let syncing = $state(false);
 	let syncResult = $state<{ synced: number; merged: number } | null>(null);
 
@@ -69,15 +63,10 @@
 		currentES = es;
 	}
 
-	// Reconnect SSE when selected repo changes, and load epics.
+	// Reconnect SSE when selected repo changes.
 	$effect(() => {
 		const repoId = repoStore.selectedRepoId;
 		connectSSE(repoId);
-		if (repoId) {
-			loadEpics(repoId);
-		} else {
-			epicStore.clear();
-		}
 		return () => {
 			if (currentES) {
 				currentES.close();
@@ -85,15 +74,6 @@
 			}
 		};
 	});
-
-	async function loadEpics(repoId: string) {
-		try {
-			const epics = await client.listEpicsByRepo(repoId);
-			epicStore.setEpics(epics);
-		} catch {
-			// Ignore errors silently on initial load
-		}
-	}
 
 	async function syncPRs() {
 		const repoId = repoStore.selectedRepoId;
@@ -122,10 +102,6 @@
 		...taskStore.tasksByStatus.merged,
 		...taskStore.tasksByStatus.closed
 	]);
-
-	const activeEpics = $derived(
-		epicStore.epics.filter((e) => !['completed', 'closed'].includes(e.status))
-	);
 </script>
 
 <div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col">
@@ -133,7 +109,7 @@
 		<header class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6">
 			<div>
 				<div class="flex items-center gap-3">
-					<h1 class="text-xl sm:text-2xl font-bold">Dashboard</h1>
+					<h1 class="text-xl sm:text-2xl font-bold">Tasks</h1>
 					{#if totalTasks > 0}
 						<div class="flex items-center gap-2">
 							<span
@@ -168,10 +144,6 @@
 					<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
 					<span class="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync PRs'}</span>
 				</Button>
-				<Button variant="outline" onclick={() => (openCreateEpic = true)} class="gap-2 border-violet-500/30 text-violet-300 hover:bg-violet-500/10">
-					<Layers class="w-4 h-4" />
-					<span class="hidden sm:inline">New Epic</span>
-				</Button>
 				<Button onclick={() => (openCreate = true)} class="gap-2">
 					<Plus class="w-4 h-4" />
 					New Task
@@ -185,21 +157,6 @@
 			>
 				<AlertCircle class="w-5 h-5 flex-shrink-0" />
 				<span>{taskStore.error}</span>
-			</div>
-		{/if}
-
-		<!-- Epics section -->
-		{#if activeEpics.length > 0}
-			<div class="mb-4">
-				<h2 class="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
-					<Layers class="w-4 h-4 text-violet-400" />
-					Epics
-				</h2>
-				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-					{#each activeEpics as epic (epic.id)}
-						<EpicCard {epic} />
-					{/each}
-				</div>
 			</div>
 		{/if}
 
@@ -268,5 +225,4 @@
 
 {#if hasRepo}
 	<CreateTaskDialog bind:open={openCreate} onCreated={() => {}} />
-	<CreateEpicDialog bind:open={openCreateEpic} onCreated={(id) => goto(`/epics/${id}`)} />
 {/if}

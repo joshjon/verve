@@ -4,7 +4,7 @@
 	import { repoStore } from '$lib/stores/repos.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Loader2, Layers, FileText, Type } from 'lucide-svelte';
+	import { Loader2, Layers, FileText, Type, MessageSquare } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -13,6 +13,7 @@
 
 	let title = $state('');
 	let description = $state('');
+	let planningPrompt = $state('');
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 
@@ -26,10 +27,11 @@
 		try {
 			const repoId = repoStore.selectedRepoId;
 			if (!repoId) throw new Error('No repository selected');
-			const epic = await client.createEpic(repoId, title, description);
+			const epic = await client.createEpic(repoId, title, description, planningPrompt || undefined);
 			epicStore.addEpic(epic);
 			title = '';
 			description = '';
+			planningPrompt = '';
 			open = false;
 			onCreated(epic.id);
 		} catch (err) {
@@ -43,6 +45,7 @@
 		open = false;
 		title = '';
 		description = '';
+		planningPrompt = '';
 		error = null;
 	}
 </script>
@@ -57,7 +60,7 @@
 				Create New Epic
 			</Dialog.Title>
 			<Dialog.Description>
-				An epic is a large deliverable with multiple related tasks. After creating it, you'll start a planning session where an AI agent helps break it into tasks.
+				An epic is a large deliverable with multiple related tasks. An AI agent will automatically plan and propose a task breakdown.
 			</Dialog.Description>
 		</Dialog.Header>
 		<form onsubmit={handleSubmit}>
@@ -100,6 +103,21 @@
 						bind:value={description}
 						class="w-full border rounded-lg p-3 min-h-[180px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
 						placeholder="Describe the epic in detail. Include:&#10;- What you want to build&#10;- Technical requirements and constraints&#10;- Relevant files or code areas&#10;- How tasks should be structured&#10;- Any dependencies or ordering requirements"
+						disabled={loading}
+					></textarea>
+				</div>
+
+				<div>
+					<label for="epic-planning" class="text-sm font-medium mb-2 flex items-center gap-2">
+						<MessageSquare class="w-4 h-4 text-muted-foreground" />
+						Planning Instructions
+						<span class="text-xs text-muted-foreground font-normal">(optional)</span>
+					</label>
+					<textarea
+						id="epic-planning"
+						bind:value={planningPrompt}
+						class="w-full border rounded-lg p-3 min-h-[80px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+						placeholder="e.g., Break this into small, independently testable tasks. Prioritize the data model and API first, then the UI."
 						disabled={loading}
 					></textarea>
 				</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { client } from '$lib/api-client';
 	import { epicStore } from '$lib/stores/epics.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -13,18 +13,16 @@
 		Loader2,
 		Plus,
 		Trash2,
-		Send,
 		Check,
 		X,
 		Edit3,
-		GripVertical,
 		Link2,
 		MessageSquare,
 		PauseCircle,
-		Play,
-		Square,
 		CheckCircle2,
-		AlertCircle
+		AlertCircle,
+		RefreshCw,
+		Clock
 	} from 'lucide-svelte';
 
 	let epic = $state<Epic | null>(null);
@@ -32,11 +30,12 @@
 	let error = $state<string | null>(null);
 
 	// Planning session state
-	let planningPrompt = $state('');
 	let sessionMessage = $state('');
 	let sendingMessage = $state(false);
 	let isPlanning = $derived(epic?.status === 'planning');
-	let isEditable = $derived(epic?.status === 'draft' || epic?.status === 'ready');
+	let isDraft = $derived(epic?.status === 'draft' || epic?.status === 'ready');
+	let isEditable = $derived(isDraft);
+	let isClaimed = $derived(!!epic?.claimed_at);
 
 	// Task editing state
 	let editingTaskIdx = $state<number | null>(null);
@@ -48,14 +47,43 @@
 	let confirming = $state(false);
 	let notReady = $state(false);
 	let closing = $state(false);
-	let startingPlanning = $state(false);
-	let finishingPlanning = $state(false);
+
+	// Polling
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 	const epicId = $derived($page.params.id);
 
 	onMount(async () => {
 		await loadEpic();
 	});
+
+	onDestroy(() => {
+		stopPolling();
+	});
+
+	function startPolling() {
+		if (pollTimer) return;
+		pollTimer = setInterval(async () => {
+			if (!epic) return;
+			try {
+				const updated = await client.getEpic(epic.id);
+				epic = updated;
+				// Stop polling once planning is done and we have tasks or status changed
+				if (updated.status !== 'planning') {
+					stopPolling();
+				}
+			} catch {
+				// Ignore polling errors silently
+			}
+		}, 2000);
+	}
+
+	function stopPolling() {
+		if (pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
+	}
 
 	async function loadEpic() {
 		loading = true;
@@ -67,24 +95,13 @@
 				return;
 			}
 			epic = await client.getEpic(id);
+			if (epic.status === 'planning') {
+				startPolling();
+			}
 		} catch (err) {
 			error = (err as Error).message;
 		} finally {
 			loading = false;
-		}
-	}
-
-	async function handleStartPlanning() {
-		if (!planningPrompt.trim() || !epic) return;
-		startingPlanning = true;
-		error = null;
-		try {
-			epic = await client.startPlanning(epic.id, planningPrompt);
-			planningPrompt = '';
-		} catch (err) {
-			error = (err as Error).message;
-		} finally {
-			startingPlanning = false;
 		}
 	}
 
@@ -95,23 +112,12 @@
 		try {
 			epic = await client.sendSessionMessage(epic.id, sessionMessage);
 			sessionMessage = '';
+			// Start polling — the agent will re-plan
+			startPolling();
 		} catch (err) {
 			error = (err as Error).message;
 		} finally {
 			sendingMessage = false;
-		}
-	}
-
-	async function handleFinishPlanning() {
-		if (!epic) return;
-		finishingPlanning = true;
-		error = null;
-		try {
-			epic = await client.finishPlanning(epic.id);
-		} catch (err) {
-			error = (err as Error).message;
-		} finally {
-			finishingPlanning = false;
 		}
 	}
 
@@ -241,11 +247,11 @@
 <div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col max-w-6xl mx-auto w-full">
 	<div class="mb-4">
 		<button
-			onclick={() => goto('/')}
+			onclick={() => goto('/epics')}
 			class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
 		>
 			<ArrowLeft class="w-4 h-4" />
-			Back to Dashboard
+			Back to Epics
 		</button>
 	</div>
 
@@ -272,11 +278,18 @@
 						<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold {getStatusColor(epic.status)}">
 							{epic.status}
 						</span>
+						{#if isPlanning}
+							{#if isClaimed}
+								<Loader2 class="w-3 h-3 animate-spin text-violet-400" />
+							{:else}
+								<Clock class="w-3 h-3 text-muted-foreground" />
+							{/if}
+						{/if}
 					</div>
 				</div>
 			</div>
 			<div class="flex items-center gap-2 shrink-0">
-				{#if epic.status === 'draft' || epic.status === 'ready'}
+				{#if isDraft}
 					<Button variant="outline" size="sm" onclick={handleClose} disabled={closing} class="gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10">
 						{#if closing}
 							<Loader2 class="w-3.5 h-3.5 animate-spin" />
@@ -294,6 +307,33 @@
 				<AlertCircle class="w-4 h-4 shrink-0" />
 				{error}
 			</div>
+		{/if}
+
+		<!-- Planning status banner -->
+		{#if isPlanning}
+			<Card.Root class="mb-6 border-violet-500/20 bg-violet-500/5">
+				<Card.Content class="p-4">
+					<div class="flex items-center gap-3">
+						{#if isClaimed}
+							<Loader2 class="w-5 h-5 animate-spin text-violet-400 shrink-0" />
+							<div>
+								<p class="text-sm font-medium text-violet-400">Agent is planning...</p>
+								<p class="text-xs text-muted-foreground mt-0.5">
+									The AI agent is analyzing the codebase and generating a task breakdown. This may take a few minutes.
+								</p>
+							</div>
+						{:else}
+							<Clock class="w-5 h-5 text-muted-foreground shrink-0" />
+							<div>
+								<p class="text-sm font-medium text-muted-foreground">Waiting for available worker...</p>
+								<p class="text-xs text-muted-foreground mt-0.5">
+									This epic is queued and will be picked up by the next available worker.
+								</p>
+							</div>
+						{/if}
+					</div>
+				</Card.Content>
+			</Card.Root>
 		{/if}
 
 		{#if epic.description}
@@ -328,11 +368,17 @@
 					<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1">
 						<Card.Content class="p-8 text-center">
 							<div class="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-								<Layers class="w-6 h-6 text-muted-foreground" />
+								{#if isPlanning}
+									<Loader2 class="w-6 h-6 text-violet-400 animate-spin" />
+								{:else}
+									<Layers class="w-6 h-6 text-muted-foreground" />
+								{/if}
 							</div>
 							<p class="text-sm text-muted-foreground">
-								{#if epic.status === 'draft' && !epic.planning_prompt}
-									Start a planning session to generate task proposals.
+								{#if isPlanning && isClaimed}
+									AI agent is analyzing the epic and generating tasks...
+								{:else if isPlanning}
+									Waiting for an agent to start planning...
 								{:else}
 									No tasks have been proposed yet.
 								{/if}
@@ -498,70 +544,49 @@
 					Planning Session
 				</h2>
 
-				{#if !epic.planning_prompt && epic.status === 'draft'}
-					<!-- Initial planning prompt -->
-					<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1 flex flex-col">
-						<Card.Content class="p-4 flex-1 flex flex-col">
-							<p class="text-xs text-muted-foreground mb-3">
-								Provide additional instructions for the AI planning agent. It will analyze the epic and propose a task breakdown.
-							</p>
-							<textarea
-								bind:value={planningPrompt}
-								class="flex-1 min-h-[120px] border rounded-lg p-3 bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-								placeholder="e.g., Break this into small, independently testable tasks. Each task should be completable in one PR. Prioritize the data model and API first, then the UI."
-							></textarea>
-							<Button
-								onclick={handleStartPlanning}
-								disabled={!planningPrompt.trim() || startingPlanning}
-								class="mt-3 gap-1.5 bg-violet-600 hover:bg-violet-700 w-full"
-							>
-								{#if startingPlanning}
-									<Loader2 class="w-4 h-4 animate-spin" />
-									Starting...
-								{:else}
-									<Play class="w-4 h-4" />
-									Start Planning
-								{/if}
-							</Button>
-						</Card.Content>
-					</Card.Root>
-				{:else}
-					<!-- Session log & chat -->
-					<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1 flex flex-col min-h-[300px]">
-						<Card.Content class="p-3 flex-1 flex flex-col min-h-0">
-							{#if epic.planning_prompt}
-								<div class="text-xs text-muted-foreground mb-2 pb-2 border-b border-border/50">
-									<span class="font-medium text-violet-400">Planning prompt:</span>
-									<p class="mt-1 line-clamp-3">{epic.planning_prompt}</p>
+				<!-- Session log & status -->
+				<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1 flex flex-col min-h-[300px]">
+					<Card.Content class="p-3 flex-1 flex flex-col min-h-0">
+						{#if epic.planning_prompt}
+							<div class="text-xs text-muted-foreground mb-2 pb-2 border-b border-border/50">
+								<span class="font-medium text-violet-400">Planning prompt:</span>
+								<p class="mt-1 line-clamp-3">{epic.planning_prompt}</p>
+							</div>
+						{/if}
+
+						<!-- Session log -->
+						<div class="flex-1 overflow-y-auto space-y-2 min-h-0 mb-3 max-h-[40vh]">
+							{#each epic.session_log as line}
+								<div class="text-xs {line.startsWith('user:') ? 'text-blue-400' : line.startsWith('system:') ? 'text-violet-400' : 'text-muted-foreground'}">
+									{line}
+								</div>
+							{/each}
+							{#if epic.session_log.length === 0 && !isPlanning}
+								<p class="text-xs text-muted-foreground text-center py-4">
+									Session log will appear here.
+								</p>
+							{/if}
+							{#if isPlanning}
+								<div class="flex items-center gap-2 text-xs text-violet-400 py-2">
+									<Loader2 class="w-3 h-3 animate-spin" />
+									{#if isClaimed}
+										Agent is planning...
+									{:else}
+										Waiting for worker...
+									{/if}
 								</div>
 							{/if}
+						</div>
 
-							<!-- Session log -->
-							<div class="flex-1 overflow-y-auto space-y-2 min-h-0 mb-3 max-h-[40vh]">
-								{#each epic.session_log as line}
-									<div class="text-xs {line.startsWith('user:') ? 'text-blue-400' : 'text-muted-foreground'}">
-										{line}
-									</div>
-								{/each}
-								{#if epic.session_log.length === 0}
-									<p class="text-xs text-muted-foreground text-center py-4">
-										{#if isPlanning}
-											Planning session is active. Send messages to guide the agent.
-										{:else}
-											Session log will appear here.
-										{/if}
-									</p>
-								{/if}
-							</div>
-
-							<!-- Message input -->
-							{#if isPlanning || isEditable}
+						<!-- Feedback input (when in draft/ready and agent may be listening) -->
+						{#if isDraft}
+							<div class="border-t border-border/50 pt-3">
 								<div class="flex items-center gap-2">
 									<input
 										type="text"
 										bind:value={sessionMessage}
 										class="flex-1 border rounded-lg px-3 py-2 bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-										placeholder={isPlanning ? 'Send feedback to the agent...' : 'Resume planning with a message...'}
+										placeholder="Send feedback to re-plan..."
 										disabled={sendingMessage}
 										onkeydown={(e) => {
 											if (e.key === 'Enter' && !e.shiftKey) {
@@ -574,35 +599,19 @@
 										size="sm"
 										onclick={handleSendMessage}
 										disabled={!sessionMessage.trim() || sendingMessage}
-										class="shrink-0"
+										class="shrink-0 gap-1.5"
 									>
 										{#if sendingMessage}
 											<Loader2 class="w-4 h-4 animate-spin" />
 										{:else}
-											<Send class="w-4 h-4" />
+											<RefreshCw class="w-4 h-4" />
 										{/if}
 									</Button>
 								</div>
-								{#if isPlanning}
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={handleFinishPlanning}
-										disabled={finishingPlanning}
-										class="mt-2 w-full gap-1.5 text-xs"
-									>
-										{#if finishingPlanning}
-											<Loader2 class="w-3.5 h-3.5 animate-spin" />
-										{:else}
-											<Square class="w-3.5 h-3.5" />
-										{/if}
-										Stop Planning Session
-									</Button>
-								{/if}
-							{/if}
-						</Card.Content>
-					</Card.Root>
-				{/if}
+							</div>
+						{/if}
+					</Card.Content>
+				</Card.Root>
 
 				<!-- Task IDs (after confirmation) -->
 				{#if epic.task_ids.length > 0}

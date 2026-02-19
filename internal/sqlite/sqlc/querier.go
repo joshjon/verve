@@ -6,13 +6,16 @@ package sqlc
 
 import (
 	"context"
+	"time"
 )
 
 type Querier interface {
 	AddTaskCost(ctx context.Context, arg AddTaskCostParams) error
 	AppendSessionLog(ctx context.Context, arg AppendSessionLogParams) error
 	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
+	ClaimEpic(ctx context.Context, id string) error
 	ClaimTask(ctx context.Context, id string) (int64, error)
+	ClearEpicFeedback(ctx context.Context, id string) error
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
 	CreateEpic(ctx context.Context, arg CreateEpicParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
@@ -22,14 +25,17 @@ type Querier interface {
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteSetting(ctx context.Context, key string) error
 	DeleteTaskLogs(ctx context.Context, taskID string) error
+	EpicHeartbeat(ctx context.Context, id string) error
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (int64, error)
 	Heartbeat(ctx context.Context, id string) error
 	ListEpics(ctx context.Context) ([]*Epic, error)
 	ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
+	ListPlanningEpics(ctx context.Context) ([]*Epic, error)
 	ListRepos(ctx context.Context) ([]*Repo, error)
 	ListSettings(ctx context.Context) ([]*ListSettingsRow, error)
+	ListStaleEpics(ctx context.Context, lastHeartbeatAt *time.Time) ([]*Epic, error)
 	ListStaleTasks(ctx context.Context, lastHeartbeatAt *string) ([]*Task, error)
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
@@ -45,6 +51,7 @@ type Querier interface {
 	ReadTask(ctx context.Context, id string) (*Task, error)
 	ReadTaskLogs(ctx context.Context, taskID string) ([]*ReadTaskLogsRow, error)
 	ReadTaskStatus(ctx context.Context, id string) (string, error)
+	ReleaseEpicClaim(ctx context.Context, id string) error
 	RetryTask(ctx context.Context, arg RetryTaskParams) (int64, error)
 	ScheduleRetryFromRunning(ctx context.Context, arg ScheduleRetryFromRunningParams) (int64, error)
 	SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) error
@@ -52,6 +59,7 @@ type Querier interface {
 	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error
 	SetConsecutiveFailures(ctx context.Context, arg SetConsecutiveFailuresParams) error
 	SetDependsOn(ctx context.Context, arg SetDependsOnParams) error
+	SetEpicFeedback(ctx context.Context, arg SetEpicFeedbackParams) error
 	SetEpicTaskIDs(ctx context.Context, arg SetEpicTaskIDsParams) error
 	SetReady(ctx context.Context, arg SetReadyParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error

@@ -14,7 +14,9 @@ type Querier interface {
 	AddTaskCost(ctx context.Context, arg AddTaskCostParams) error
 	AppendSessionLog(ctx context.Context, arg AppendSessionLogParams) error
 	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
+	ClaimEpic(ctx context.Context, id string) error
 	ClaimTask(ctx context.Context, id string) (int64, error)
+	ClearEpicFeedback(ctx context.Context, id string) error
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
 	CreateEpic(ctx context.Context, arg CreateEpicParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
@@ -24,6 +26,7 @@ type Querier interface {
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteSetting(ctx context.Context, key string) error
 	DeleteTaskLogs(ctx context.Context, taskID string) error
+	EpicHeartbeat(ctx context.Context, id string) error
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
 	Heartbeat(ctx context.Context, id string) error
@@ -31,8 +34,10 @@ type Querier interface {
 	ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)
 	ListPendingTasksByRepos(ctx context.Context, dollar_1 []string) ([]*Task, error)
+	ListPlanningEpics(ctx context.Context) ([]*Epic, error)
 	ListRepos(ctx context.Context) ([]*Repo, error)
 	ListSettings(ctx context.Context) ([]*ListSettingsRow, error)
+	ListStaleEpics(ctx context.Context, lastHeartbeatAt pgtype.Timestamptz) ([]*Epic, error)
 	ListStaleTasks(ctx context.Context, lastHeartbeatAt pgtype.Timestamptz) ([]*Task, error)
 	ListTasks(ctx context.Context) ([]*Task, error)
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
@@ -48,6 +53,7 @@ type Querier interface {
 	ReadTask(ctx context.Context, id string) (*Task, error)
 	ReadTaskLogs(ctx context.Context, id string) ([]*ReadTaskLogsRow, error)
 	ReadTaskStatus(ctx context.Context, id string) (TaskStatus, error)
+	ReleaseEpicClaim(ctx context.Context, id string) error
 	RemoveDependency(ctx context.Context, arg RemoveDependencyParams) error
 	RetryTask(ctx context.Context, arg RetryTaskParams) (int64, error)
 	ScheduleRetryFromRunning(ctx context.Context, arg ScheduleRetryFromRunningParams) (int64, error)
@@ -55,6 +61,7 @@ type Querier interface {
 	SetBranchName(ctx context.Context, arg SetBranchNameParams) error
 	SetCloseReason(ctx context.Context, arg SetCloseReasonParams) error
 	SetConsecutiveFailures(ctx context.Context, arg SetConsecutiveFailuresParams) error
+	SetEpicFeedback(ctx context.Context, arg SetEpicFeedbackParams) error
 	SetEpicTaskIDs(ctx context.Context, arg SetEpicTaskIDsParams) error
 	SetReady(ctx context.Context, arg SetReadyParams) error
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
