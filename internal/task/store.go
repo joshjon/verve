@@ -533,7 +533,7 @@ func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
 	return nil
 }
 
-// DeleteTask deletes a task and removes it from any other tasks' dependency lists.
+// DeleteTask deletes a task, its logs, and removes it from any other tasks' dependency lists.
 func (s *Store) DeleteTask(ctx context.Context, id TaskID) error {
 	// Read task before deletion for event publishing
 	t, err := s.repo.ReadTask(ctx, id)
@@ -555,6 +555,11 @@ func (s *Store) DeleteTask(ctx context.Context, id TaskID) error {
 				break
 			}
 		}
+	}
+
+	// Delete task logs first (task_log has a FK reference to task)
+	if err := s.repo.DeleteTaskLogs(ctx, id); err != nil {
+		return err
 	}
 
 	// Delete the task

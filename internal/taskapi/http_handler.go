@@ -1065,6 +1065,7 @@ func writeSSE(w *echo.Response, event string, data any) error {
 }
 
 // jsonError maps errtag-tagged errors to appropriate HTTP status codes.
+// For 5xx errors, the underlying error details are logged to aid debugging.
 func jsonError(c echo.Context, err error) error {
 	code := http.StatusInternalServerError
 	msg := "internal server error"
@@ -1073,6 +1074,10 @@ func jsonError(c echo.Context, err error) error {
 	if errors.As(err, &tagger) {
 		code = tagger.Code()
 		msg = tagger.Msg()
+	}
+
+	if code >= 500 {
+		c.Logger().Errorf("handler error: method=%s path=%s status=%d error=%v", c.Request().Method, c.Path(), code, err)
 	}
 
 	return c.JSON(code, errorResponse(msg))
