@@ -24,6 +24,7 @@ type Querier interface {
 	DeleteGitHubToken(ctx context.Context) error
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteSetting(ctx context.Context, key string) error
+	DeleteTask(ctx context.Context, id string) error
 	DeleteTaskLogs(ctx context.Context, taskID string) error
 	EpicHeartbeat(ctx context.Context, id string) error
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)

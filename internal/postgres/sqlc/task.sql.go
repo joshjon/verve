@@ -114,6 +114,15 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 	return err
 }
 
+const deleteTask = `-- name: DeleteTask :exec
+DELETE FROM task WHERE id = $1
+`
+
+func (q *Queries) DeleteTask(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteTask, id)
+	return err
+}
+
 const deleteTaskLogs = `-- name: DeleteTaskLogs :exec
 DELETE FROM task_log WHERE task_id = $1
 `
