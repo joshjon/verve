@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/joshjon/kit/log"
@@ -17,9 +20,10 @@ import (
 const DefaultAgentImage = "verve-agent:latest"
 
 type DockerRunner struct {
-	client     *client.Client
-	agentImage string
-	logger     log.Logger
+	client       *client.Client
+	agentImage   string
+	logger       log.Logger
+	networkName  string // Docker network to attach epic containers to
 }
 
 func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error) {
@@ -30,7 +34,51 @@ func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error
 	if agentImage == "" {
 		agentImage = DefaultAgentImage
 	}
-	return &DockerRunner{client: cli, agentImage: agentImage, logger: logger}, nil
+	runner := &DockerRunner{client: cli, agentImage: agentImage, logger: logger}
+
+	// Discover the Docker network this worker is running on so we can
+	// attach epic planning containers to the same network (allowing them
+	// to resolve Docker Compose service names like "server").
+	runner.networkName = runner.discoverNetwork()
+	if runner.networkName != "" {
+		logger.Info("discovered docker network for agent containers", "network", runner.networkName)
+	}
+
+	return runner, nil
+}
+
+// discoverNetwork attempts to find the Docker network this worker container
+// is running on. It first checks the DOCKER_NETWORK env var, then inspects
+// the current container (identified by hostname) to find a bridge network.
+func (d *DockerRunner) discoverNetwork() string {
+	// Allow explicit override via environment variable
+	if n := os.Getenv("DOCKER_NETWORK"); n != "" {
+		return n
+	}
+
+	// The container's hostname is usually its short container ID
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		return ""
+	}
+
+	ctx := context.Background()
+	info, err := d.client.ContainerInspect(ctx, hostname)
+	if err != nil {
+		// Not running inside Docker, or hostname doesn't match container ID
+		return ""
+	}
+
+	// Find a non-default bridge network (Docker Compose networks)
+	for name := range info.NetworkSettings.Networks {
+		// Skip the default bridge and host networks
+		if name == "bridge" || name == "host" || name == "none" {
+			continue
+		}
+		return name
+	}
+
+	return ""
 }
 
 func (d *DockerRunner) Close() error {
@@ -124,8 +172,12 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	if workType == workTypeEpic {
 		// Epic-specific env vars
-		// Normalize API URL for host networking (convert Docker hostnames to localhost)
-		apiURL := normalizeAPIURLForHostNetwork(cfg.APIURL)
+		apiURL := cfg.APIURL
+		// If we don't have a discovered network (not running in Docker Compose),
+		// normalize the URL for host networking as a fallback.
+		if d.networkName == "" {
+			apiURL = normalizeAPIURLForHostNetwork(apiURL)
+		}
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
 			"EPIC_TITLE="+cfg.EpicTitle,
@@ -183,11 +235,25 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		AutoRemove: false, // We'll remove it manually after getting logs
 	}
 
-	// Epic planning containers need to call back to the API server, so they
-	// need host networking to reach whatever address API_URL points at (which
-	// is often localhost or a hostname only resolvable on the host).
+	// For epic planning containers that need to call back to the API server:
+	// prefer attaching to the same Docker network as the worker (so Docker
+	// DNS resolves service names like "server"). Fall back to host networking
+	// if we couldn't discover the network.
+	var networkConfig *network.NetworkingConfig
 	if workType == workTypeEpic {
-		hostConfig.NetworkMode = "host"
+		if d.networkName != "" {
+			networkConfig = &network.NetworkingConfig{
+				EndpointsConfig: map[string]*network.EndpointSettings{
+					d.networkName: {},
+				},
+			}
+			d.logger.Info("attaching epic container to docker network",
+				"network", d.networkName, "container", containerName)
+		} else {
+			hostConfig.NetworkMode = "host"
+			d.logger.Info("using host network for epic container (no compose network found)",
+				"container", containerName)
+		}
 	}
 
 	resp, err := d.client.ContainerCreate(ctx,
@@ -196,26 +262,28 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			Env:   env,
 		},
 		hostConfig,
-		nil, nil,
+		networkConfig, nil,
 		containerName,
 	)
 	if err != nil {
-		return RunResult{Error: fmt.Errorf("failed to create container: %w", err)}
+		return RunResult{Error: fmt.Errorf("failed to create container %s: %w", containerName, err)}
 	}
 	containerID := resp.ID
+	d.logger.Info("container created", "container", containerName, "id", containerID[:12])
 
 	// Ensure cleanup
 	defer func() {
 		// Remove container
 		if err := d.client.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true}); err != nil {
-			d.logger.Warn("failed to remove container", "container_id", containerID, "error", err)
+			d.logger.Warn("failed to remove container", "container", containerName, "error", err)
 		}
 	}()
 
 	// Start container
 	if err := d.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
-		return RunResult{Error: fmt.Errorf("failed to start container: %w", err)}
+		return RunResult{Error: fmt.Errorf("failed to start container %s: %w", containerName, err)}
 	}
+	d.logger.Info("container started", "container", containerName)
 
 	// Attach to logs with Follow=true for real-time streaming
 	logReader, err := d.client.ContainerLogs(ctx, containerID, container.LogsOptions{
@@ -248,6 +316,8 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	case <-ctx.Done():
 		return RunResult{Error: ctx.Err()}
 	}
+
+	d.logger.Info("container exited", "container", containerName, "exit_code", exitCode)
 
 	// Wait for log streaming to complete
 	wg.Wait()
@@ -344,9 +414,9 @@ func normalizeAPIURLForHostNetwork(apiURL string) string {
 		"https://verve:":    "https://localhost:",
 	}
 
-	for old, new := range replacements {
-		if len(apiURL) >= len(old) && apiURL[:len(old)] == old {
-			return new + apiURL[len(old):]
+	for old, replacement := range replacements {
+		if strings.HasPrefix(apiURL, old) {
+			return replacement + apiURL[len(old):]
 		}
 	}
 

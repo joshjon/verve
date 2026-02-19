@@ -51,9 +51,33 @@ _epic_run_planning() {
     prompt=$(_build_epic_prompt "$feedback")
 
     log_agent "Running Claude for epic planning..."
-    local output
-    output=$(claude --output-format stream-json --verbose --dangerously-skip-permissions \
-        --model "sonnet" "$prompt" 2>&1 | _extract_claude_result)
+
+    # Write raw stream-json output to a temp file so we can extract the
+    # result afterwards. Use tee to also pipe through _parse_stream (from
+    # claude.sh) which prints human-readable log lines to stdout in
+    # real-time — these are captured by the Docker log streamer.
+    local raw_output_file
+    raw_output_file=$(mktemp /tmp/epic_claude_raw.XXXXXX)
+
+    claude --output-format stream-json --verbose --dangerously-skip-permissions \
+        --model "sonnet" "$prompt" 2>&1 \
+        | tee "$raw_output_file" \
+        | _parse_stream
+
+    # Extract the result text from the saved raw output
+    local output=""
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        local event_type
+        event_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null)
+        if [ "$event_type" = "result" ]; then
+            output=$(echo "$line" | jq -r '.result // empty' 2>/dev/null)
+        fi
+    done < "$raw_output_file"
+    rm -f "$raw_output_file"
+
+    log_blank
+    log_agent "Claude Code session completed"
 
     if [ -z "$output" ]; then
         log_error "Claude produced no output"
@@ -147,20 +171,6 @@ Output the tasks as a JSON array wrapped in a markdown code block with the langu
 Order tasks by dependency (tasks with no dependencies first). Be thorough but practical — each task should be independently completable by an AI coding agent."
 
     echo "$prompt"
-}
-
-_extract_claude_result() {
-    # Read Claude JSON output and extract the result text
-    local last_result=""
-    while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        local event_type
-        event_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null)
-        if [ "$event_type" = "result" ]; then
-            last_result=$(echo "$line" | jq -r '.result // empty' 2>/dev/null)
-        fi
-    done
-    echo "$last_result"
 }
 
 _extract_proposed_tasks() {
