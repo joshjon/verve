@@ -6,6 +6,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { goto } from '$app/navigation';
 	import { repoStore } from '$lib/stores/repos.svelte';
 	import { taskStore } from '$lib/stores/tasks.svelte';
@@ -43,7 +44,8 @@
 		PauseCircle,
 		PlayCircle,
 		RotateCcw,
-		Pencil
+		Pencil,
+		Trash2
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -130,6 +132,8 @@
 	let startOverCriteria = $state('');
 	let removingDep = $state<string | null>(null);
 	let showEditDialog = $state(false);
+	let showDeleteDialog = $state(false);
+	let deleting = $state(false);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
@@ -573,6 +577,20 @@
 		if (diffHours < 24) return `${diffHours}h ago`;
 		return `${diffDays}d ago`;
 	}
+
+	async function handleDelete() {
+		if (!task || deleting) return;
+		deleting = true;
+		try {
+			await client.deleteTask(task.id);
+			showDeleteDialog = false;
+			await goto('/');
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			deleting = false;
+		}
+	}
 </script>
 
 <div class="p-4 sm:p-6">
@@ -682,6 +700,10 @@
 							</Button>
 						{/if}
 					{/if}
+					<Button size="sm" variant="destructive" onclick={() => (showDeleteDialog = true)} class="gap-1">
+						<Trash2 class="w-4 h-4" />
+						<span class="hidden sm:inline">Delete</span>
+					</Button>
 				</div>
 			</div>
 
@@ -1442,6 +1464,45 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Delete Confirmation Dialog -->
+<Dialog.Root bind:open={showDeleteDialog}>
+	<Dialog.Content class="sm:max-w-[450px]">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2">
+				<div class="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+					<Trash2 class="w-4 h-4 text-destructive" />
+				</div>
+				Delete Task
+			</Dialog.Title>
+			<Dialog.Description>
+				Are you sure you want to delete this task? This action cannot be undone. All logs, agent data, and related information will be permanently removed.
+			</Dialog.Description>
+		</Dialog.Header>
+		{#if error}
+			<div class="bg-destructive/10 text-destructive text-sm p-3 rounded-lg flex items-center gap-2">
+				<XCircle class="w-4 h-4 flex-shrink-0" />
+				{error}
+			</div>
+		{/if}
+		<Dialog.Footer>
+			<div class="flex justify-end gap-2 w-full">
+				<Button type="button" variant="outline" onclick={() => (showDeleteDialog = false)} disabled={deleting}>
+					Cancel
+				</Button>
+				<Button type="button" variant="destructive" onclick={handleDelete} disabled={deleting} class="gap-2">
+					{#if deleting}
+						<Loader2 class="w-4 h-4 animate-spin" />
+						Deleting...
+					{:else}
+						<Trash2 class="w-4 h-4" />
+						Delete Task
+					{/if}
+				</Button>
+			</div>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <style>
 	:global(.terminal-container) {
