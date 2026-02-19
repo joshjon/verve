@@ -530,6 +530,40 @@ func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
 	return nil
 }
 
+// DeleteTask deletes a task and removes it from any other tasks' dependency lists.
+func (s *Store) DeleteTask(ctx context.Context, id TaskID) error {
+	// Read task before deletion for event publishing
+	t, err := s.repo.ReadTask(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Find all tasks and remove this task from their depends_on lists
+	allTasks, err := s.repo.ListTasks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range allTasks {
+		for _, depID := range task.DependsOn {
+			if depID == id.String() {
+				if err := s.repo.RemoveDependency(ctx, task.ID, id.String()); err != nil {
+					return err
+				}
+				break
+			}
+		}
+	}
+
+	// Delete the task
+	if err := s.repo.DeleteTask(ctx, id); err != nil {
+		return err
+	}
+
+	// Publish deletion event
+	s.broker.Publish(ctx, Event{Type: EventTaskDeleted, RepoID: t.RepoID, TaskID: id})
+	return nil
+}
+
 // WaitForPending returns a channel that signals when a pending task might be available.
 func (s *Store) WaitForPending() <-chan struct{} {
 	s.pendingMu.Lock()
