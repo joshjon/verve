@@ -22,7 +22,7 @@ type Repository interface {
 	ListPlanningEpics(ctx context.Context) ([]*Epic, error)
 	ClaimEpic(ctx context.Context, id EpicID) error
 	EpicHeartbeat(ctx context.Context, id EpicID) error
-	SetEpicFeedback(ctx context.Context, id EpicID, feedback string, feedbackType string) error
+	SetEpicFeedback(ctx context.Context, id EpicID, feedback, feedbackType string) error
 	ClearEpicFeedback(ctx context.Context, id EpicID) error
 	ReleaseEpicClaim(ctx context.Context, id EpicID) error
 	ListStaleEpics(ctx context.Context, threshold time.Time) ([]*Epic, error)

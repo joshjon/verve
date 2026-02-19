@@ -35,9 +35,10 @@ run_epic_planning() {
     log_agent "Repository cloned for context analysis"
     log_blank
 
-    # Initial planning
+    # Initial planning (don't exit on failure — fall through to feedback loop
+    # so the user can see the error and provide feedback for a retry)
     _epic_send_log "system: Planning session started. Analyzing epic and generating task breakdown..."
-    _epic_run_planning ""
+    _epic_run_planning "" || true
 
     # Enter feedback loop
     _epic_feedback_loop
@@ -260,7 +261,7 @@ _epic_feedback_loop() {
                 log_agent "Received feedback: ${feedback_text}"
                 _epic_send_log "system: Re-planning based on user feedback..."
                 last_activity=$(date +%s)
-                _epic_run_planning "$feedback_text"
+                _epic_run_planning "$feedback_text" || true
                 ;;
             confirmed)
                 log_agent "Epic confirmed by user. Exiting."
