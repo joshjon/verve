@@ -1493,14 +1493,11 @@
 
 <!-- Fullscreen Log Overlay -->
 {#if isFullscreen}
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<!-- svelte-ignore a11y_interactive_supports_focus -->
 	<div
 		role="dialog"
-		aria-label="Fullscreen logs"
-		tabindex="-1"
+		aria-modal="true"
+		aria-label="Fullscreen agent logs"
 		class="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
-		onkeydown={handleFullscreenKeydown}
 	>
 		<!-- Fullscreen Header -->
 		<div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
