@@ -62,9 +62,22 @@ func (h *HTTPHandler) CreateEpic(c echo.Context) error {
 	}
 
 	e := epic.NewEpic(repoID.String(), req.Title, req.Description)
+	e.PlanningPrompt = req.PlanningPrompt
+
+	// Auto-start planning if a planner is configured.
+	if h.store.HasPlanner() {
+		e.Status = epic.StatusPlanning
+	}
+
 	if err := h.store.CreateEpic(c.Request().Context(), e); err != nil {
 		return jsonError(c, err)
 	}
+
+	// Launch planning in the background after the epic is persisted.
+	if h.store.HasPlanner() {
+		h.store.StartPlanningAsync(e.ID)
+	}
+
 	return c.JSON(http.StatusCreated, e)
 }
 

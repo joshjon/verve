@@ -19,6 +19,7 @@ import (
 	"verve/internal/frontend"
 	"verve/internal/github"
 	"verve/internal/githubtoken"
+	"verve/internal/planner"
 	"verve/internal/postgres"
 	"verve/internal/setting"
 	pgmigrations "verve/internal/postgres/migrations"
@@ -73,18 +74,26 @@ func Run(ctx context.Context, logger log.Logger, cfg Config) error {
 }
 
 func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKey []byte) (stores, func(), error) {
+	var ep epic.Planner
+	if cfg.AnthropicKey != "" {
+		ep = planner.New(cfg.AnthropicKey)
+		logger.Info("epic planning enabled (Anthropic API key configured)")
+	} else {
+		logger.Warn("ANTHROPIC_API_KEY not set, AI-powered epic planning will be unavailable")
+	}
+
 	if !cfg.Postgres.IsSet() {
 		if cfg.SQLiteDir != "" {
 			logger.Info("Postgres not configured, using file-backed SQLite", "dir", cfg.SQLiteDir)
 		} else {
 			logger.Warn("Postgres not configured, using in-memory SQLite (data will not persist)")
 		}
-		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey)
+		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey, ep, logger)
 	}
-	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey)
+	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey, ep)
 }
 
-func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte) (stores, func(), error) {
+func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte, ep epic.Planner) (stores, func(), error) {
 	pool, err := pgdb.Dial(ctx, cfg.User, cfg.Password, cfg.HostPort, cfg.Database)
 	if err != nil {
 		return stores{}, nil, fmt.Errorf("dial postgres: %w", err)
@@ -116,12 +125,12 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 
 	epicRepo := postgres.NewEpicRepository(pool)
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
-	epicStore := epic.NewStore(epicRepo, taskCreator)
+	epicStore := epic.NewStore(epicRepo, taskCreator, ep, logger)
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, func(), error) {
+func initSQLite(ctx context.Context, dir string, encryptionKey []byte, ep epic.Planner, logger log.Logger) (stores, func(), error) {
 	var opts []sqlitedb.OpenOption
 	if dir != "" {
 		opts = append(opts, sqlitedb.WithDir(dir), sqlitedb.WithDBName("verve"))
@@ -156,7 +165,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte) (stores, 
 
 	epicRepo := sqlite.NewEpicRepository(db)
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
-	epicStore := epic.NewStore(epicRepo, taskCreator)
+	epicStore := epic.NewStore(epicRepo, taskCreator, ep, logger)
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
 }

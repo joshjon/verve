@@ -23,6 +23,7 @@ func main() {
 		UI:            os.Getenv("UI") == "true",
 		SQLiteDir:     os.Getenv("SQLITE_DIR"),
 		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		AnthropicKey:  os.Getenv("ANTHROPIC_API_KEY"),
 		Postgres: app.PostgresConfig{
 			User:     os.Getenv("POSTGRES_USER"),
 			Password: os.Getenv("POSTGRES_PASSWORD"),

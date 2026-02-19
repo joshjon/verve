@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/joshjon/kit/log"
 )
 
 // TaskCreator creates tasks in the task system when an epic is confirmed.
@@ -11,15 +13,32 @@ type TaskCreator interface {
 	CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool) (string, error)
 }
 
+// Planner generates proposed tasks from an epic description using AI.
+type Planner interface {
+	PlanEpic(ctx context.Context, title, description, prompt string) ([]ProposedTask, error)
+}
+
 // Store wraps a Repository and adds application-level concerns for epics.
 type Store struct {
 	repo        Repository
 	taskCreator TaskCreator
+	planner     Planner
+	logger      log.Logger
 }
 
 // NewStore creates a new Store backed by the given Repository.
-func NewStore(repo Repository, taskCreator TaskCreator) *Store {
-	return &Store{repo: repo, taskCreator: taskCreator}
+func NewStore(repo Repository, taskCreator TaskCreator, planner Planner, logger log.Logger) *Store {
+	return &Store{
+		repo:        repo,
+		taskCreator: taskCreator,
+		planner:     planner,
+		logger:      logger.With("component", "epic_store"),
+	}
+}
+
+// HasPlanner returns true if an AI planner is configured.
+func (s *Store) HasPlanner() bool {
+	return s.planner != nil
 }
 
 // CreateEpic creates a new epic in draft status.
@@ -42,7 +61,8 @@ func (s *Store) ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, er
 	return s.repo.ListEpicsByRepo(ctx, repoID)
 }
 
-// StartPlanning transitions an epic from draft to planning status.
+// StartPlanning transitions an epic from draft to planning status and
+// launches the AI planner in a background goroutine.
 func (s *Store) StartPlanning(ctx context.Context, id EpicID, prompt string) error {
 	e, err := s.repo.ReadEpic(ctx, id)
 	if err != nil {
@@ -54,7 +74,58 @@ func (s *Store) StartPlanning(ctx context.Context, id EpicID, prompt string) err
 	e.PlanningPrompt = prompt
 	e.Status = StatusPlanning
 	e.UpdatedAt = time.Now()
-	return s.repo.UpdateEpic(ctx, e)
+	if err := s.repo.UpdateEpic(ctx, e); err != nil {
+		return err
+	}
+
+	if s.planner != nil {
+		go s.runPlanning(id)
+	}
+	return nil
+}
+
+// StartPlanningAsync launches the AI planner in a background goroutine.
+// The epic must already be in planning status.
+func (s *Store) StartPlanningAsync(id EpicID) {
+	go s.runPlanning(id)
+}
+
+// runPlanning calls the AI planner and updates the epic with proposed tasks.
+// It runs in a background goroutine with its own context.
+func (s *Store) runPlanning(id EpicID) {
+	ctx := context.Background()
+	logger := s.logger.With("epic_id", id.String())
+
+	_ = s.repo.AppendSessionLog(ctx, id, []string{"system: Planning session started. Analyzing epic and generating task breakdown..."})
+
+	e, err := s.repo.ReadEpic(ctx, id)
+	if err != nil {
+		logger.Error("failed to read epic for planning", "error", err)
+		_ = s.repo.AppendSessionLog(ctx, id, []string{"system: Planning failed: could not read epic"})
+		_ = s.repo.UpdateEpicStatus(ctx, id, StatusDraft)
+		return
+	}
+
+	tasks, err := s.planner.PlanEpic(ctx, e.Title, e.Description, e.PlanningPrompt)
+	if err != nil {
+		logger.Error("planning failed", "error", err)
+		_ = s.repo.AppendSessionLog(ctx, id, []string{"system: Planning failed: " + err.Error()})
+		_ = s.repo.UpdateEpicStatus(ctx, id, StatusDraft)
+		return
+	}
+
+	if err := s.repo.UpdateProposedTasks(ctx, id, tasks); err != nil {
+		logger.Error("failed to save proposed tasks", "error", err)
+		_ = s.repo.AppendSessionLog(ctx, id, []string{"system: Planning failed: could not save tasks"})
+		_ = s.repo.UpdateEpicStatus(ctx, id, StatusDraft)
+		return
+	}
+
+	_ = s.repo.AppendSessionLog(ctx, id, []string{
+		fmt.Sprintf("system: Planning complete. Proposed %d tasks.", len(tasks)),
+	})
+	_ = s.repo.UpdateEpicStatus(ctx, id, StatusDraft)
+	logger.Info("planning complete", "proposed_tasks", len(tasks))
 }
 
 // UpdateProposedTasks updates the proposed tasks for an epic in planning.
