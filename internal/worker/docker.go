@@ -187,11 +187,14 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	}
 
 	// Epic planning containers need to call back to the API server.
-	// If the worker is running inside Docker (e.g. via Compose), attach the
-	// epic container to the same network so Docker DNS resolves service names
-	// like "server". If running outside Docker and the API URL points to
-	// localhost, rewrite it to host.docker.internal so the container can
-	// reach the host machine.
+	// Three deployment scenarios are handled:
+	// 1. Docker Compose: worker is in Docker, attach epic container to
+	//    the same network so Docker DNS resolves service names.
+	// 2. Local dev: worker on host with API_URL=localhost — rewrite to
+	//    host.docker.internal so the container can reach the host.
+	// 3. Distributed: worker on host with API_URL pointing to a remote
+	//    server (e.g. EC2) — no rewrite needed, the container reaches
+	//    the remote server over the default bridge network.
 	var networkConfig *network.NetworkingConfig
 	if workType == workTypeEpic {
 		if netName := d.detectNetwork(ctx); netName != "" {

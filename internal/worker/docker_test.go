@@ -44,6 +44,16 @@ func TestRewriteLocalhostURL(t *testing.T) {
 			expected: "https://api.example.com",
 		},
 		{
+			name:     "private IP unchanged (distributed worker)",
+			input:    "http://10.0.1.5:7400",
+			expected: "http://10.0.1.5:7400",
+		},
+		{
+			name:     "public hostname unchanged (distributed worker)",
+			input:    "https://api.verve.example.com",
+			expected: "https://api.verve.example.com",
+		},
+		{
 			name:     "invalid URL unchanged",
 			input:    "://bad",
 			expected: "://bad",
