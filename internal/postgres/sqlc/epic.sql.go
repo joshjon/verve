@@ -26,7 +26,7 @@ func (q *Queries) AppendSessionLog(ctx context.Context, arg AppendSessionLogPara
 	return err
 }
 
-const claimEpic = `-- name: ClaimEpic :exec
+const claimEpic = `-- name: ClaimEpic :execrows
 UPDATE epic SET
   claimed_at = NOW(),
   last_heartbeat_at = NOW(),
@@ -34,9 +34,12 @@ UPDATE epic SET
 WHERE id = $1 AND status = 'planning' AND claimed_at IS NULL
 `
 
-func (q *Queries) ClaimEpic(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, claimEpic, id)
-	return err
+func (q *Queries) ClaimEpic(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, claimEpic, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const clearEpicFeedback = `-- name: ClearEpicFeedback :exec

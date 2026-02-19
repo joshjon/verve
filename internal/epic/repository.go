@@ -20,7 +20,7 @@ type Repository interface {
 
 	// Worker support
 	ListPlanningEpics(ctx context.Context) ([]*Epic, error)
-	ClaimEpic(ctx context.Context, id EpicID) error
+	ClaimEpic(ctx context.Context, id EpicID) (bool, error)
 	EpicHeartbeat(ctx context.Context, id EpicID) error
 	SetEpicFeedback(ctx context.Context, id EpicID, feedback, feedbackType string) error
 	ClearEpicFeedback(ctx context.Context, id EpicID) error
