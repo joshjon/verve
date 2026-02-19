@@ -186,7 +186,7 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	}
 
 	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken, s.setting))
-	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo))
+	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo, s.setting))
 	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken))
 
 	// Background PR sync.

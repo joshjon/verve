@@ -24,7 +24,7 @@ func NewTaskIDString() string {
 }
 
 // TaskCreateFunc is a function that creates a task and returns its ID.
-type TaskCreateFunc func(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool) (string, error)
+type TaskCreateFunc func(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool, model string) (string, error)
 
 // TaskCreatorFunc adapts a function to the TaskCreator interface.
 type TaskCreatorFunc struct {
@@ -36,8 +36,8 @@ func NewTaskCreatorFunc(fn TaskCreateFunc) *TaskCreatorFunc {
 	return &TaskCreatorFunc{fn: fn}
 }
 
-func (f *TaskCreatorFunc) CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool) (string, error) {
-	return f.fn(ctx, repoID, title, description, dependsOn, acceptanceCriteria, epicID, ready)
+func (f *TaskCreatorFunc) CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool, model string) (string, error) {
+	return f.fn(ctx, repoID, title, description, dependsOn, acceptanceCriteria, epicID, ready, model)
 }
 
 // Now is a helper for generating timestamps.

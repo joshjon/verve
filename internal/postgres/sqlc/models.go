@@ -98,6 +98,7 @@ type Epic struct {
 	LastHeartbeatAt pgtype.Timestamptz `json:"last_heartbeat_at"`
 	Feedback        *string            `json:"feedback"`
 	FeedbackType    *string            `json:"feedback_type"`
+	Model           *string            `json:"model"`
 }
 
 type GithubToken struct {

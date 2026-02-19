@@ -9,17 +9,19 @@ import (
 
 	"verve/internal/epic"
 	"verve/internal/repo"
+	"verve/internal/setting"
 )
 
 // HTTPHandler handles epic HTTP requests.
 type HTTPHandler struct {
-	store     *epic.Store
-	repoStore *repo.Store
+	store          *epic.Store
+	repoStore      *repo.Store
+	settingService *setting.Service
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *epic.Store, repoStore *repo.Store) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore}
+func NewHTTPHandler(store *epic.Store, repoStore *repo.Store, settingService *setting.Service) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, settingService: settingService}
 }
 
 // Register adds the epic endpoints to the provided Echo router group.
@@ -62,6 +64,16 @@ func (h *HTTPHandler) CreateEpic(c echo.Context) error {
 
 	e := epic.NewEpic(repoID.String(), req.Title, req.Description)
 	e.PlanningPrompt = req.PlanningPrompt
+
+	// Resolve model: use request value, fall back to default model setting, then "sonnet".
+	model := req.Model
+	if model == "" && h.settingService != nil {
+		model = h.settingService.Get(setting.KeyDefaultModel)
+	}
+	if model == "" {
+		model = "sonnet"
+	}
+	e.Model = model
 
 	if err := h.store.CreateEpic(c.Request().Context(), e); err != nil {
 		return jsonError(c, err)

@@ -7,6 +7,7 @@ type CreateEpicRequest struct {
 	Title          string `json:"title"`
 	Description    string `json:"description"`
 	PlanningPrompt string `json:"planning_prompt,omitempty"`
+	Model          string `json:"model,omitempty"`
 }
 
 // StartPlanningRequest is the request body for starting a planning session.

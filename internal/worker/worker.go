@@ -50,6 +50,7 @@ type Epic struct {
 	Title          string `json:"title"`
 	Description    string `json:"description"`
 	PlanningPrompt string `json:"planning_prompt,omitempty"`
+	Model          string `json:"model,omitempty"`
 }
 
 // PollResponse is a discriminated union returned by the unified poll endpoint.
@@ -529,6 +530,7 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 		GitHubRepo:           repoFullName,
 		AnthropicAPIKey:      w.config.AnthropicAPIKey,
 		ClaudeCodeOAuthToken: w.config.ClaudeCodeOAuthToken,
+		ClaudeModel:          ep.Model,
 	}
 
 	// Start heartbeat goroutine

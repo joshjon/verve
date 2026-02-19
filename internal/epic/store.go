@@ -11,7 +11,7 @@ import (
 
 // TaskCreator creates tasks in the task system when an epic is confirmed.
 type TaskCreator interface {
-	CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool) (string, error)
+	CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool, model string) (string, error)
 }
 
 // Store wraps a Repository and adds application-level concerns for epics.
@@ -238,6 +238,7 @@ func (s *Store) ConfirmEpic(ctx context.Context, id EpicID, notReady bool) error
 			pt.AcceptanceCriteria,
 			id.String(),
 			!notReady,
+			e.Model,
 		)
 		if err != nil {
 			return fmt.Errorf("create task %q: %w", pt.Title, err)

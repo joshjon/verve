@@ -4,7 +4,7 @@
 	import { repoStore } from '$lib/stores/repos.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Loader2, Layers, FileText, Type, MessageSquare } from 'lucide-svelte';
+	import { Loader2, Layers, FileText, Type, MessageSquare, ChevronDown, ChevronRight, Cpu } from 'lucide-svelte';
 
 	let {
 		open = $bindable(false),
@@ -16,6 +16,29 @@
 	let planningPrompt = $state('');
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let showAdvanced = $state(false);
+	let selectedModel = $state('');
+	let defaultModel = $state('sonnet');
+
+	// Fetch default model when dialog opens
+	$effect(() => {
+		if (open) {
+			client.getDefaultModel().then((res) => {
+				defaultModel = res.model;
+			}).catch(() => {});
+		}
+	});
+
+	const modelOptions = [
+		{ value: '', label: 'Default' },
+		{ value: 'haiku', label: 'Haiku' },
+		{ value: 'sonnet', label: 'Sonnet' },
+		{ value: 'opus', label: 'Opus' }
+	];
+
+	const defaultModelLabel = $derived(
+		modelOptions.find((m) => m.value === defaultModel)?.label || defaultModel
+	);
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -27,11 +50,12 @@
 		try {
 			const repoId = repoStore.selectedRepoId;
 			if (!repoId) throw new Error('No repository selected');
-			const epic = await client.createEpic(repoId, title, description, planningPrompt || undefined);
+			const epic = await client.createEpic(repoId, title, description, planningPrompt || undefined, selectedModel || undefined);
 			epicStore.addEpic(epic);
 			title = '';
 			description = '';
 			planningPrompt = '';
+			selectedModel = '';
 			open = false;
 			onCreated(epic.id);
 		} catch (err) {
@@ -46,6 +70,7 @@
 		title = '';
 		description = '';
 		planningPrompt = '';
+		selectedModel = '';
 		error = null;
 	}
 </script>
@@ -120,6 +145,45 @@
 						placeholder="e.g., Break this into small, independently testable tasks. Prioritize the data model and API first, then the UI."
 						disabled={loading}
 					></textarea>
+				</div>
+
+				<div>
+					<button
+						type="button"
+						class="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+						onclick={() => (showAdvanced = !showAdvanced)}
+					>
+						{#if showAdvanced}
+							<ChevronDown class="w-4 h-4" />
+						{:else}
+							<ChevronRight class="w-4 h-4" />
+						{/if}
+						Advanced Options
+					</button>
+
+					{#if showAdvanced}
+						<div class="mt-3 space-y-4 pl-1">
+							<div>
+								<label for="epic-model-select" class="text-sm font-medium mb-2 flex items-center gap-2">
+									<Cpu class="w-4 h-4 text-muted-foreground" />
+									Model
+									<span class="text-xs text-muted-foreground font-normal">(used for planning and generated tasks)</span>
+								</label>
+								<select
+									id="epic-model-select"
+									bind:value={selectedModel}
+									class="w-full border rounded-lg p-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow text-sm"
+									disabled={loading}
+								>
+									{#each modelOptions as option}
+										<option value={option.value}>
+											{option.label}{option.value === '' ? ` (${defaultModelLabel})` : ''}
+										</option>
+									{/each}
+								</select>
+							</div>
+						</div>
+					{/if}
 				</div>
 
 				{#if error}

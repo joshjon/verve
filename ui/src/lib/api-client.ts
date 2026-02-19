@@ -306,10 +306,12 @@ export class VerveClient {
 		repoId: string,
 		title: string,
 		description: string,
-		planningPrompt?: string
+		planningPrompt?: string,
+		model?: string
 	): Promise<Epic> {
 		const body: Record<string, unknown> = { title, description };
 		if (planningPrompt) body.planning_prompt = planningPrompt;
+		if (model) body.model = model;
 		const res = await fetch(`${this.baseUrl}/repos/${repoId}/epics`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
