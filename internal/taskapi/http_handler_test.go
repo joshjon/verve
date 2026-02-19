@@ -381,6 +381,15 @@ func (m *mockTaskRepo) ListStaleTasks(_ context.Context, _ time.Time) ([]*task.T
 	return nil, nil
 }
 
+func (m *mockTaskRepo) DeleteTask(_ context.Context, id task.TaskID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.tasks, id.String())
+	delete(m.taskStatuses, id.String())
+	delete(m.logs, id.String())
+	return nil
+}
+
 // --- Mock repo repository ---
 
 type mockRepoRepo struct {
