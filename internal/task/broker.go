@@ -10,6 +10,7 @@ import (
 const (
 	EventTaskCreated  = "task_created"
 	EventTaskUpdated  = "task_updated"
+	EventTaskDeleted  = "task_deleted"
 	EventLogsAppended = "logs_appended"
 )
 
