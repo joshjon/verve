@@ -459,6 +459,16 @@ func (m *mockRepository) ListStaleTasks(_ context.Context, _ time.Time) ([]*Task
 	return nil, nil
 }
 
+func (m *mockRepository) DeleteTask(_ context.Context, id TaskID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.tasks, id.String())
+	delete(m.taskStatuses, id.String())
+	delete(m.logs, id.String())
+	delete(m.consecutiveFailMap, id.String())
+	return nil
+}
+
 // --- Store tests ---
 
 func TestStore_CreateTask_Success(t *testing.T) {
