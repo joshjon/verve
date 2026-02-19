@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
@@ -124,7 +125,10 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	if workType == workTypeEpic {
 		// Epic-specific env vars
-		// Normalize API URL for host networking (convert Docker hostnames to localhost)
+		// Normalize API URL for host networking (convert Docker hostnames to localhost).
+		// Epic containers use host networking so they can reach the API server at
+		// whatever address is accessible from the host — this works whether server
+		// and worker are co-located or on different machines.
 		apiURL := normalizeAPIURLForHostNetwork(cfg.APIURL)
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
@@ -184,8 +188,11 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	}
 
 	// Epic planning containers need to call back to the API server, so they
-	// need host networking to reach whatever address API_URL points at (which
-	// is often localhost or a hostname only resolvable on the host).
+	// use host networking to reach whatever address API_URL points at. The
+	// API URL is normalized above so Docker service names (like "server") are
+	// replaced with localhost. This works regardless of whether the server is
+	// on the same machine or remote — the worker's API_URL just needs to be
+	// reachable from the host network.
 	if workType == workTypeEpic {
 		hostConfig.NetworkMode = "host"
 	}
@@ -200,22 +207,24 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		containerName,
 	)
 	if err != nil {
-		return RunResult{Error: fmt.Errorf("failed to create container: %w", err)}
+		return RunResult{Error: fmt.Errorf("failed to create container %s: %w", containerName, err)}
 	}
 	containerID := resp.ID
+	d.logger.Info("container created", "container", containerName, "id", containerID[:12])
 
 	// Ensure cleanup
 	defer func() {
 		// Remove container
 		if err := d.client.ContainerRemove(context.Background(), containerID, container.RemoveOptions{Force: true}); err != nil {
-			d.logger.Warn("failed to remove container", "container_id", containerID, "error", err)
+			d.logger.Warn("failed to remove container", "container", containerName, "error", err)
 		}
 	}()
 
 	// Start container
 	if err := d.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
-		return RunResult{Error: fmt.Errorf("failed to start container: %w", err)}
+		return RunResult{Error: fmt.Errorf("failed to start container %s: %w", containerName, err)}
 	}
+	d.logger.Info("container started", "container", containerName)
 
 	// Attach to logs with Follow=true for real-time streaming
 	logReader, err := d.client.ContainerLogs(ctx, containerID, container.LogsOptions{
@@ -248,6 +257,8 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	case <-ctx.Done():
 		return RunResult{Error: ctx.Err()}
 	}
+
+	d.logger.Info("container exited", "container", containerName, "exit_code", exitCode)
 
 	// Wait for log streaming to complete
 	wg.Wait()
@@ -344,9 +355,9 @@ func normalizeAPIURLForHostNetwork(apiURL string) string {
 		"https://verve:":    "https://localhost:",
 	}
 
-	for old, new := range replacements {
-		if len(apiURL) >= len(old) && apiURL[:len(old)] == old {
-			return new + apiURL[len(old):]
+	for old, replacement := range replacements {
+		if strings.HasPrefix(apiURL, old) {
+			return replacement + apiURL[len(old):]
 		}
 	}
 

@@ -536,9 +536,10 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 	defer cancelHeartbeat()
 	go w.epicHeartbeatLoop(heartbeatCtx, ep.ID)
 
-	// Log callback for epic planning
+	// Log callback for epic planning — log at INFO level so agent output
+	// is visible in worker logs (helps diagnose issues)
 	onLog := func(line string) {
-		epicLogger.Debug("epic agent output", "line", line)
+		epicLogger.Info("epic agent", "line", line)
 		streamer.AddLine(line)
 	}
 
