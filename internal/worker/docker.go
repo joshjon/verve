@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
+	"os"
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/joshjon/kit/log"
@@ -125,17 +126,12 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	if workType == workTypeEpic {
 		// Epic-specific env vars
-		// Normalize API URL for host networking (convert Docker hostnames to localhost).
-		// Epic containers use host networking so they can reach the API server at
-		// whatever address is accessible from the host — this works whether server
-		// and worker are co-located or on different machines.
-		apiURL := normalizeAPIURLForHostNetwork(cfg.APIURL)
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
 			"EPIC_TITLE="+cfg.EpicTitle,
 			"EPIC_DESCRIPTION="+cfg.EpicDescription,
 			"EPIC_PLANNING_PROMPT="+cfg.EpicPlanningPrompt,
-			"API_URL="+apiURL,
+			"API_URL="+cfg.APIURL,
 		)
 	} else {
 		// Task-specific env vars
@@ -187,14 +183,21 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		AutoRemove: false, // We'll remove it manually after getting logs
 	}
 
-	// Epic planning containers need to call back to the API server, so they
-	// use host networking to reach whatever address API_URL points at. The
-	// API URL is normalized above so Docker service names (like "server") are
-	// replaced with localhost. This works regardless of whether the server is
-	// on the same machine or remote — the worker's API_URL just needs to be
-	// reachable from the host network.
+	// Epic planning containers need to call back to the API server.
+	// If the worker is running inside Docker (e.g. via Compose), attach the
+	// epic container to the same network so Docker DNS resolves service names
+	// like "server". If running outside Docker, the default bridge network is
+	// fine since the API URL will already be a routable address.
+	var networkConfig *network.NetworkingConfig
 	if workType == workTypeEpic {
-		hostConfig.NetworkMode = "host"
+		if netName := d.detectNetwork(ctx); netName != "" {
+			d.logger.Info("attaching epic container to worker network", "network", netName)
+			networkConfig = &network.NetworkingConfig{
+				EndpointsConfig: map[string]*network.EndpointSettings{
+					netName: {},
+				},
+			}
+		}
 	}
 
 	resp, err := d.client.ContainerCreate(ctx,
@@ -203,7 +206,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			Env:   env,
 		},
 		hostConfig,
-		nil, nil,
+		networkConfig, nil,
 		containerName,
 	)
 	if err != nil {
@@ -339,27 +342,32 @@ func readLines(reader io.Reader, onLine func(string)) {
 	}
 }
 
-// normalizeAPIURLForHostNetwork converts Docker service hostnames to localhost
-// for containers running in host network mode. This is needed because host
-// networking bypasses Docker's DNS, so hostnames like "server" won't resolve.
-func normalizeAPIURLForHostNetwork(apiURL string) string {
-	// Common Docker Compose service names that should be converted to localhost
-	replacements := map[string]string{
-		"http://server:":    "http://localhost:",
-		"https://server:":   "https://localhost:",
-		"http://api:":       "http://localhost:",
-		"https://api:":      "https://localhost:",
-		"http://backend:":   "http://localhost:",
-		"https://backend:":  "https://localhost:",
-		"http://verve:":     "http://localhost:",
-		"https://verve:":    "https://localhost:",
+// detectNetwork returns the name of a user-defined Docker network the worker
+// is connected to, or "" if none is found (e.g. the worker runs on the host).
+// This is used to attach epic planning containers to the same network so they
+// can resolve service names like "server" via Docker DNS.
+func (d *DockerRunner) detectNetwork(ctx context.Context) string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ""
 	}
 
-	for old, replacement := range replacements {
-		if strings.HasPrefix(apiURL, old) {
-			return replacement + apiURL[len(old):]
+	info, err := d.client.ContainerInspect(ctx, hostname)
+	if err != nil {
+		// Not running inside Docker, or hostname doesn't match a container ID
+		return ""
+	}
+
+	if info.NetworkSettings == nil {
+		return ""
+	}
+
+	// Return the first non-default network (Compose creates user-defined networks)
+	for name := range info.NetworkSettings.Networks {
+		if name != "bridge" && name != "host" && name != "none" {
+			return name
 		}
 	}
 
-	return apiURL
+	return ""
 }
