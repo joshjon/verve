@@ -834,13 +834,10 @@ test.describe('UI Screenshots', () => {
 	test('create epic dialog', async ({ page }, testInfo) => {
 		await page.setViewportSize({ width: 1280, height: 1600 });
 		await setupMockAPI(page);
-		await page.goto('/');
+		await page.goto('/epics');
 
-		// Wait for dashboard to load.
-		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
-			timeout: 5000
-		}).catch(() => {});
-		await page.waitForTimeout(1000);
+		// Wait for epics page to load.
+		await page.waitForTimeout(2000);
 
 		// Click the "New Epic" button to open the dialog.
 		const createButton = page.getByRole('button', { name: /new epic/i });
