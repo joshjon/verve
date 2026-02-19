@@ -56,6 +56,11 @@
 			taskStore.updateTask(event.task);
 		});
 
+		es.addEventListener('task_deleted', (e) => {
+			const event = JSON.parse(e.data);
+			taskStore.deleteTask(event.task_id);
+		});
+
 		es.onerror = () => {
 			taskStore.error = 'Connection lost. Reconnecting...';
 		};
