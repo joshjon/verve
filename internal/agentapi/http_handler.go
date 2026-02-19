@@ -371,6 +371,7 @@ func (h *HTTPHandler) EpicAppendLogs(c echo.Context) error {
 // --- Helpers ---
 
 func jsonError(c echo.Context, err error) error {
+	c.Logger().Errorf("handler error: method=%s path=%s status=500 error=%v", c.Request().Method, c.Path(), err)
 	return c.JSON(http.StatusInternalServerError, errorResponse(err.Error()))
 }
 

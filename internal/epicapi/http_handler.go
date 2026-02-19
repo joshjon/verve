@@ -259,6 +259,10 @@ func jsonError(c echo.Context, err error) error {
 		msg = tagger.Msg()
 	}
 
+	if code >= 500 {
+		c.Logger().Errorf("handler error: method=%s path=%s status=%d error=%v", c.Request().Method, c.Path(), code, err)
+	}
+
 	return c.JSON(code, errorResponse(msg))
 }
 
