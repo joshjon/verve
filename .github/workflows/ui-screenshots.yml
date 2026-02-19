@@ -44,9 +44,11 @@ jobs:
         run: pnpm build
 
       - name: Take screenshots
+        id: playwright
         run: |
           mkdir -p screenshots
-          pnpm exec playwright test --project=desktop
+          pnpm exec playwright test --project=desktop 2>&1 | tee playwright-output.txt
+          exit ${PIPESTATUS[0]}
 
       - name: Upload screenshots as artifact
         if: always()
@@ -56,6 +58,17 @@ jobs:
           path: ui/screenshots/
           retention-days: 30
           if-no-files-found: warn
+
+      - name: Upload Playwright results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            ui/playwright-output.txt
+            ui/e2e/results/
+          retention-days: 30
+          if-no-files-found: ignore
 
       - name: Push screenshots to branch
         if: always()
@@ -170,4 +183,14 @@ jobs:
             echo "## UI Screenshots" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "No screenshots were captured." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Append full Playwright output to the summary when tests failed.
+          if [ "${{ steps.playwright.outcome }}" = "failure" ] && [ -f playwright-output.txt ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## Playwright Test Failures" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat playwright-output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
