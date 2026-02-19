@@ -122,7 +122,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		env = append(env, "ANTHROPIC_API_KEY="+cfg.AnthropicAPIKey)
 	}
 
-	if workType == "epic" {
+	if workType == workTypeEpic {
 		// Epic-specific env vars
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
@@ -171,10 +171,21 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	// Container name
 	containerName := "verve-agent-"
-	if workType == "epic" {
+	if workType == workTypeEpic {
 		containerName += "epic-" + cfg.EpicID
 	} else {
 		containerName += cfg.TaskID
+	}
+
+	hostConfig := &container.HostConfig{
+		AutoRemove: false, // We'll remove it manually after getting logs
+	}
+
+	// Epic planning containers need to call back to the API server, so they
+	// need host networking to reach whatever address API_URL points at (which
+	// is often localhost or a hostname only resolvable on the host).
+	if workType == workTypeEpic {
+		hostConfig.NetworkMode = "host"
 	}
 
 	resp, err := d.client.ContainerCreate(ctx,
@@ -182,9 +193,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			Image: d.agentImage,
 			Env:   env,
 		},
-		&container.HostConfig{
-			AutoRemove: false, // We'll remove it manually after getting logs
-		},
+		hostConfig,
 		nil, nil,
 		containerName,
 	)

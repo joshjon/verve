@@ -194,12 +194,12 @@ _epic_propose_tasks() {
     response=$(curl -s -w "\n%{http_code}" -X POST \
         -H "Content-Type: application/json" \
         -d "$body" \
-        "${POLL_URL}/propose")
+        "${POLL_URL}/propose" 2>/dev/null) || true
 
     local http_code
     http_code=$(echo "$response" | tail -1)
 
-    if [ "$http_code" != "200" ]; then
+    if [ -z "$http_code" ] || [ "$http_code" != "200" ]; then
         log_error "Failed to submit proposed tasks (HTTP ${http_code})"
     else
         log_agent "Proposed tasks submitted successfully"
@@ -235,17 +235,17 @@ _epic_feedback_loop() {
             exit 0
         fi
 
-        # Long-poll for feedback
+        # Long-poll for feedback (|| true to prevent set -e exit on curl failure)
         local response
         response=$(curl -s -w "\n%{http_code}" \
-            "${POLL_URL}/poll-feedback" 2>/dev/null)
+            "${POLL_URL}/poll-feedback" 2>/dev/null) || true
 
         local http_code
         http_code=$(echo "$response" | tail -1)
         local body
         body=$(echo "$response" | sed '$d')
 
-        if [ "$http_code" != "200" ]; then
+        if [ -z "$http_code" ] || [ "$http_code" != "200" ]; then
             log_error "Failed to poll feedback (HTTP ${http_code})"
             sleep 5
             continue
