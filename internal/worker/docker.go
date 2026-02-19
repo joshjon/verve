@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
@@ -185,10 +187,14 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 	}
 
 	// Epic planning containers need to call back to the API server.
-	// If the worker is running inside Docker (e.g. via Compose), attach the
-	// epic container to the same network so Docker DNS resolves service names
-	// like "server". If running outside Docker, the default bridge network is
-	// fine since the API URL will already be a routable address.
+	// Three deployment scenarios are handled:
+	// 1. Docker Compose: worker is in Docker, attach epic container to
+	//    the same network so Docker DNS resolves service names.
+	// 2. Local dev: worker on host with API_URL=localhost — rewrite to
+	//    host.docker.internal so the container can reach the host.
+	// 3. Distributed: worker on host with API_URL pointing to a remote
+	//    server (e.g. EC2) — no rewrite needed, the container reaches
+	//    the remote server over the default bridge network.
 	var networkConfig *network.NetworkingConfig
 	if workType == workTypeEpic {
 		if netName := d.detectNetwork(ctx); netName != "" {
@@ -197,6 +203,23 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 				EndpointsConfig: map[string]*network.EndpointSettings{
 					netName: {},
 				},
+			}
+		} else {
+			// Worker is running on the host (not in Docker). The API URL
+			// may use localhost/127.0.0.1 which won't resolve inside the
+			// container. Rewrite to host.docker.internal and add the
+			// extra host mapping so Docker resolves it to the host.
+			rewritten := rewriteLocalhostURL(cfg.APIURL)
+			if rewritten != cfg.APIURL {
+				d.logger.Info("rewriting API URL for container access", "original", cfg.APIURL, "rewritten", rewritten)
+				// Update the API_URL in the env slice
+				for i, e := range env {
+					if strings.HasPrefix(e, "API_URL=") {
+						env[i] = "API_URL=" + rewritten
+						break
+					}
+				}
+				hostConfig.ExtraHosts = append(hostConfig.ExtraHosts, "host.docker.internal:host-gateway")
 			}
 		}
 	}
@@ -341,6 +364,26 @@ func readLines(reader io.Reader, onLine func(string)) {
 			break
 		}
 	}
+}
+
+// rewriteLocalhostURL replaces localhost or 127.0.0.1 in a URL with
+// host.docker.internal so that containers can reach the host machine.
+func rewriteLocalhostURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "127.0.0.1" {
+		port := u.Port()
+		if port != "" {
+			u.Host = "host.docker.internal:" + port
+		} else {
+			u.Host = "host.docker.internal"
+		}
+		return u.String()
+	}
+	return rawURL
 }
 
 // detectNetwork returns the name of a user-defined Docker network the worker

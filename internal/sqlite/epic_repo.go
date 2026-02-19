@@ -167,8 +167,9 @@ func (r *EpicRepository) ListPlanningEpics(ctx context.Context) ([]*epic.Epic, e
 	return unmarshalEpicList(rows), nil
 }
 
-func (r *EpicRepository) ClaimEpic(ctx context.Context, id epic.EpicID) error {
-	return tagEpicErr(r.db.ClaimEpic(ctx, id.String()))
+func (r *EpicRepository) ClaimEpic(ctx context.Context, id epic.EpicID) (bool, error) {
+	rows, err := r.db.ClaimEpic(ctx, id.String())
+	return rows > 0, tagEpicErr(err)
 }
 
 func (r *EpicRepository) EpicHeartbeat(ctx context.Context, id epic.EpicID) error {

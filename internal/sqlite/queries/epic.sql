@@ -49,7 +49,7 @@ SELECT * FROM epic
 WHERE status = 'planning' AND claimed_at IS NULL
 ORDER BY created_at ASC;
 
--- name: ClaimEpic :exec
+-- name: ClaimEpic :execrows
 UPDATE epic SET
   claimed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
   last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),

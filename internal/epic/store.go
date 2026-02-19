@@ -123,8 +123,12 @@ func (s *Store) ClaimPendingEpic(ctx context.Context) (*Epic, error) {
 		return nil, err
 	}
 	for _, e := range epics {
-		if err := s.repo.ClaimEpic(ctx, e.ID); err != nil {
+		ok, err := s.repo.ClaimEpic(ctx, e.ID)
+		if err != nil {
 			continue
+		}
+		if !ok {
+			continue // Already claimed by another worker
 		}
 		// Re-read to get updated claimed_at
 		return s.repo.ReadEpic(ctx, e.ID)

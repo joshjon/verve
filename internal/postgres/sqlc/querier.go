@@ -14,7 +14,7 @@ type Querier interface {
 	AddTaskCost(ctx context.Context, arg AddTaskCostParams) error
 	AppendSessionLog(ctx context.Context, arg AppendSessionLogParams) error
 	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
-	ClaimEpic(ctx context.Context, id string) error
+	ClaimEpic(ctx context.Context, id string) (int64, error)
 	ClaimTask(ctx context.Context, id string) (int64, error)
 	ClearEpicFeedback(ctx context.Context, id string) error
 	CloseTask(ctx context.Context, arg CloseTaskParams) error
