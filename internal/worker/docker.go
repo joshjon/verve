@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/joshjon/kit/log"
@@ -20,10 +18,9 @@ import (
 const DefaultAgentImage = "verve-agent:latest"
 
 type DockerRunner struct {
-	client       *client.Client
-	agentImage   string
-	logger       log.Logger
-	networkName  string // Docker network to attach epic containers to
+	client     *client.Client
+	agentImage string
+	logger     log.Logger
 }
 
 func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error) {
@@ -34,51 +31,7 @@ func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error
 	if agentImage == "" {
 		agentImage = DefaultAgentImage
 	}
-	runner := &DockerRunner{client: cli, agentImage: agentImage, logger: logger}
-
-	// Discover the Docker network this worker is running on so we can
-	// attach epic planning containers to the same network (allowing them
-	// to resolve Docker Compose service names like "server").
-	runner.networkName = runner.discoverNetwork()
-	if runner.networkName != "" {
-		logger.Info("discovered docker network for agent containers", "network", runner.networkName)
-	}
-
-	return runner, nil
-}
-
-// discoverNetwork attempts to find the Docker network this worker container
-// is running on. It first checks the DOCKER_NETWORK env var, then inspects
-// the current container (identified by hostname) to find a bridge network.
-func (d *DockerRunner) discoverNetwork() string {
-	// Allow explicit override via environment variable
-	if n := os.Getenv("DOCKER_NETWORK"); n != "" {
-		return n
-	}
-
-	// The container's hostname is usually its short container ID
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		return ""
-	}
-
-	ctx := context.Background()
-	info, err := d.client.ContainerInspect(ctx, hostname)
-	if err != nil {
-		// Not running inside Docker, or hostname doesn't match container ID
-		return ""
-	}
-
-	// Find a non-default bridge network (Docker Compose networks)
-	for name := range info.NetworkSettings.Networks {
-		// Skip the default bridge and host networks
-		if name == "bridge" || name == "host" || name == "none" {
-			continue
-		}
-		return name
-	}
-
-	return ""
+	return &DockerRunner{client: cli, agentImage: agentImage, logger: logger}, nil
 }
 
 func (d *DockerRunner) Close() error {
@@ -172,12 +125,11 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	if workType == workTypeEpic {
 		// Epic-specific env vars
-		apiURL := cfg.APIURL
-		// If we don't have a discovered network (not running in Docker Compose),
-		// normalize the URL for host networking as a fallback.
-		if d.networkName == "" {
-			apiURL = normalizeAPIURLForHostNetwork(apiURL)
-		}
+		// Normalize API URL for host networking (convert Docker hostnames to localhost).
+		// Epic containers use host networking so they can reach the API server at
+		// whatever address is accessible from the host — this works whether server
+		// and worker are co-located or on different machines.
+		apiURL := normalizeAPIURLForHostNetwork(cfg.APIURL)
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
 			"EPIC_TITLE="+cfg.EpicTitle,
@@ -235,25 +187,14 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		AutoRemove: false, // We'll remove it manually after getting logs
 	}
 
-	// For epic planning containers that need to call back to the API server:
-	// prefer attaching to the same Docker network as the worker (so Docker
-	// DNS resolves service names like "server"). Fall back to host networking
-	// if we couldn't discover the network.
-	var networkConfig *network.NetworkingConfig
+	// Epic planning containers need to call back to the API server, so they
+	// use host networking to reach whatever address API_URL points at. The
+	// API URL is normalized above so Docker service names (like "server") are
+	// replaced with localhost. This works regardless of whether the server is
+	// on the same machine or remote — the worker's API_URL just needs to be
+	// reachable from the host network.
 	if workType == workTypeEpic {
-		if d.networkName != "" {
-			networkConfig = &network.NetworkingConfig{
-				EndpointsConfig: map[string]*network.EndpointSettings{
-					d.networkName: {},
-				},
-			}
-			d.logger.Info("attaching epic container to docker network",
-				"network", d.networkName, "container", containerName)
-		} else {
-			hostConfig.NetworkMode = "host"
-			d.logger.Info("using host network for epic container (no compose network found)",
-				"container", containerName)
-		}
+		hostConfig.NetworkMode = "host"
 	}
 
 	resp, err := d.client.ContainerCreate(ctx,
@@ -262,7 +203,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			Env:   env,
 		},
 		hostConfig,
-		networkConfig, nil,
+		nil, nil,
 		containerName,
 	)
 	if err != nil {
