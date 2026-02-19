@@ -138,12 +138,33 @@ Please revise the task breakdown based on this feedback."
 
 You have access to the repository at $(pwd). Use the tools available to explore the codebase structure, read key files, and understand the architecture before creating your plan.
 
+## Task Sizing Guidelines
+
+Each task should represent a **substantial, logical piece of work** — not a tiny atomic change. Think in terms of meaningful features or vertical slices that span across components.
+
+**Good task sizing (aim for this):**
+- \"Add database schema and migrations for user profiles\" (covers migration, model, repository)
+- \"Implement backend API endpoints for user profiles\" (covers handler, routes, request/response types, validation)
+- \"Build frontend UI for user profile management\" (covers components, state, API integration)
+- \"Add authentication middleware and integrate with existing routes\" (covers the full auth layer)
+
+**Bad task sizing (too small — avoid this):**
+- \"Add a single constant to the config file\"
+- \"Create the User struct\"
+- \"Add one helper function\"
+- \"Add a single database column\"
+- \"Write the interface definition\"
+
+A single task should typically touch **multiple files** and produce a **coherent, self-contained unit of functionality**. It is fine for a task to span across layers (e.g. database + backend, or backend + frontend) as long as it forms a logical unit. Aim for roughly **3-7 tasks** for a typical epic. Only create more if the epic is genuinely large in scope.
+
+Each task will be completed by an AI coding agent that can handle complex, multi-file changes. Do not break work into pieces smaller than what a senior developer would consider a single pull request.
+
 ## Output Requirements
 
 After analyzing the codebase and the epic, output a JSON array of proposed tasks. Each task should have:
 - \`temp_id\`: A unique identifier like \"task_1\", \"task_2\", etc.
 - \`title\`: A concise, actionable title (imperative form, e.g. \"Add user authentication middleware\")
-- \`description\`: Detailed description of what needs to be done, including relevant file paths and implementation details
+- \`description\`: Detailed description of what needs to be done, including relevant file paths and implementation details. Be thorough — include enough context and specifics that an AI agent can implement the task without further clarification.
 - \`depends_on_temp_ids\`: Array of temp_ids this task depends on (empty array if none)
 - \`acceptance_criteria\`: Array of specific, testable criteria for completion
 
@@ -153,22 +174,22 @@ Output the tasks as a JSON array wrapped in a markdown code block with the langu
 [
   {
     \"temp_id\": \"task_1\",
-    \"title\": \"Create database migration for users table\",
-    \"description\": \"Add a new migration file...\",
+    \"title\": \"Add database schema and repository for user profiles\",
+    \"description\": \"Create the database migration, domain model, and repository implementation for user profiles. This includes the migration file with the profiles table, the Go struct, the repository interface methods, and the PostgreSQL/SQLite implementations...\",
     \"depends_on_temp_ids\": [],
-    \"acceptance_criteria\": [\"Migration creates users table with required columns\", \"Migration is reversible\"]
+    \"acceptance_criteria\": [\"Migration creates profiles table with required columns\", \"Repository supports CRUD operations\", \"Both PostgreSQL and SQLite implementations work\"]
   },
   {
     \"temp_id\": \"task_2\",
-    \"title\": \"Implement user model and repository\",
-    \"description\": \"Create the user domain model...\",
+    \"title\": \"Implement user profile API endpoints\",
+    \"description\": \"Build the HTTP handler layer for user profiles including all REST endpoints, request/response types, input validation, and route registration...\",
     \"depends_on_temp_ids\": [\"task_1\"],
-    \"acceptance_criteria\": [\"User CRUD operations work\", \"Input validation implemented\"]
+    \"acceptance_criteria\": [\"GET/POST/PUT/DELETE endpoints work\", \"Input validation returns proper errors\", \"Routes registered under /api/v1/profiles\"]
   }
 ]
 \`\`\`
 
-Order tasks by dependency (tasks with no dependencies first). Be thorough but practical — each task should be independently completable by an AI coding agent."
+Order tasks by dependency (tasks with no dependencies first). Remember: prefer fewer, larger tasks over many small ones. Each task should be a meaningful chunk of work, not a tiny atomic change."
 
     echo "$prompt"
 }
