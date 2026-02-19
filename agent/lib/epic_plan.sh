@@ -52,7 +52,7 @@ _epic_run_planning() {
 
     log_agent "Running Claude for epic planning..."
     local output
-    output=$(claude --output-format json --verbose --dangerously-skip-permissions \
+    output=$(claude --output-format stream-json --verbose --dangerously-skip-permissions \
         --model "sonnet" "$prompt" 2>&1 | _extract_claude_result)
 
     if [ -z "$output" ]; then
