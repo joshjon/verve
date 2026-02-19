@@ -5,7 +5,8 @@ bin/
 tmp/
 local/
 dist/
-data/
+data/*
+!data/.gitkeep
 
 .env.server
 .env.worker
