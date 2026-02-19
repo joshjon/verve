@@ -238,6 +238,7 @@ func (w *Worker) poll(ctx context.Context) (*PollResponse, error) {
 type logStreamer struct {
 	worker    *Worker
 	taskID    string
+	epicID    string
 	attempt   int
 	ctx       context.Context
 	buffer    []string
@@ -253,6 +254,21 @@ func newLogStreamer(ctx context.Context, w *Worker, taskID string, attempt int) 
 		worker:    w,
 		taskID:    taskID,
 		attempt:   attempt,
+		ctx:       ctx,
+		buffer:    make([]string, 0, 100),
+		done:      make(chan struct{}),
+		flushed:   make(chan struct{}),
+		interval:  2 * time.Second,
+		batchSize: 50,
+	}
+	go ls.flushLoop()
+	return ls
+}
+
+func newEpicLogStreamer(ctx context.Context, w *Worker, epicID string) *logStreamer {
+	ls := &logStreamer{
+		worker:    w,
+		epicID:    epicID,
 		ctx:       ctx,
 		buffer:    make([]string, 0, 100),
 		done:      make(chan struct{}),
@@ -313,8 +329,14 @@ func (ls *logStreamer) flush() {
 	ls.mu.Unlock()
 
 	// Send to API server
-	if err := ls.worker.sendLogs(ls.ctx, ls.taskID, ls.attempt, toSend); err != nil {
-		ls.worker.logger.Error("failed to send logs", "task_id", ls.taskID, "error", err)
+	if ls.taskID != "" {
+		if err := ls.worker.sendLogs(ls.ctx, ls.taskID, ls.attempt, toSend); err != nil {
+			ls.worker.logger.Error("failed to send logs", "task_id", ls.taskID, "error", err)
+		}
+	} else if ls.epicID != "" {
+		if err := ls.worker.sendEpicLogs(ls.ctx, ls.epicID, toSend); err != nil {
+			ls.worker.logger.Error("failed to send epic logs", "epic_id", ls.epicID, "error", err)
+		}
 	}
 }
 
@@ -493,6 +515,9 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 	epicLogger := w.logger.With("epic_id", ep.ID)
 	epicLogger.Info("starting epic planning", "title", ep.Title)
 
+	// Create log streamer for real-time log streaming
+	streamer := newEpicLogStreamer(ctx, w, ep.ID)
+
 	agentCfg := AgentConfig{
 		WorkType:             workTypeEpic,
 		EpicID:               ep.ID,
@@ -514,11 +539,16 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 	// Log callback for epic planning
 	onLog := func(line string) {
 		epicLogger.Debug("epic agent output", "line", line)
+		streamer.AddLine(line)
 	}
 
 	result := w.docker.RunAgent(ctx, agentCfg, onLog)
 
+	// Stop heartbeat before completing
 	cancelHeartbeat()
+
+	// Stop the streamer and flush remaining logs
+	streamer.Stop()
 
 	switch {
 	case result.Error != nil:
@@ -533,6 +563,27 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 func (w *Worker) sendLogs(ctx context.Context, taskID string, attempt int, logs []string) error {
 	body, _ := json.Marshal(map[string]any{"logs": logs, "attempt": attempt})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/agent/tasks/"+taskID+"/logs", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := w.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
+	}
+	return nil
+}
+
+func (w *Worker) sendEpicLogs(ctx context.Context, epicID string, logs []string) error {
+	body, _ := json.Marshal(map[string]any{"lines": logs})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.config.APIURL+"/api/v1/agent/epics/"+epicID+"/logs", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
