@@ -1036,3 +1036,49 @@ func TestStore_ScheduleRetry_CircuitBreaker(t *testing.T) {
 	// Circuit breaker should trigger: 3 consecutive same failures
 	assert.Equal(t, StatusFailed, tsk.Status, "expected task to fail due to circuit breaker")
 }
+
+func TestStore_DeleteTask_WithLogs(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusFailed
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusFailed
+	repo.logs[tsk.ID.String()] = []string{"log line 1", "log line 2"}
+
+	err := store.DeleteTask(context.Background(), tsk.ID)
+	require.NoError(t, err)
+
+	// Verify task was deleted
+	_, ok := repo.tasks[tsk.ID.String()]
+	assert.False(t, ok, "expected task to be deleted")
+
+	// Verify logs were deleted
+	_, ok = repo.logs[tsk.ID.String()]
+	assert.False(t, ok, "expected task logs to be deleted")
+}
+
+func TestStore_DeleteTask_RemovesDependencies(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	// Create a task that will be deleted
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusFailed
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusFailed
+
+	// Create another task that depends on the first
+	dependent := NewTask("repo_123", "dependent", "desc", []string{tsk.ID.String()}, nil, 0, false, "", true)
+	repo.tasks[dependent.ID.String()] = dependent
+	repo.taskStatuses[dependent.ID.String()] = StatusPending
+
+	err := store.DeleteTask(context.Background(), tsk.ID)
+	require.NoError(t, err)
+
+	// Verify the dependency was removed from the dependent task
+	assert.Empty(t, dependent.DependsOn, "expected dependency to be removed")
+}

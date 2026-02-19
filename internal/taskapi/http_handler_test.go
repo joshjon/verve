@@ -1226,3 +1226,43 @@ func TestCompleteTask_RetryableWithPrereqFailed_NotRetried(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, task.StatusFailed, tsk.Status, "prereq failures should not be retried even if retryable flag is set")
 }
+
+func TestDeleteTask_FailedWithLogs(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusFailed
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+	taskRepo.logs[tsk.ID.String()] = []string{"error log line 1", "error log line 2"}
+
+	c, rec := newContext(e, http.MethodDelete, "/tasks/"+tsk.ID.String(), "")
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.DeleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify task was deleted
+	_, exists := taskRepo.tasks[tsk.ID.String()]
+	assert.False(t, exists, "expected task to be deleted")
+
+	// Verify logs were deleted
+	_, logsExist := taskRepo.logs[tsk.ID.String()]
+	assert.False(t, logsExist, "expected task logs to be deleted")
+}
+
+func TestDeleteTask_InvalidID(t *testing.T) {
+	handler, _, _, _ := setupHandler()
+	e := echo.New()
+
+	c, rec := newContext(e, http.MethodDelete, "/tasks/invalid", "")
+	c.SetParamNames("id")
+	c.SetParamValues("invalid")
+
+	err := handler.DeleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
