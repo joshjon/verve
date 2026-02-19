@@ -43,7 +43,9 @@
 		PauseCircle,
 		PlayCircle,
 		RotateCcw,
-		Pencil
+		Pencil,
+		Maximize2,
+		Minimize2
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -131,8 +133,10 @@
 	let removingDep = $state<string | null>(null);
 	let showEditDialog = $state(false);
 	let logsContainer: HTMLDivElement | null = $state(null);
+	let fullscreenLogsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
+	let isFullscreen = $state(false);
 	let showRetryContext = $state(false);
 	let checkStatus = $state<{
 		status: 'pending' | 'success' | 'failure' | 'error';
@@ -294,10 +298,13 @@
 	$effect(() => {
 		if (logs.length > lastLogCount) {
 			lastLogCount = logs.length;
-			if (autoScroll && logsContainer) {
+			if (autoScroll) {
 				requestAnimationFrame(() => {
 					if (logsContainer) {
 						logsContainer.scrollTop = logsContainer.scrollHeight;
+					}
+					if (fullscreenLogsContainer) {
+						fullscreenLogsContainer.scrollTop = fullscreenLogsContainer.scrollHeight;
 					}
 				});
 			}
@@ -309,6 +316,36 @@
 		// Check if user is near bottom (within 50px)
 		const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
 		autoScroll = isNearBottom;
+	}
+
+	function toggleFullscreen() {
+		isFullscreen = !isFullscreen;
+		if (isFullscreen) {
+			// Scroll fullscreen container to bottom after it renders
+			requestAnimationFrame(() => {
+				if (fullscreenLogsContainer) {
+					fullscreenLogsContainer.scrollTop = fullscreenLogsContainer.scrollHeight;
+				}
+			});
+		}
+	}
+
+	// Prevent body scrolling when fullscreen is active
+	$effect(() => {
+		if (isFullscreen) {
+			document.body.style.overflow = 'hidden';
+		} else {
+			document.body.style.overflow = '';
+		}
+		return () => {
+			document.body.style.overflow = '';
+		};
+	});
+
+	function handleFullscreenKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && isFullscreen) {
+			isFullscreen = false;
+		}
 	}
 
 	onMount(() => {
@@ -574,6 +611,8 @@
 		return `${diffDays}d ago`;
 	}
 </script>
+
+<svelte:window onkeydown={handleFullscreenKeydown} />
 
 <div class="p-4 sm:p-6">
 	<Button variant="ghost" onclick={() => goto('/')} class="mb-4 sm:mb-6 gap-2 -ml-2">
@@ -1264,8 +1303,17 @@
 							{parsedAgentStatus.confidence} confidence
 						</Badge>
 					{/if}
-					{#if canRetry}
-						<div class="ml-auto">
+					<div class="ml-auto flex items-center gap-2">
+						<Button
+							size="sm"
+							variant="ghost"
+							onclick={toggleFullscreen}
+							class="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+							title="Toggle fullscreen logs"
+						>
+							<Maximize2 class="w-3.5 h-3.5" />
+						</Button>
+						{#if canRetry}
 							{#if showRetryForm}
 								<Button size="sm" variant="ghost" onclick={() => (showRetryForm = false)} class="gap-1">
 									<X class="w-4 h-4" />
@@ -1277,8 +1325,8 @@
 									Retry
 								</Button>
 							{/if}
-						</div>
-					{/if}
+						{/if}
+					</div>
 				</div>
 
 			<!-- Agent Insights -->
@@ -1442,6 +1490,74 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Fullscreen Log Overlay -->
+{#if isFullscreen}
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="Fullscreen agent logs"
+		class="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
+	>
+		<!-- Fullscreen Header -->
+		<div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
+			<Terminal class="w-4 h-4 text-zinc-400" />
+			<span class="font-semibold text-sm text-zinc-200">Agent Logs</span>
+			{#if task?.status === 'running'}
+				<span class="flex items-center gap-1 text-xs text-blue-500">
+					<span class="relative flex h-2 w-2">
+						<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+						<span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+					</span>
+					Live
+				</span>
+			{/if}
+			{#if showAttemptTabs}
+				<div class="flex items-center gap-1 ml-4">
+					{#each attemptNumbers as num}
+						<button
+							type="button"
+							class="px-3 py-1 text-xs font-medium rounded-md transition-all {activeAttemptTab === num ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'}"
+							onclick={() => switchAttemptTab(num)}
+						>
+							Run {num}
+							{#if task?.status === 'running' && num === task.attempt}
+								<span class="inline-flex ml-1 h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+			<div class="ml-auto flex items-center gap-2">
+				<span class="text-xs text-zinc-500">Press Esc to exit</span>
+				<Button
+					size="sm"
+					variant="ghost"
+					onclick={toggleFullscreen}
+					class="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-zinc-800"
+					title="Exit fullscreen"
+				>
+					<Minimize2 class="w-4 h-4" />
+				</Button>
+			</div>
+		</div>
+		<!-- Fullscreen Log Content -->
+		<div
+			bind:this={fullscreenLogsContainer}
+			onscroll={handleLogsScroll}
+			class="flex-1 overflow-y-auto p-4 sm:p-6"
+		>
+			{#if logs.length > 0}
+				<pre class="log-output text-sm font-mono whitespace-pre-wrap leading-relaxed">{@html renderedLogs}</pre>
+			{:else}
+				<div class="flex flex-col items-center justify-center h-full text-zinc-500">
+					<Terminal class="w-12 h-12 opacity-20 mb-3" />
+					<p class="text-sm">No logs available yet</p>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
 
 <style>
 	:global(.terminal-container) {
