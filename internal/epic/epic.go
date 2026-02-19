@@ -45,6 +45,7 @@ type Epic struct {
 	PlanningPrompt  string         `json:"planning_prompt,omitempty"`
 	SessionLog      []string       `json:"session_log"`
 	NotReady        bool           `json:"not_ready"`
+	Model           string         `json:"model,omitempty"`
 	ClaimedAt       *time.Time     `json:"claimed_at,omitempty"`
 	LastHeartbeatAt *time.Time     `json:"last_heartbeat_at,omitempty"`
 	Feedback        *string        `json:"feedback,omitempty"`

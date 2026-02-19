@@ -52,8 +52,8 @@ func (q *Queries) ClearEpicFeedback(ctx context.Context, id string) error {
 }
 
 const createEpic = `-- name: CreateEpic :exec
-INSERT INTO epic (id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO epic (id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, model, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateEpicParams struct {
@@ -67,6 +67,7 @@ type CreateEpicParams struct {
 	PlanningPrompt *string
 	SessionLog     string
 	NotReady       int64
+	Model          *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -83,6 +84,7 @@ func (q *Queries) CreateEpic(ctx context.Context, arg CreateEpicParams) error {
 		arg.PlanningPrompt,
 		arg.SessionLog,
 		arg.NotReady,
+		arg.Model,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -111,7 +113,7 @@ func (q *Queries) EpicHeartbeat(ctx context.Context, id string) error {
 }
 
 const listEpics = `-- name: ListEpics :many
-SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type FROM epic ORDER BY created_at DESC
+SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic ORDER BY created_at DESC
 `
 
 func (q *Queries) ListEpics(ctx context.Context) ([]*Epic, error) {
@@ -140,6 +142,7 @@ func (q *Queries) ListEpics(ctx context.Context) ([]*Epic, error) {
 			&i.LastHeartbeatAt,
 			&i.Feedback,
 			&i.FeedbackType,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -155,7 +158,7 @@ func (q *Queries) ListEpics(ctx context.Context) ([]*Epic, error) {
 }
 
 const listEpicsByRepo = `-- name: ListEpicsByRepo :many
-SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type FROM epic WHERE repo_id = ? ORDER BY created_at DESC
+SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic WHERE repo_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, error) {
@@ -184,6 +187,7 @@ func (q *Queries) ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, 
 			&i.LastHeartbeatAt,
 			&i.Feedback,
 			&i.FeedbackType,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +203,7 @@ func (q *Queries) ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, 
 }
 
 const listPlanningEpics = `-- name: ListPlanningEpics :many
-SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type FROM epic
+SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic
 WHERE status = 'planning' AND claimed_at IS NULL
 ORDER BY created_at ASC
 `
@@ -230,6 +234,7 @@ func (q *Queries) ListPlanningEpics(ctx context.Context) ([]*Epic, error) {
 			&i.LastHeartbeatAt,
 			&i.Feedback,
 			&i.FeedbackType,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -245,7 +250,7 @@ func (q *Queries) ListPlanningEpics(ctx context.Context) ([]*Epic, error) {
 }
 
 const listStaleEpics = `-- name: ListStaleEpics :many
-SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type FROM epic
+SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic
 WHERE claimed_at IS NOT NULL
   AND last_heartbeat_at < ?
   AND status IN ('planning', 'draft')
@@ -278,6 +283,7 @@ func (q *Queries) ListStaleEpics(ctx context.Context, lastHeartbeatAt *time.Time
 			&i.LastHeartbeatAt,
 			&i.Feedback,
 			&i.FeedbackType,
+			&i.Model,
 		); err != nil {
 			return nil, err
 		}
@@ -293,7 +299,7 @@ func (q *Queries) ListStaleEpics(ctx context.Context, lastHeartbeatAt *time.Time
 }
 
 const readEpic = `-- name: ReadEpic :one
-SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type FROM epic WHERE id = ?
+SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic WHERE id = ?
 `
 
 func (q *Queries) ReadEpic(ctx context.Context, id string) (*Epic, error) {
@@ -316,6 +322,7 @@ func (q *Queries) ReadEpic(ctx context.Context, id string) (*Epic, error) {
 		&i.LastHeartbeatAt,
 		&i.Feedback,
 		&i.FeedbackType,
+		&i.Model,
 	)
 	return &i, err
 }
@@ -378,6 +385,7 @@ UPDATE epic SET
   planning_prompt = ?,
   session_log = ?,
   not_ready = ?,
+  model = ?,
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?
 `
@@ -391,6 +399,7 @@ type UpdateEpicParams struct {
 	PlanningPrompt *string
 	SessionLog     string
 	NotReady       int64
+	Model          *string
 	ID             string
 }
 
@@ -404,6 +413,7 @@ func (q *Queries) UpdateEpic(ctx context.Context, arg UpdateEpicParams) error {
 		arg.PlanningPrompt,
 		arg.SessionLog,
 		arg.NotReady,
+		arg.Model,
 		arg.ID,
 	)
 	return err

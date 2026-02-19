@@ -132,6 +132,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			"EPIC_DESCRIPTION="+cfg.EpicDescription,
 			"EPIC_PLANNING_PROMPT="+cfg.EpicPlanningPrompt,
 			"API_URL="+cfg.APIURL,
+			"CLAUDE_MODEL="+cfg.ClaudeModel,
 		)
 	} else {
 		// Task-specific env vars

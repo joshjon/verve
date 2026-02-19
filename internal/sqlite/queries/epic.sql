@@ -1,6 +1,6 @@
 -- name: CreateEpic :exec
-INSERT INTO epic (id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO epic (id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, model, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ReadEpic :one
 SELECT * FROM epic WHERE id = ?;
@@ -21,6 +21,7 @@ UPDATE epic SET
   planning_prompt = ?,
   session_log = ?,
   not_ready = ?,
+  model = ?,
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?;
 

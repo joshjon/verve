@@ -1,6 +1,6 @@
 -- name: CreateEpic :exec
-INSERT INTO epic (id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+INSERT INTO epic (id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, model, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: ReadEpic :one
 SELECT * FROM epic WHERE id = $1;
@@ -21,6 +21,7 @@ UPDATE epic SET
   planning_prompt = $7,
   session_log = $8,
   not_ready = $9,
+  model = $10,
   updated_at = NOW()
 WHERE id = $1;
 

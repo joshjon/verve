@@ -25,6 +25,7 @@ type Epic struct {
 	LastHeartbeatAt *time.Time
 	Feedback        *string
 	FeedbackType    *string
+	Model           *string
 }
 
 type GithubToken struct {

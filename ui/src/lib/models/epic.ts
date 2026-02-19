@@ -19,6 +19,7 @@ export interface Epic {
 	planning_prompt?: string;
 	session_log: string[];
 	not_ready: boolean;
+	model?: string;
 	claimed_at?: string;
 	created_at: string;
 	updated_at: string;

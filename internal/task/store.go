@@ -70,14 +70,17 @@ func (s *Store) CreateTask(ctx context.Context, task *Task) error {
 
 // CreateTaskFromEpic creates a task associated with an epic. Dependencies
 // are not validated since they are created in the same batch.
-func (s *Store) CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool) (string, error) {
+func (s *Store) CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool, model string) (string, error) {
 	if dependsOn == nil {
 		dependsOn = []string{}
 	}
 	if acceptanceCriteria == nil {
 		acceptanceCriteria = []string{}
 	}
-	t := NewTask(repoID, title, description, dependsOn, acceptanceCriteria, 0, false, "sonnet", ready)
+	if model == "" {
+		model = "sonnet"
+	}
+	t := NewTask(repoID, title, description, dependsOn, acceptanceCriteria, 0, false, model, ready)
 	t.EpicID = epicID
 	if err := s.repo.CreateTask(ctx, t); err != nil {
 		return "", err

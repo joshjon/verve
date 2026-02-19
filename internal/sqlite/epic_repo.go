@@ -40,6 +40,10 @@ func (r *EpicRepository) CreateEpic(ctx context.Context, e *epic.Epic) error {
 	if e.NotReady {
 		notReady = 1
 	}
+	var model *string
+	if e.Model != "" {
+		model = &e.Model
+	}
 	err := r.db.CreateEpic(ctx, sqlc.CreateEpicParams{
 		ID:             e.ID.String(),
 		RepoID:         e.RepoID,
@@ -51,6 +55,7 @@ func (r *EpicRepository) CreateEpic(ctx context.Context, e *epic.Epic) error {
 		PlanningPrompt: prompt,
 		SessionLog:     string(sessionLogJSON),
 		NotReady:       notReady,
+		Model:          model,
 		CreatedAt:      e.CreatedAt,
 		UpdatedAt:      e.UpdatedAt,
 	})
@@ -93,6 +98,10 @@ func (r *EpicRepository) UpdateEpic(ctx context.Context, e *epic.Epic) error {
 	if e.NotReady {
 		notReady = 1
 	}
+	var model *string
+	if e.Model != "" {
+		model = &e.Model
+	}
 	return tagEpicErr(r.db.UpdateEpic(ctx, sqlc.UpdateEpicParams{
 		Title:          e.Title,
 		Description:    e.Description,
@@ -102,6 +111,7 @@ func (r *EpicRepository) UpdateEpic(ctx context.Context, e *epic.Epic) error {
 		PlanningPrompt: prompt,
 		SessionLog:     string(sessionLogJSON),
 		NotReady:       notReady,
+		Model:          model,
 		ID:             e.ID.String(),
 	}))
 }
@@ -206,6 +216,9 @@ func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
 	}
 	if in.PlanningPrompt != nil {
 		e.PlanningPrompt = *in.PlanningPrompt
+	}
+	if in.Model != nil {
+		e.Model = *in.Model
 	}
 	_ = json.Unmarshal([]byte(in.ProposedTasks), &e.ProposedTasks)
 	if e.ProposedTasks == nil {

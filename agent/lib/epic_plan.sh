@@ -16,6 +16,7 @@ run_epic_planning() {
     echo "Title: ${EPIC_TITLE}"
     echo "Description: ${EPIC_DESCRIPTION}"
     [ -n "${EPIC_PLANNING_PROMPT}" ] && echo "Planning Prompt: ${EPIC_PLANNING_PROMPT}"
+    echo "Model: ${CLAUDE_MODEL:-sonnet}"
     log_blank
 
     # Validate required env vars
@@ -59,8 +60,9 @@ _epic_run_planning() {
     local raw_output_file
     raw_output_file=$(mktemp /tmp/epic_claude_raw.XXXXXX)
 
+    local model="${CLAUDE_MODEL:-sonnet}"
     claude --output-format stream-json --verbose --dangerously-skip-permissions \
-        --model "sonnet" "$prompt" 2>&1 \
+        --model "$model" "$prompt" 2>&1 \
         | tee "$raw_output_file" \
         | _parse_stream
 
