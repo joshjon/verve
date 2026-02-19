@@ -15,12 +15,22 @@
 		Clock,
 		Play,
 		Eye,
-		XCircle
+		XCircle,
+		List,
+		Trash2
 	} from 'lucide-svelte';
+	import * as Dialog from '$lib/components/ui/dialog';
 
 	let openCreate = $state(false);
 	let syncing = $state(false);
 	let syncResult = $state<{ synced: number; merged: number } | null>(null);
+
+	// Bulk delete state
+	let selectionMode = $state(false);
+	let selectedTaskIds = $state<Set<string>>(new Set());
+	let showDeleteDialog = $state(false);
+	let deleting = $state(false);
+	let deleteProgress = $state<{ completed: number; total: number; errors: string[] }>({ completed: 0, total: 0, errors: [] });
 
 	// Track current EventSource so we can reconnect when repo changes.
 	let currentES: EventSource | null = null;
@@ -107,6 +117,59 @@
 		...taskStore.tasksByStatus.merged,
 		...taskStore.tasksByStatus.closed
 	]);
+
+	function toggleSelectionMode() {
+		selectionMode = !selectionMode;
+		if (!selectionMode) {
+			selectedTaskIds.clear();
+		}
+	}
+
+	function toggleTaskSelection(taskId: string) {
+		if (selectedTaskIds.has(taskId)) {
+			selectedTaskIds.delete(taskId);
+		} else {
+			selectedTaskIds.add(taskId);
+		}
+		selectedTaskIds = new Set(selectedTaskIds); // Trigger reactivity
+	}
+
+	function openDeleteConfirmation() {
+		if (selectedTaskIds.size === 0) return;
+		showDeleteDialog = true;
+	}
+
+	async function confirmBulkDelete() {
+		const tasksToDelete = Array.from(selectedTaskIds);
+		deleting = true;
+		deleteProgress = { completed: 0, total: tasksToDelete.length, errors: [] };
+
+		// Delete all tasks in parallel
+		const deletePromises = tasksToDelete.map(async (taskId) => {
+			try {
+				await client.deleteTask(taskId);
+				deleteProgress.completed++;
+			} catch (e) {
+				deleteProgress.errors.push(`${taskId}: ${(e as Error).message}`);
+			}
+		});
+
+		await Promise.all(deletePromises);
+
+		deleting = false;
+		showDeleteDialog = false;
+		selectionMode = false;
+		selectedTaskIds.clear();
+
+		// Show error if any deletions failed
+		if (deleteProgress.errors.length > 0) {
+			taskStore.error = `Failed to delete ${deleteProgress.errors.length} task(s)`;
+		}
+	}
+
+	function cancelBulkDelete() {
+		showDeleteDialog = false;
+	}
 </script>
 
 <div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col">
@@ -149,6 +212,10 @@
 					<RefreshCw class="w-4 h-4 {syncing ? 'animate-spin' : ''}" />
 					<span class="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync PRs'}</span>
 				</Button>
+				<Button variant={selectionMode ? 'default' : 'outline'} onclick={toggleSelectionMode} class="gap-2">
+					<List class="w-4 h-4" />
+					<span class="hidden sm:inline">{selectionMode ? 'Cancel' : 'Bulk Delete'}</span>
+				</Button>
 				<Button onclick={() => (openCreate = true)} class="gap-2">
 					<Plus class="w-4 h-4" />
 					New Task
@@ -162,6 +229,21 @@
 			>
 				<AlertCircle class="w-5 h-5 flex-shrink-0" />
 				<span>{taskStore.error}</span>
+			</div>
+		{/if}
+
+		{#if selectionMode && selectedTaskIds.size > 0}
+			<div
+				class="bg-primary/10 border border-primary/20 p-4 rounded-lg mb-4 flex items-center justify-between gap-3"
+			>
+				<div class="flex items-center gap-3">
+					<CheckCircle2 class="w-5 h-5 text-primary" />
+					<span class="font-medium">{selectedTaskIds.size} task{selectedTaskIds.size === 1 ? '' : 's'} selected</span>
+				</div>
+				<Button variant="destructive" onclick={openDeleteConfirmation} class="gap-2">
+					<Trash2 class="w-4 h-4" />
+					Delete Selected
+				</Button>
 			</div>
 		{/if}
 
@@ -183,6 +265,9 @@
 				iconClass="text-amber-600 dark:text-amber-400"
 				tasks={taskStore.tasksByStatus.pending}
 				headerAction={pendingAction}
+				{selectionMode}
+				{selectedTaskIds}
+				onToggleSelection={toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="Running"
@@ -190,6 +275,9 @@
 				headerBg="bg-blue-500/10"
 				iconClass="text-blue-600 dark:text-blue-400"
 				tasks={taskStore.tasksByStatus.running}
+				{selectionMode}
+				{selectedTaskIds}
+				onToggleSelection={toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="In Review"
@@ -197,6 +285,9 @@
 				headerBg="bg-purple-500/10"
 				iconClass="text-purple-600 dark:text-purple-400"
 				tasks={taskStore.tasksByStatus.review}
+				{selectionMode}
+				{selectedTaskIds}
+				onToggleSelection={toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="Done"
@@ -204,6 +295,9 @@
 				headerBg="bg-green-500/10"
 				iconClass="text-green-600 dark:text-green-400"
 				tasks={doneTasks}
+				{selectionMode}
+				{selectedTaskIds}
+				onToggleSelection={toggleTaskSelection}
 			/>
 			<TaskColumn
 				label="Failed"
@@ -211,6 +305,9 @@
 				headerBg="bg-red-500/10"
 				iconClass="text-red-600 dark:text-red-400"
 				tasks={taskStore.tasksByStatus.failed}
+				{selectionMode}
+				{selectedTaskIds}
+				onToggleSelection={toggleTaskSelection}
 			/>
 		</div>
 	{:else}
@@ -231,3 +328,40 @@
 {#if hasRepo}
 	<CreateTaskDialog bind:open={openCreate} onCreated={() => {}} />
 {/if}
+
+<Dialog.Root bind:open={showDeleteDialog}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Delete {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? '' : 's'}?</Dialog.Title>
+			<Dialog.Description>
+				This action cannot be undone. This will permanently delete the selected task{selectedTaskIds.size === 1 ? '' : 's'} and remove {selectedTaskIds.size === 1 ? 'it' : 'them'} from the system.
+			</Dialog.Description>
+		</Dialog.Header>
+		{#if deleting}
+			<div class="py-4">
+				<div class="flex items-center gap-3 mb-2">
+					<div class="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+						<div
+							class="bg-primary h-full transition-all duration-300"
+							style="width: {(deleteProgress.completed / deleteProgress.total) * 100}%"
+						></div>
+					</div>
+					<span class="text-sm text-muted-foreground">{deleteProgress.completed}/{deleteProgress.total}</span>
+				</div>
+				{#if deleteProgress.errors.length > 0}
+					<div class="text-xs text-destructive mt-2">
+						{deleteProgress.errors.length} error{deleteProgress.errors.length === 1 ? '' : 's'}
+					</div>
+				{/if}
+			</div>
+		{:else}
+			<Dialog.Footer>
+				<Button variant="outline" onclick={cancelBulkDelete}>Cancel</Button>
+				<Button variant="destructive" onclick={confirmBulkDelete} class="gap-2">
+					<Trash2 class="w-4 h-4" />
+					Delete
+				</Button>
+			</Dialog.Footer>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>

@@ -5,10 +5,24 @@
 	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2, PauseCircle } from 'lucide-svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
 
-	let { task }: { task: Task } = $props();
+	let {
+		task,
+		selectionMode = false,
+		selected = false,
+		onToggleSelection
+	}: {
+		task: Task;
+		selectionMode?: boolean;
+		selected?: boolean;
+		onToggleSelection?: (taskId: string) => void;
+	} = $props();
 
 	function handleClick() {
-		goto(`/tasks/${task.id}`);
+		if (selectionMode && onToggleSelection) {
+			onToggleSelection(task.id);
+		} else {
+			goto(`/tasks/${task.id}`);
+		}
 	}
 
 	function handlePRClick(e: MouseEvent) {
@@ -25,12 +39,23 @@
 </script>
 
 <Card.Root
-	class="group p-3 cursor-pointer bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md"
+	class="group p-3 cursor-pointer bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md {selected ? 'ring-2 ring-primary' : ''}"
 	onclick={handleClick}
 	role="button"
 	tabindex={0}
 >
 	<div class="flex items-start justify-between gap-2">
+		{#if selectionMode}
+			<label class="flex items-center pt-0.5 cursor-pointer" onclick={(e) => e.stopPropagation()}>
+				<input
+					type="checkbox"
+					checked={selected}
+					onchange={() => onToggleSelection?.(task.id)}
+					class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary focus:ring-offset-0"
+					aria-label="Select task"
+				/>
+			</label>
+		{/if}
 		<p class="font-medium text-sm line-clamp-2 flex-1">{task.title || task.description}</p>
 		{#if task.status === 'merged'}
 			<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-300 bg-green-500/15 px-2 py-0.5 rounded-full border border-green-500/20 shrink-0">
