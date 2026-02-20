@@ -15,6 +15,10 @@ type Querier interface {
 	AppendSessionLog(ctx context.Context, arg AppendSessionLogParams) error
 	AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) error
 	BulkCloseTasksByEpic(ctx context.Context, arg BulkCloseTasksByEpicParams) error
+	BulkDeleteTaskLogsByEpic(ctx context.Context, epicID *string) error
+	BulkDeleteTaskLogsByIDs(ctx context.Context, dollar_1 []string) error
+	BulkDeleteTasksByEpic(ctx context.Context, epicID *string) error
+	BulkDeleteTasksByIDs(ctx context.Context, dollar_1 []string) error
 	ClaimEpic(ctx context.Context, id string) (int64, error)
 	ClaimTask(ctx context.Context, id string) (int64, error)
 	ClearEpicFeedback(ctx context.Context, id string) error

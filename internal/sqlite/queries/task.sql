@@ -159,3 +159,9 @@ WHERE epic_id = ? AND status NOT IN ('closed', 'merged');
 -- name: ClearEpicIDForTasks :exec
 UPDATE task SET epic_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE epic_id = ?;
+
+-- name: BulkDeleteTaskLogsByEpic :exec
+DELETE FROM task_log WHERE task_id IN (SELECT id FROM task WHERE epic_id = ?);
+
+-- name: BulkDeleteTasksByEpic :exec
+DELETE FROM task WHERE epic_id = ?;

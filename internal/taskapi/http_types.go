@@ -99,6 +99,11 @@ type RemoveDependencyRequest struct {
 	DependsOn string `json:"depends_on"`
 }
 
+// BulkDeleteTasksRequest is the request body for bulk-deleting tasks.
+type BulkDeleteTasksRequest struct {
+	TaskIDs []string `json:"task_ids"`
+}
+
 // CheckStatusResponse is the response body for the task check status endpoint.
 type CheckStatusResponse struct {
 	Status           string                  `json:"status"`                       // "pending", "success", "failure", "error"

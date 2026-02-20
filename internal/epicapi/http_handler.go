@@ -114,7 +114,7 @@ func (h *HTTPHandler) GetEpic(c echo.Context) error {
 }
 
 // DeleteEpic handles DELETE /epics/:id
-// Deletes the epic after bulk-closing all of its non-terminal child tasks.
+// Deletes the epic and bulk-deletes all of its child tasks.
 func (h *HTTPHandler) DeleteEpic(c echo.Context) error {
 	id, err := epic.ParseEpicID(c.Param("id"))
 	if err != nil {
@@ -128,15 +128,10 @@ func (h *HTTPHandler) DeleteEpic(c echo.Context) error {
 		return jsonError(c, err)
 	}
 
-	// Bulk-close all non-terminal child tasks (pending, running, review, failed).
-	// Tasks already closed or merged are left unchanged.
+	// Bulk-delete all child tasks (and their logs/dependencies).
 	if h.taskStore != nil {
-		if err := h.taskStore.BulkCloseTasksByEpic(ctx, id.String(), "Epic deleted"); err != nil {
-			c.Logger().Errorf("failed to bulk close tasks for epic %s: %v", id, err)
-		}
-		// Clear the epic_id FK on all child tasks so the epic can be deleted.
-		if err := h.taskStore.ClearEpicIDForTasks(ctx, id.String()); err != nil {
-			c.Logger().Errorf("failed to clear epic_id for tasks of epic %s: %v", id, err)
+		if err := h.taskStore.BulkDeleteTasksByEpic(ctx, id.String()); err != nil {
+			c.Logger().Errorf("failed to bulk delete tasks for epic %s: %v", id, err)
 		}
 	}
 
@@ -254,6 +249,7 @@ func (h *HTTPHandler) ConfirmEpic(c echo.Context) error {
 }
 
 // CloseEpic handles POST /epics/:id/close
+// Closes the epic and bulk-closes all non-terminal child tasks.
 func (h *HTTPHandler) CloseEpic(c echo.Context) error {
 	id, err := epic.ParseEpicID(c.Param("id"))
 	if err != nil {
@@ -263,6 +259,14 @@ func (h *HTTPHandler) CloseEpic(c echo.Context) error {
 	ctx := c.Request().Context()
 	if err := h.store.CloseEpic(ctx, id); err != nil {
 		return jsonError(c, err)
+	}
+
+	// Bulk-close all non-terminal child tasks (pending, running, review, failed).
+	// Tasks already closed or merged are left unchanged.
+	if h.taskStore != nil {
+		if err := h.taskStore.BulkCloseTasksByEpic(ctx, id.String(), "Epic closed"); err != nil {
+			c.Logger().Errorf("failed to bulk close tasks for epic %s: %v", id, err)
+		}
 	}
 
 	e, err := h.store.ReadEpic(ctx, id)

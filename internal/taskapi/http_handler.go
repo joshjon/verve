@@ -63,6 +63,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.PUT("/tasks/:id/ready", h.SetReady)
 	g.PATCH("/tasks/:id", h.UpdateTask)
 	g.DELETE("/tasks/:id", h.DeleteTask)
+	g.POST("/tasks/bulk-delete", h.BulkDeleteTasks)
 
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
@@ -899,6 +900,58 @@ func (h *HTTPHandler) DeleteTask(c echo.Context) error {
 		if parseErr == nil {
 			if err := h.epicStore.RemoveTaskAndCheck(ctx, epicID, id.String()); err != nil {
 				c.Logger().Errorf("failed to update epic after task deletion: %v", err)
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, statusOK())
+}
+
+// BulkDeleteTasks handles POST /tasks/bulk-delete
+// Deletes multiple tasks by their IDs in a single operation.
+func (h *HTTPHandler) BulkDeleteTasks(c echo.Context) error {
+	var req BulkDeleteTasksRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid request"))
+	}
+	if len(req.TaskIDs) == 0 {
+		return c.JSON(http.StatusBadRequest, errorResponse("task_ids required"))
+	}
+
+	ctx := c.Request().Context()
+
+	// Read tasks before deletion to check epic associations.
+	type epicRef struct {
+		epicID string
+		taskID string
+	}
+	var epicRefs []epicRef
+	for _, idStr := range req.TaskIDs {
+		id, parseErr := task.ParseTaskID(idStr)
+		if parseErr != nil {
+			continue
+		}
+		t, readErr := h.store.ReadTask(ctx, id)
+		if readErr != nil {
+			continue
+		}
+		if t.EpicID != "" {
+			epicRefs = append(epicRefs, epicRef{epicID: t.EpicID, taskID: idStr})
+		}
+	}
+
+	if err := h.store.BulkDeleteTasksByIDs(ctx, req.TaskIDs); err != nil {
+		return jsonError(c, err)
+	}
+
+	// Update epic task_ids for any deleted tasks that belonged to epics.
+	if h.epicStore != nil {
+		for _, ref := range epicRefs {
+			epicID, parseErr := epic.ParseEpicID(ref.epicID)
+			if parseErr == nil {
+				if err := h.epicStore.RemoveTaskAndCheck(ctx, epicID, ref.taskID); err != nil {
+					c.Logger().Errorf("failed to update epic after bulk task deletion: %v", err)
+				}
 			}
 		}
 	}

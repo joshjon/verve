@@ -54,6 +54,24 @@ func (q *Queries) BulkCloseTasksByEpic(ctx context.Context, arg BulkCloseTasksBy
 	return err
 }
 
+const bulkDeleteTaskLogsByEpic = `-- name: BulkDeleteTaskLogsByEpic :exec
+DELETE FROM task_log WHERE task_id IN (SELECT id FROM task WHERE epic_id = ?)
+`
+
+func (q *Queries) BulkDeleteTaskLogsByEpic(ctx context.Context, epicID *string) error {
+	_, err := q.db.ExecContext(ctx, bulkDeleteTaskLogsByEpic, epicID)
+	return err
+}
+
+const bulkDeleteTasksByEpic = `-- name: BulkDeleteTasksByEpic :exec
+DELETE FROM task WHERE epic_id = ?
+`
+
+func (q *Queries) BulkDeleteTasksByEpic(ctx context.Context, epicID *string) error {
+	_, err := q.db.ExecContext(ctx, bulkDeleteTasksByEpic, epicID)
+	return err
+}
+
 const claimTask = `-- name: ClaimTask :execrows
 UPDATE task SET status = 'running', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'pending' AND ready = 1
