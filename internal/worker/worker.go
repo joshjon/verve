@@ -464,16 +464,29 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		PreviousStatus:       task.AgentStatus,
 	}
 
+	// Create a cancellable context for the agent execution.
+	// The heartbeat loop can cancel this if the task is stopped.
+	execCtx, cancelExec := context.WithCancel(ctx)
+	defer cancelExec()
+
 	// Start heartbeat goroutine
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
-	go w.taskHeartbeatLoop(heartbeatCtx, task.ID)
+	go w.taskHeartbeatLoop(heartbeatCtx, task.ID, cancelExec)
 
 	// Run the agent with streaming logs
-	result := w.docker.RunAgent(ctx, agentCfg, onLog)
+	result := w.docker.RunAgent(execCtx, agentCfg, onLog)
 
 	// Stop heartbeat before completing the task
 	cancelHeartbeat()
+
+	// If the execution was cancelled because the task was stopped,
+	// don't report completion — the server already moved it to pending.
+	if execCtx.Err() != nil && ctx.Err() == nil {
+		taskLogger.Info("task execution cancelled (stopped by user)")
+		streamer.Stop()
+		return
+	}
 
 	// Stop the streamer and flush remaining logs
 	streamer.Stop()
@@ -605,36 +618,52 @@ func (w *Worker) sendEpicLogs(ctx context.Context, epicID string, logs []string)
 	return nil
 }
 
-func (w *Worker) taskHeartbeatLoop(ctx context.Context, taskID string) {
+func (w *Worker) taskHeartbeatLoop(ctx context.Context, taskID string, cancelExecution context.CancelFunc) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	// Send initial heartbeat immediately
-	_ = w.sendTaskHeartbeat(ctx, taskID)
+	if stopped := w.sendTaskHeartbeat(ctx, taskID); stopped {
+		w.logger.Info("task was stopped, cancelling execution", "task_id", taskID)
+		cancelExecution()
+		return
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_ = w.sendTaskHeartbeat(ctx, taskID)
+			if stopped := w.sendTaskHeartbeat(ctx, taskID); stopped {
+				w.logger.Info("task was stopped, cancelling execution", "task_id", taskID)
+				cancelExecution()
+				return
+			}
 		}
 	}
 }
 
-func (w *Worker) sendTaskHeartbeat(ctx context.Context, taskID string) error {
+func (w *Worker) sendTaskHeartbeat(ctx context.Context, taskID string) (stopped bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		w.config.APIURL+"/api/v1/agent/tasks/"+taskID+"/heartbeat", http.NoBody)
 	if err != nil {
-		return err
+		return false
 	}
 
 	resp, err := w.client.Do(req)
 	if err != nil {
-		return err
+		return false
 	}
-	_ = resp.Body.Close()
-	return nil
+	defer func() { _ = resp.Body.Close() }()
+
+	// Parse the response to check if the task was stopped.
+	var result struct {
+		Stopped bool `json:"stopped"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false
+	}
+	return result.Stopped
 }
 
 func (w *Worker) epicHeartbeatLoop(ctx context.Context, epicID string) {

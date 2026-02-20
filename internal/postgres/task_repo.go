@@ -367,6 +367,14 @@ func (r *TaskRepository) StartOverTask(ctx context.Context, id task.TaskID, para
 	return rows > 0, tagTaskErr(err)
 }
 
+func (r *TaskRepository) StopTask(ctx context.Context, id task.TaskID, reason string) (bool, error) {
+	rows, err := r.db.StopTask(ctx, sqlc.StopTaskParams{
+		ID:          id.String(),
+		CloseReason: &reason,
+	})
+	return rows > 0, tagTaskErr(err)
+}
+
 func (r *TaskRepository) Heartbeat(ctx context.Context, id task.TaskID) error {
 	return tagTaskErr(r.db.Heartbeat(ctx, id.String()))
 }

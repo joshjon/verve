@@ -171,10 +171,28 @@ func (h *HTTPHandler) TaskHeartbeat(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
 	}
-	if err := h.taskStore.Heartbeat(c.Request().Context(), id); err != nil {
+	ctx := c.Request().Context()
+
+	// Check if the task is still running. If the task was stopped
+	// (status changed away from running), signal the worker to cancel.
+	t, readErr := h.taskStore.ReadTask(ctx, id)
+	if readErr != nil {
+		return jsonError(c, readErr)
+	}
+	if t.Status != task.StatusRunning {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"status":  "ok",
+			"stopped": true,
+		})
+	}
+
+	if err := h.taskStore.Heartbeat(ctx, id); err != nil {
 		return jsonError(c, err)
 	}
-	return c.JSON(http.StatusOK, statusOK())
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"status":  "ok",
+		"stopped": false,
+	})
 }
 
 // TaskComplete handles POST /tasks/:id/complete

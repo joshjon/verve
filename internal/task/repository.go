@@ -71,6 +71,9 @@ type TaskRepository interface {
 	// state. Optionally updates title, description, and acceptance criteria.
 	// Returns false if the task was not in review or failed status.
 	StartOverTask(ctx context.Context, id TaskID, params StartOverTaskParams) (bool, error)
+	// StopTask atomically transitions a task from running → pending with ready=false,
+	// recording the stop reason. Returns false if the task was not in running status.
+	StopTask(ctx context.Context, id TaskID, reason string) (bool, error)
 	// Heartbeat updates the last heartbeat time for a running task.
 	Heartbeat(ctx context.Context, id TaskID) error
 	// ListStaleTasks returns running tasks whose last heartbeat is before the given time.

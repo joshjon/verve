@@ -863,6 +863,25 @@ func (q *Queries) StartOverTask(ctx context.Context, arg StartOverTaskParams) (i
 	return result.RowsAffected()
 }
 
+const stopTask = `-- name: StopTask :execrows
+UPDATE task SET status = 'pending', ready = 0, close_reason = ?,
+  started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'running'
+`
+
+type StopTaskParams struct {
+	CloseReason *string
+	ID          string
+}
+
+func (q *Queries) StopTask(ctx context.Context, arg StopTaskParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, stopTask, arg.CloseReason, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const taskExists = `-- name: TaskExists :one
 SELECT EXISTS(SELECT 1 FROM task WHERE id = ?)
 `
