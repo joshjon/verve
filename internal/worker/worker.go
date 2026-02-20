@@ -20,6 +20,7 @@ const workTypeEpic = "epic"
 type Config struct {
 	APIURL                   string
 	AnthropicAPIKey          string // API key auth (pay-per-use)
+	AnthropicBaseURL         string // Custom base URL for Anthropic API (e.g. for proxies or self-hosted endpoints)
 	ClaudeCodeOAuthToken     string // OAuth token auth (subscription-based, alternative to API key)
 	AgentImage               string // Docker image for agent - defaults to verve-agent:latest
 	MaxConcurrentTasks       int    // Maximum concurrent tasks (default: 1)
@@ -470,6 +471,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		GitHubToken:              githubToken,
 		GitHubRepo:               repoFullName,
 		AnthropicAPIKey:          w.config.AnthropicAPIKey,
+		AnthropicBaseURL:         w.config.AnthropicBaseURL,
 		ClaudeCodeOAuthToken:     w.config.ClaudeCodeOAuthToken,
 		ClaudeModel:              task.Model,
 		DryRun:                   w.config.DryRun,
@@ -560,6 +562,7 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 		GitHubToken:              githubToken,
 		GitHubRepo:               repoFullName,
 		AnthropicAPIKey:          w.config.AnthropicAPIKey,
+		AnthropicBaseURL:         w.config.AnthropicBaseURL,
 		ClaudeCodeOAuthToken:     w.config.ClaudeCodeOAuthToken,
 		ClaudeModel:              ep.Model,
 		GitHubInsecureSkipVerify: w.config.GitHubInsecureSkipVerify,
