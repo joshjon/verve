@@ -451,6 +451,20 @@ func (m *mockRepository) WithTx(_ tx.Tx) Repository {
 	return m
 }
 
+func (m *mockRepository) StopTask(_ context.Context, id TaskID, reason string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id.String()]
+	if !ok || t.Status != StatusRunning {
+		return false, nil
+	}
+	t.Status = StatusPending
+	t.Ready = false
+	t.CloseReason = reason
+	m.taskStatuses[id.String()] = StatusPending
+	return true, nil
+}
+
 func (m *mockRepository) Heartbeat(_ context.Context, _ TaskID) error {
 	return nil
 }
