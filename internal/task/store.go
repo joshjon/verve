@@ -142,6 +142,12 @@ func (s *Store) HasTasksForRepo(ctx context.Context, repoID string) (bool, error
 // for circuit breaker detection. If the same category fails consecutively
 // >= 2 times, the task is failed immediately. Categories include the specific
 // failed check names so that different CI failures don't trip the breaker.
+//
+// Merge conflict retries are exempt from the max attempts limit and circuit
+// breaker because resolving conflicts can be an ongoing process when there is
+// a lot of in-flight work happening on the same repo. Like feedback retries,
+// both attempt and max_attempts are incremented so the attempt number stays
+// unique for log tabbing while keeping the retry budget unchanged.
 func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason string) error {
 	t, err := s.repo.ReadTask(ctx, id)
 	if err != nil {
@@ -151,6 +157,22 @@ func (s *Store) RetryTask(ctx context.Context, id TaskID, category, reason strin
 	// Budget check: fail if cost exceeds max
 	if t.MaxCostUSD > 0 && t.CostUSD >= t.MaxCostUSD {
 		return s.UpdateTaskStatus(ctx, id, StatusFailed)
+	}
+
+	// Merge conflict retries do not count towards max attempts or trigger
+	// the circuit breaker. Conflicts are expected when many tasks target the
+	// same repo, so the agent should keep resolving them indefinitely.
+	if category == "merge_conflict" {
+		ok, err := s.repo.FeedbackRetryTask(ctx, id, reason)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil // task was not in review status
+		}
+		s.notifyPending()
+		s.publishTaskUpdated(ctx, id)
+		return nil
 	}
 
 	if t.Attempt >= t.MaxAttempts {
