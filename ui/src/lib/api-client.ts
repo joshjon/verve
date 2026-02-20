@@ -242,6 +242,17 @@ export class VerveClient {
 		}
 	}
 
+	async bulkDeleteTasks(taskIds: string[]): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/tasks/bulk-delete`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ task_ids: taskIds })
+		});
+		if (!res.ok) {
+			throw new Error('Failed to bulk delete tasks');
+		}
+	}
+
 	// --- Settings APIs ---
 
 	async getGitHubTokenStatus(): Promise<{ configured: boolean; fine_grained?: boolean }> {
