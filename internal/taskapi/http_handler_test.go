@@ -402,6 +402,14 @@ func (m *mockTaskRepo) ClearEpicIDForTasks(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockTaskRepo) BulkDeleteTasksByEpic(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockTaskRepo) BulkDeleteTasksByIDs(_ context.Context, _ []string) error {
+	return nil
+}
+
 // --- Mock repo repository ---
 
 type mockRepoRepo struct {
