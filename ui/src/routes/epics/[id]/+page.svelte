@@ -26,7 +26,9 @@
 		Clock,
 		CircleDot,
 		GitMerge,
-		XCircle
+		XCircle,
+		Play,
+		Eye
 	} from 'lucide-svelte';
 
 	let epic = $state<Epic | null>(null);
@@ -39,6 +41,14 @@
 	let failedTasks = $derived(epicTasks.filter((t) => t.status === 'failed'));
 	let isActive = $derived(epic?.status === 'active');
 	let isCompleted = $derived(epic?.status === 'completed');
+	let hasCreatedTasks = $derived(epic != null && epic.task_ids.length > 0);
+
+	// Grouped epic tasks by status
+	let pendingTasks = $derived(epicTasks.filter((t) => t.status === 'pending'));
+	let runningTasks = $derived(epicTasks.filter((t) => t.status === 'running'));
+	let reviewTasks = $derived(epicTasks.filter((t) => t.status === 'review'));
+	let doneTasks = $derived(epicTasks.filter((t) => t.status === 'merged' || t.status === 'closed'));
+	let epicFailedTasks = $derived(epicTasks.filter((t) => t.status === 'failed'));
 
 	// Planning session state
 	let sessionMessage = $state('');
@@ -63,6 +73,7 @@
 
 	// Polling
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let taskPollTimer: ReturnType<typeof setInterval> | null = null;
 
 	const epicId = $derived($page.params.id);
 
@@ -72,6 +83,7 @@
 
 	onDestroy(() => {
 		stopPolling();
+		stopTaskPolling();
 	});
 
 	function startPolling() {
@@ -98,6 +110,25 @@
 		}
 	}
 
+	function startTaskPolling() {
+		if (taskPollTimer) return;
+		taskPollTimer = setInterval(async () => {
+			if (!epic) return;
+			try {
+				epicTasks = await client.getEpicTasks(epic.id);
+			} catch {
+				// Ignore polling errors silently
+			}
+		}, 5000);
+	}
+
+	function stopTaskPolling() {
+		if (taskPollTimer) {
+			clearInterval(taskPollTimer);
+			taskPollTimer = null;
+		}
+	}
+
 	async function loadEpic() {
 		loading = true;
 		error = null;
@@ -114,6 +145,10 @@
 			// Load task statuses if epic has created tasks
 			if (epic.task_ids.length > 0) {
 				await loadEpicTasks();
+				// Poll for task status updates on active epics
+				if (epic.status === 'active') {
+					startTaskPolling();
+				}
 			}
 		} catch (err) {
 			error = (err as Error).message;
@@ -223,6 +258,13 @@
 		try {
 			epic = await client.confirmEpic(epic.id, notReady);
 			epicStore.updateEpic(epic);
+			// Load the created tasks and start polling if active
+			if (epic.task_ids.length > 0) {
+				await loadEpicTasks();
+				if (epic.status === 'active') {
+					startTaskPolling();
+				}
+			}
 		} catch (err) {
 			error = (err as Error).message;
 		} finally {
@@ -307,6 +349,26 @@
 	function getTaskForId(taskId: string): EpicTask | undefined {
 		return epicTasks.find((t) => t.id === taskId);
 	}
+
+	function getTaskStatusBadge(status: string): { bg: string; text: string; label: string } {
+		switch (status) {
+			case 'pending':
+				return { bg: 'bg-amber-500/15 border-amber-500/20', text: 'text-amber-400', label: 'Pending' };
+			case 'running':
+				return { bg: 'bg-blue-500/15 border-blue-500/20', text: 'text-blue-400', label: 'Running' };
+			case 'review':
+				return { bg: 'bg-purple-500/15 border-purple-500/20', text: 'text-purple-400', label: 'In Review' };
+			case 'merged':
+				return { bg: 'bg-green-500/15 border-green-500/20', text: 'text-green-400', label: 'Merged' };
+			case 'closed':
+				return { bg: 'bg-gray-500/15 border-gray-500/20', text: 'text-gray-400', label: 'Closed' };
+			case 'failed':
+				return { bg: 'bg-red-500/15 border-red-500/20', text: 'text-red-400', label: 'Failed' };
+			default:
+				return { bg: 'bg-gray-500/15 border-gray-500/20', text: 'text-gray-400', label: status };
+		}
+	}
+
 </script>
 
 <div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col max-w-6xl mx-auto w-full">
@@ -440,312 +502,412 @@
 			</Card.Root>
 		{/if}
 
-		<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
-			<!-- Left: Proposed Tasks -->
-			<div class="lg:col-span-2 flex flex-col min-h-0">
+		{#if hasCreatedTasks}
+			<!-- Active/Completed Epic: Show actual tasks grouped by status -->
+			<div class="flex-1 min-h-0 flex flex-col">
 				<div class="flex items-center justify-between mb-3">
 					<h2 class="text-sm font-semibold flex items-center gap-2">
-						Proposed Tasks
-						{#if epic.proposed_tasks.length > 0}
-							<span class="px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
-								{epic.proposed_tasks.length}
-							</span>
-						{/if}
+						Epic Tasks
+						<span class="px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
+							{epicTasks.length}
+						</span>
 					</h2>
-					{#if isEditable}
-						<Button variant="outline" size="sm" onclick={addNewTask} class="gap-1.5 text-xs" disabled={isPlanning}>
-							<Plus class="w-3.5 h-3.5" />
-							Add Task
-						</Button>
+					{#if isActive}
+						<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+							<Loader2 class="w-3 h-3 animate-spin" />
+							Auto-refreshing
+						</div>
 					{/if}
 				</div>
 
-				{#if epic.proposed_tasks.length === 0}
-					<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1">
-						<Card.Content class="p-8 text-center">
-							<div class="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-								{#if isPlanning}
-									<Loader2 class="w-6 h-6 text-violet-400 animate-spin" />
-								{:else}
-									<Layers class="w-6 h-6 text-muted-foreground" />
-								{/if}
-							</div>
-							<p class="text-sm text-muted-foreground">
-								{#if isPlanning && isClaimed}
-									AI agent is analyzing the epic and generating tasks...
-								{:else if isPlanning}
-									Waiting for an agent to start planning...
-								{:else}
-									No tasks have been proposed yet.
-								{/if}
-							</p>
-						</Card.Content>
-					</Card.Root>
-				{:else}
-					<div class="space-y-2 overflow-y-auto overscroll-contain flex-1 min-h-0 max-h-[60vh]">
-						{#each epic.proposed_tasks as task, idx (task.temp_id)}
-							<Card.Root class="bg-[oklch(0.18_0.005_285.823)] {isPlanning ? 'opacity-60' : ''}">
-								<Card.Content class="p-3">
-									{#if editingTaskIdx === idx}
-										<!-- Edit mode -->
-										<div class="space-y-3">
-											<input
-												type="text"
-												bind:value={editTitle}
-												class="w-full border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-												placeholder="Task title"
-											/>
-											<textarea
-												bind:value={editDescription}
-												class="w-full border rounded-lg px-3 py-2 bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[80px]"
-												placeholder="Task description"
-											></textarea>
-											<div>
-												<span class="text-xs font-medium text-muted-foreground mb-1 block">Acceptance Criteria</span>
-												{#each editCriteria as criterion, ci}
-													<div class="flex items-center gap-2 mb-1">
-														<input
-															type="text"
-															value={criterion}
-															oninput={(e) => {
-																editCriteria = editCriteria.map((c, i) => (i === ci ? (e.target as HTMLInputElement).value : c));
-															}}
-															class="flex-1 border rounded-lg px-2 py-1 bg-background text-foreground text-xs"
-															placeholder="Criterion"
-														/>
-														<button
-															type="button"
-															class="p-1 hover:bg-destructive/10 hover:text-destructive rounded"
-															onclick={() => {
-																editCriteria = editCriteria.filter((_, i) => i !== ci);
-															}}
-														>
-															<X class="w-3 h-3" />
-														</button>
-													</div>
-												{/each}
-												<button
-													type="button"
-													class="text-xs text-primary hover:underline mt-1"
-													onclick={() => {
-														editCriteria = [...editCriteria, ''];
-													}}
-												>
-													+ Add criterion
-												</button>
-											</div>
-											<div class="flex items-center gap-2 justify-end">
-												<Button variant="ghost" size="sm" onclick={cancelEditTask}>Cancel</Button>
-												<Button size="sm" onclick={saveEditTask} class="gap-1">
-													<Check class="w-3.5 h-3.5" />
-													Save
-												</Button>
-											</div>
-										</div>
-									{:else}
-										<!-- Display mode -->
-										<div class="flex items-start gap-2">
-											<span class="text-xs text-muted-foreground font-mono mt-0.5 shrink-0">{idx + 1}.</span>
-											<div class="flex-1 min-w-0">
-												<div class="flex items-start justify-between gap-2">
-													<p class="text-sm font-medium">{task.title}</p>
-													{#if isEditable && !isPlanning}
-														<div class="flex items-center gap-1 shrink-0">
-															<button
-																class="p-1 hover:bg-accent rounded transition-colors"
-																onclick={() => startEditTask(idx)}
-																title="Edit task"
-															>
-																<Edit3 class="w-3.5 h-3.5 text-muted-foreground" />
-															</button>
-															<button
-																class="p-1 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
-																onclick={() => removeTask(idx)}
-																title="Remove task"
-															>
-																<Trash2 class="w-3.5 h-3.5 text-muted-foreground" />
-															</button>
-														</div>
-													{/if}
-												</div>
-												{#if task.description}
-													<p class="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
-												{/if}
-												<div class="flex items-center gap-3 mt-2 flex-wrap">
-													{#if task.depends_on_temp_ids && task.depends_on_temp_ids.length > 0}
-														<span class="text-[10px] text-muted-foreground flex items-center gap-0.5">
-															<Link2 class="w-3 h-3" />
-															{task.depends_on_temp_ids.map((id) => getDependencyLabel(id)).join(', ')}
-														</span>
-													{/if}
-													{#if task.acceptance_criteria && task.acceptance_criteria.length > 0}
-														<span class="text-[10px] text-muted-foreground flex items-center gap-0.5">
-															<CheckCircle2 class="w-3 h-3" />
-															{task.acceptance_criteria.length} criteria
-														</span>
-													{/if}
-												</div>
-											</div>
-										</div>
-									{/if}
-								</Card.Content>
-							</Card.Root>
-						{/each}
+				<!-- Task status summary bar -->
+				{#if epicTasks.length > 0}
+					<div class="flex items-center gap-3 mb-4 flex-wrap">
+						{#if pendingTasks.length > 0}
+							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+								<Clock class="w-3 h-3" />
+								{pendingTasks.length} Pending
+							</span>
+						{/if}
+						{#if runningTasks.length > 0}
+							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+								<Play class="w-3 h-3" />
+								{runningTasks.length} Running
+							</span>
+						{/if}
+						{#if reviewTasks.length > 0}
+							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+								<Eye class="w-3 h-3" />
+								{reviewTasks.length} In Review
+							</span>
+						{/if}
+						{#if doneTasks.length > 0}
+							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+								<CheckCircle2 class="w-3 h-3" />
+								{doneTasks.length} Done
+							</span>
+						{/if}
+						{#if epicFailedTasks.length > 0}
+							<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+								<XCircle class="w-3 h-3" />
+								{epicFailedTasks.length} Failed
+							</span>
+						{/if}
+					</div>
+
+					<!-- Progress bar -->
+					{@const totalCount = epicTasks.length}
+					{@const mergedCount = epicTasks.filter(t => t.status === 'merged').length}
+					{@const closedCount = epicTasks.filter(t => t.status === 'closed').length}
+					{@const failedCount = epicFailedTasks.length}
+					{@const reviewCount = reviewTasks.length}
+					{@const runningCount = runningTasks.length}
+					<div class="w-full h-2 rounded-full bg-muted overflow-hidden flex mb-4">
+						{#if mergedCount > 0}
+							<div class="bg-green-500 h-full" style="width: {(mergedCount / totalCount) * 100}%"></div>
+						{/if}
+						{#if closedCount > 0}
+							<div class="bg-gray-500 h-full" style="width: {(closedCount / totalCount) * 100}%"></div>
+						{/if}
+						{#if reviewCount > 0}
+							<div class="bg-purple-500 h-full" style="width: {(reviewCount / totalCount) * 100}%"></div>
+						{/if}
+						{#if runningCount > 0}
+							<div class="bg-blue-500 h-full" style="width: {(runningCount / totalCount) * 100}%"></div>
+						{/if}
+						{#if failedCount > 0}
+							<div class="bg-red-500 h-full" style="width: {(failedCount / totalCount) * 100}%"></div>
+						{/if}
 					</div>
 				{/if}
 
-				<!-- Confirm / Ready section -->
-				{#if isEditable && epic.proposed_tasks.length > 0}
-					<Card.Root class="mt-4 bg-[oklch(0.18_0.005_285.823)] border-green-500/20">
-						<Card.Content class="p-4">
-							<div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-								<div class="flex-1">
-									<p class="text-sm font-medium">Ready to create tasks?</p>
-									<p class="text-xs text-muted-foreground mt-0.5">
-										This will create {epic.proposed_tasks.length} task{epic.proposed_tasks.length !== 1 ? 's' : ''} from the proposed plan.
-									</p>
-								</div>
-								<div class="flex items-center gap-3">
-									<label class="flex items-center gap-2 cursor-pointer">
-										<input
-											type="checkbox"
-											bind:checked={notReady}
-											class="w-3.5 h-3.5 rounded border-input accent-primary"
-										/>
-										<span class="text-xs flex items-center gap-1">
-											<PauseCircle class="w-3 h-3" />
-											Hold tasks
+				<!-- Task list -->
+				<div class="space-y-2 overflow-y-auto overscroll-contain flex-1 min-h-0">
+					{#each epicTasks as epicTask (epicTask.id)}
+						{@const badge = getTaskStatusBadge(epicTask.status)}
+						<a
+							href="/tasks/{epicTask.id}"
+							class="block"
+						>
+							<Card.Root class="bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md cursor-pointer">
+								<Card.Content class="p-3">
+									<div class="flex items-start justify-between gap-3">
+										<div class="flex items-start gap-3 flex-1 min-w-0">
+											<div class="mt-0.5 shrink-0">
+												{#if epicTask.status === 'running'}
+													<Loader2 class="w-4 h-4 text-blue-400 animate-spin" />
+												{:else if epicTask.status === 'pending'}
+													<Clock class="w-4 h-4 text-amber-400" />
+												{:else if epicTask.status === 'review'}
+													<Eye class="w-4 h-4 text-purple-400" />
+												{:else if epicTask.status === 'merged'}
+													<GitMerge class="w-4 h-4 text-green-400" />
+												{:else if epicTask.status === 'closed'}
+													<XCircle class="w-4 h-4 text-gray-400" />
+												{:else if epicTask.status === 'failed'}
+													<AlertCircle class="w-4 h-4 text-red-400" />
+												{:else}
+													<CircleDot class="w-4 h-4 text-muted-foreground" />
+												{/if}
+											</div>
+											<div class="flex-1 min-w-0">
+												<p class="text-sm font-medium truncate">{epicTask.title}</p>
+												<span class="text-[10px] text-muted-foreground font-mono">{epicTask.id}</span>
+											</div>
+										</div>
+										<span class="inline-flex items-center gap-1 text-[11px] font-semibold {badge.text} {badge.bg} px-2 py-0.5 rounded-full border shrink-0">
+											{badge.label}
 										</span>
-									</label>
-									<Button onclick={handleConfirm} disabled={confirming} class="gap-1.5 bg-green-600 hover:bg-green-700">
-										{#if confirming}
-											<Loader2 class="w-4 h-4 animate-spin" />
-											Confirming...
-										{:else}
-											<Check class="w-4 h-4" />
-											Confirm Epic
-										{/if}
-									</Button>
+									</div>
+								</Card.Content>
+							</Card.Root>
+						</a>
+					{/each}
+					{#if epicTasks.length === 0}
+						<Card.Root class="bg-[oklch(0.18_0.005_285.823)]">
+							<Card.Content class="p-8 text-center">
+								<div class="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+									<Loader2 class="w-6 h-6 text-muted-foreground animate-spin" />
 								</div>
-							</div>
-						</Card.Content>
-					</Card.Root>
-				{/if}
+								<p class="text-sm text-muted-foreground">Loading tasks...</p>
+							</Card.Content>
+						</Card.Root>
+					{/if}
+				</div>
 			</div>
-
-			<!-- Right: Planning Session -->
-			<div class="flex flex-col min-h-0">
-				<h2 class="text-sm font-semibold mb-3 flex items-center gap-2">
-					<MessageSquare class="w-4 h-4 text-violet-400" />
-					Planning Session
-				</h2>
-
-				<!-- Session log & status -->
-				<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1 flex flex-col min-h-[300px]">
-					<Card.Content class="p-3 flex-1 flex flex-col min-h-0">
-						{#if epic.planning_prompt}
-							<div class="text-xs text-muted-foreground mb-2 pb-2 border-b border-border/50">
-								<span class="font-medium text-violet-400">Planning prompt:</span>
-								<p class="mt-1 line-clamp-3">{epic.planning_prompt}</p>
-							</div>
-						{/if}
-
-						<!-- Session log -->
-						<div class="flex-1 overflow-y-auto overscroll-contain space-y-2 min-h-0 mb-3 max-h-[40vh]">
-							{#each epic.session_log as line}
-								<div class="text-xs {line.startsWith('user:') ? 'text-blue-400' : line.startsWith('system:') ? 'text-violet-400' : 'text-muted-foreground'}">
-									{line}
-								</div>
-							{/each}
-							{#if epic.session_log.length === 0 && !isPlanning}
-								<p class="text-xs text-muted-foreground text-center py-4">
-									Session log will appear here.
-								</p>
+		{:else}
+			<!-- Draft/Planning: Show proposed tasks and planning session side by side -->
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+				<!-- Left: Proposed Tasks -->
+				<div class="lg:col-span-2 flex flex-col min-h-0">
+					<div class="flex items-center justify-between mb-3">
+						<h2 class="text-sm font-semibold flex items-center gap-2">
+							Proposed Tasks
+							{#if epic.proposed_tasks.length > 0}
+								<span class="px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
+									{epic.proposed_tasks.length}
+								</span>
 							{/if}
-							{#if isPlanning}
-								<div class="flex items-center gap-2 text-xs text-violet-400 py-2">
-									<Loader2 class="w-3 h-3 animate-spin" />
-									{#if isClaimed}
-										Agent is planning...
+						</h2>
+						{#if isEditable}
+							<Button variant="outline" size="sm" onclick={addNewTask} class="gap-1.5 text-xs" disabled={isPlanning}>
+								<Plus class="w-3.5 h-3.5" />
+								Add Task
+							</Button>
+						{/if}
+					</div>
+
+					{#if epic.proposed_tasks.length === 0}
+						<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1">
+							<Card.Content class="p-8 text-center">
+								<div class="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+									{#if isPlanning}
+										<Loader2 class="w-6 h-6 text-violet-400 animate-spin" />
 									{:else}
-										Waiting for worker...
+										<Layers class="w-6 h-6 text-muted-foreground" />
 									{/if}
 								</div>
-							{/if}
+								<p class="text-sm text-muted-foreground">
+									{#if isPlanning && isClaimed}
+										AI agent is analyzing the epic and generating tasks...
+									{:else if isPlanning}
+										Waiting for an agent to start planning...
+									{:else}
+										No tasks have been proposed yet.
+									{/if}
+								</p>
+							</Card.Content>
+						</Card.Root>
+					{:else}
+						<div class="space-y-2 overflow-y-auto overscroll-contain flex-1 min-h-0 max-h-[60vh]">
+							{#each epic.proposed_tasks as task, idx (task.temp_id)}
+								<Card.Root class="bg-[oklch(0.18_0.005_285.823)] {isPlanning ? 'opacity-60' : ''}">
+									<Card.Content class="p-3">
+										{#if editingTaskIdx === idx}
+											<!-- Edit mode -->
+											<div class="space-y-3">
+												<input
+													type="text"
+													bind:value={editTitle}
+													class="w-full border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+													placeholder="Task title"
+												/>
+												<textarea
+													bind:value={editDescription}
+													class="w-full border rounded-lg px-3 py-2 bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[80px]"
+													placeholder="Task description"
+												></textarea>
+												<div>
+													<span class="text-xs font-medium text-muted-foreground mb-1 block">Acceptance Criteria</span>
+													{#each editCriteria as criterion, ci}
+														<div class="flex items-center gap-2 mb-1">
+															<input
+																type="text"
+																value={criterion}
+																oninput={(e) => {
+																	editCriteria = editCriteria.map((c, i) => (i === ci ? (e.target as HTMLInputElement).value : c));
+																}}
+																class="flex-1 border rounded-lg px-2 py-1 bg-background text-foreground text-xs"
+																placeholder="Criterion"
+															/>
+															<button
+																type="button"
+																class="p-1 hover:bg-destructive/10 hover:text-destructive rounded"
+																onclick={() => {
+																	editCriteria = editCriteria.filter((_, i) => i !== ci);
+																}}
+															>
+																<X class="w-3 h-3" />
+															</button>
+														</div>
+													{/each}
+													<button
+														type="button"
+														class="text-xs text-primary hover:underline mt-1"
+														onclick={() => {
+															editCriteria = [...editCriteria, ''];
+														}}
+													>
+														+ Add criterion
+													</button>
+												</div>
+												<div class="flex items-center gap-2 justify-end">
+													<Button variant="ghost" size="sm" onclick={cancelEditTask}>Cancel</Button>
+													<Button size="sm" onclick={saveEditTask} class="gap-1">
+														<Check class="w-3.5 h-3.5" />
+														Save
+													</Button>
+												</div>
+											</div>
+										{:else}
+											<!-- Display mode -->
+											<div class="flex items-start gap-2">
+												<span class="text-xs text-muted-foreground font-mono mt-0.5 shrink-0">{idx + 1}.</span>
+												<div class="flex-1 min-w-0">
+													<div class="flex items-start justify-between gap-2">
+														<p class="text-sm font-medium">{task.title}</p>
+														{#if isEditable && !isPlanning}
+															<div class="flex items-center gap-1 shrink-0">
+																<button
+																	class="p-1 hover:bg-accent rounded transition-colors"
+																	onclick={() => startEditTask(idx)}
+																	title="Edit task"
+																>
+																	<Edit3 class="w-3.5 h-3.5 text-muted-foreground" />
+																</button>
+																<button
+																	class="p-1 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
+																	onclick={() => removeTask(idx)}
+																	title="Remove task"
+																>
+																	<Trash2 class="w-3.5 h-3.5 text-muted-foreground" />
+																</button>
+															</div>
+														{/if}
+													</div>
+													{#if task.description}
+														<p class="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
+													{/if}
+													<div class="flex items-center gap-3 mt-2 flex-wrap">
+														{#if task.depends_on_temp_ids && task.depends_on_temp_ids.length > 0}
+															<span class="text-[10px] text-muted-foreground flex items-center gap-0.5">
+																<Link2 class="w-3 h-3" />
+																{task.depends_on_temp_ids.map((id) => getDependencyLabel(id)).join(', ')}
+															</span>
+														{/if}
+														{#if task.acceptance_criteria && task.acceptance_criteria.length > 0}
+															<span class="text-[10px] text-muted-foreground flex items-center gap-0.5">
+																<CheckCircle2 class="w-3 h-3" />
+																{task.acceptance_criteria.length} criteria
+															</span>
+														{/if}
+													</div>
+												</div>
+											</div>
+										{/if}
+									</Card.Content>
+								</Card.Root>
+							{/each}
 						</div>
+					{/if}
 
-						<!-- Feedback input (when in draft/ready and agent may be listening) -->
-						{#if isDraft}
-							<div class="border-t border-border/50 pt-3">
-								<div class="flex items-center gap-2">
-									<input
-										type="text"
-										bind:value={sessionMessage}
-										class="flex-1 border rounded-lg px-3 py-2 bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-										placeholder="Send feedback to re-plan..."
-										disabled={sendingMessage}
-										onkeydown={(e) => {
-											if (e.key === 'Enter' && !e.shiftKey) {
-												e.preventDefault();
-												handleSendMessage();
-											}
-										}}
-									/>
-									<Button
-										size="sm"
-										onclick={handleSendMessage}
-										disabled={!sessionMessage.trim() || sendingMessage}
-										class="shrink-0 gap-1.5"
-									>
-										{#if sendingMessage}
-											<Loader2 class="w-4 h-4 animate-spin" />
-										{:else}
-											<RefreshCw class="w-4 h-4" />
-										{/if}
-									</Button>
+					<!-- Confirm / Ready section -->
+					{#if isEditable && epic.proposed_tasks.length > 0}
+						<Card.Root class="mt-4 bg-[oklch(0.18_0.005_285.823)] border-green-500/20">
+							<Card.Content class="p-4">
+								<div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+									<div class="flex-1">
+										<p class="text-sm font-medium">Ready to create tasks?</p>
+										<p class="text-xs text-muted-foreground mt-0.5">
+											This will create {epic.proposed_tasks.length} task{epic.proposed_tasks.length !== 1 ? 's' : ''} from the proposed plan.
+										</p>
+									</div>
+									<div class="flex items-center gap-3">
+										<label class="flex items-center gap-2 cursor-pointer">
+											<input
+												type="checkbox"
+												bind:checked={notReady}
+												class="w-3.5 h-3.5 rounded border-input accent-primary"
+											/>
+											<span class="text-xs flex items-center gap-1">
+												<PauseCircle class="w-3 h-3" />
+												Hold tasks
+											</span>
+										</label>
+										<Button onclick={handleConfirm} disabled={confirming} class="gap-1.5 bg-green-600 hover:bg-green-700">
+											{#if confirming}
+												<Loader2 class="w-4 h-4 animate-spin" />
+												Confirming...
+											{:else}
+												<Check class="w-4 h-4" />
+												Confirm Epic
+											{/if}
+										</Button>
+									</div>
 								</div>
-							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
+							</Card.Content>
+						</Card.Root>
+					{/if}
+				</div>
 
-				<!-- Task IDs (after confirmation) -->
-				{#if epic.task_ids.length > 0}
-					<Card.Root class="mt-4 bg-[oklch(0.18_0.005_285.823)]">
-						<Card.Content class="p-4">
-							<h3 class="text-xs font-semibold mb-2">Created Tasks</h3>
-							<div class="space-y-1.5">
-								{#each epic.task_ids as taskId}
-									{@const taskInfo = getTaskForId(taskId)}
-									<a
-										href="/tasks/{taskId}"
-										class="flex items-center gap-2 text-xs hover:underline {taskInfo ? getTaskStatusColor(taskInfo.status) : 'text-primary'}"
-									>
-										{#if taskInfo?.status === 'merged'}
-											<GitMerge class="w-3 h-3" />
-										{:else if taskInfo?.status === 'closed'}
-											<XCircle class="w-3 h-3" />
-										{:else if taskInfo?.status === 'failed'}
-											<AlertCircle class="w-3 h-3" />
-										{:else if taskInfo?.status === 'running'}
-											<Loader2 class="w-3 h-3 animate-spin" />
-										{:else if taskInfo?.status === 'review'}
-											<CircleDot class="w-3 h-3" />
-										{:else}
-											<CheckCircle2 class="w-3 h-3" />
-										{/if}
-										<span class="truncate">{taskInfo?.title ?? taskId}</span>
-										{#if taskInfo}
-											<span class="text-[10px] opacity-60 shrink-0">{taskInfo.status}</span>
-										{/if}
-									</a>
+				<!-- Right: Planning Session -->
+				<div class="flex flex-col min-h-0">
+					<h2 class="text-sm font-semibold mb-3 flex items-center gap-2">
+						<MessageSquare class="w-4 h-4 text-violet-400" />
+						Planning Session
+					</h2>
+
+					<!-- Session log & status -->
+					<Card.Root class="bg-[oklch(0.18_0.005_285.823)] flex-1 flex flex-col min-h-[300px]">
+						<Card.Content class="p-3 flex-1 flex flex-col min-h-0">
+							{#if epic.planning_prompt}
+								<div class="text-xs text-muted-foreground mb-2 pb-2 border-b border-border/50">
+									<span class="font-medium text-violet-400">Planning prompt:</span>
+									<p class="mt-1 line-clamp-3">{epic.planning_prompt}</p>
+								</div>
+							{/if}
+
+							<!-- Session log -->
+							<div class="flex-1 overflow-y-auto overscroll-contain space-y-2 min-h-0 mb-3 max-h-[40vh]">
+								{#each epic.session_log as line}
+									<div class="text-xs {line.startsWith('user:') ? 'text-blue-400' : line.startsWith('system:') ? 'text-violet-400' : 'text-muted-foreground'}">
+										{line}
+									</div>
 								{/each}
+								{#if epic.session_log.length === 0 && !isPlanning}
+									<p class="text-xs text-muted-foreground text-center py-4">
+										Session log will appear here.
+									</p>
+								{/if}
+								{#if isPlanning}
+									<div class="flex items-center gap-2 text-xs text-violet-400 py-2">
+										<Loader2 class="w-3 h-3 animate-spin" />
+										{#if isClaimed}
+											Agent is planning...
+										{:else}
+											Waiting for worker...
+										{/if}
+									</div>
+								{/if}
 							</div>
+
+							<!-- Feedback input (when in draft/ready and agent may be listening) -->
+							{#if isDraft}
+								<div class="border-t border-border/50 pt-3">
+									<div class="flex items-center gap-2">
+										<input
+											type="text"
+											bind:value={sessionMessage}
+											class="flex-1 border rounded-lg px-3 py-2 bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+											placeholder="Send feedback to re-plan..."
+											disabled={sendingMessage}
+											onkeydown={(e) => {
+												if (e.key === 'Enter' && !e.shiftKey) {
+													e.preventDefault();
+													handleSendMessage();
+												}
+											}}
+										/>
+										<Button
+											size="sm"
+											onclick={handleSendMessage}
+											disabled={!sessionMessage.trim() || sendingMessage}
+											class="shrink-0 gap-1.5"
+										>
+											{#if sendingMessage}
+												<Loader2 class="w-4 h-4 animate-spin" />
+											{:else}
+												<RefreshCw class="w-4 h-4" />
+											{/if}
+										</Button>
+									</div>
+								</div>
+							{/if}
 						</Card.Content>
 					</Card.Root>
-				{/if}
+				</div>
 			</div>
-		</div>
+		{/if}
 	{/if}
 </div>
 
