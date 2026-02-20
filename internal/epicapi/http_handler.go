@@ -114,7 +114,7 @@ func (h *HTTPHandler) GetEpic(c echo.Context) error {
 }
 
 // DeleteEpic handles DELETE /epics/:id
-// Deletes the epic and all of its child tasks (including their logs).
+// Deletes the epic after bulk-closing all of its non-terminal child tasks.
 func (h *HTTPHandler) DeleteEpic(c echo.Context) error {
 	id, err := epic.ParseEpicID(c.Param("id"))
 	if err != nil {
@@ -128,19 +128,15 @@ func (h *HTTPHandler) DeleteEpic(c echo.Context) error {
 		return jsonError(c, err)
 	}
 
-	// Delete all child tasks by querying on epic_id (covers tasks that may
-	// have been removed from the epic's task_ids array but still reference it).
-	// Each DeleteTask call also deletes the task's logs and removes it from
-	// other tasks' depends_on lists.
+	// Bulk-close all non-terminal child tasks (pending, running, review, failed).
+	// Tasks already closed or merged are left unchanged.
 	if h.taskStore != nil {
-		tasks, listErr := h.taskStore.ListTasksByEpic(ctx, id.String())
-		if listErr != nil {
-			c.Logger().Errorf("failed to list tasks for epic %s: %v", id, listErr)
+		if err := h.taskStore.BulkCloseTasksByEpic(ctx, id.String(), "Epic deleted"); err != nil {
+			c.Logger().Errorf("failed to bulk close tasks for epic %s: %v", id, err)
 		}
-		for _, t := range tasks {
-			if err := h.taskStore.DeleteTask(ctx, t.ID); err != nil {
-				c.Logger().Errorf("failed to delete task %s during epic deletion: %v", t.ID, err)
-			}
+		// Clear the epic_id FK on all child tasks so the epic can be deleted.
+		if err := h.taskStore.ClearEpicIDForTasks(ctx, id.String()); err != nil {
+			c.Logger().Errorf("failed to clear epic_id for tasks of epic %s: %v", id, err)
 		}
 	}
 

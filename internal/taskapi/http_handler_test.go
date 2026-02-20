@@ -394,6 +394,14 @@ func (m *mockTaskRepo) ListTasksByEpic(_ context.Context, _ string) ([]*task.Tas
 	return nil, nil
 }
 
+func (m *mockTaskRepo) BulkCloseTasksByEpic(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockTaskRepo) ClearEpicIDForTasks(_ context.Context, _ string) error {
+	return nil
+}
+
 // --- Mock repo repository ---
 
 type mockRepoRepo struct {
