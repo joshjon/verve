@@ -482,7 +482,7 @@
 						</Card.Content>
 					</Card.Root>
 				{:else}
-					<div class="space-y-2 overflow-y-auto flex-1 min-h-0 max-h-[60vh]">
+					<div class="space-y-2 overflow-y-auto overscroll-contain flex-1 min-h-0 max-h-[60vh]">
 						{#each epic.proposed_tasks as task, idx (task.temp_id)}
 							<Card.Root class="bg-[oklch(0.18_0.005_285.823)] {isPlanning ? 'opacity-60' : ''}">
 								<Card.Content class="p-3">
@@ -651,7 +651,7 @@
 						{/if}
 
 						<!-- Session log -->
-						<div class="flex-1 overflow-y-auto space-y-2 min-h-0 mb-3 max-h-[40vh]">
+						<div class="flex-1 overflow-y-auto overscroll-contain space-y-2 min-h-0 mb-3 max-h-[40vh]">
 							{#each epic.session_log as line}
 								<div class="text-xs {line.startsWith('user:') ? 'text-blue-400' : line.startsWith('system:') ? 'text-violet-400' : 'text-muted-foreground'}">
 									{line}
