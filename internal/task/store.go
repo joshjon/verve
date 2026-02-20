@@ -553,7 +553,7 @@ func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
 
 // BulkCloseTasksByEpic closes all non-terminal tasks for an epic and publishes
 // update events for each affected task.
-func (s *Store) BulkCloseTasksByEpic(ctx context.Context, epicID string, reason string) error {
+func (s *Store) BulkCloseTasksByEpic(ctx context.Context, epicID, reason string) error {
 	// Read tasks before closing so we can publish events.
 	tasks, err := s.repo.ListTasksByEpic(ctx, epicID)
 	if err != nil {

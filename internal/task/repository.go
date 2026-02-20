@@ -79,7 +79,7 @@ type TaskRepository interface {
 	// ListTasksByEpic returns all tasks belonging to a given epic.
 	ListTasksByEpic(ctx context.Context, epicID string) ([]*Task, error)
 	// BulkCloseTasksByEpic closes all non-terminal tasks for an epic.
-	BulkCloseTasksByEpic(ctx context.Context, epicID string, reason string) error
+	BulkCloseTasksByEpic(ctx context.Context, epicID, reason string) error
 	// ClearEpicIDForTasks removes the epic_id FK from all tasks for a given epic.
 	ClearEpicIDForTasks(ctx context.Context, epicID string) error
 }

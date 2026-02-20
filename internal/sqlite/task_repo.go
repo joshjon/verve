@@ -433,7 +433,7 @@ func (r *TaskRepository) ListTasksByEpic(ctx context.Context, epicID string) ([]
 	return unmarshalTaskList(rows), nil
 }
 
-func (r *TaskRepository) BulkCloseTasksByEpic(ctx context.Context, epicID string, reason string) error {
+func (r *TaskRepository) BulkCloseTasksByEpic(ctx context.Context, epicID, reason string) error {
 	return tagTaskErr(r.db.BulkCloseTasksByEpic(ctx, sqlc.BulkCloseTasksByEpicParams{
 		CloseReason: &reason,
 		EpicID:      &epicID,
