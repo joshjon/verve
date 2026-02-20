@@ -315,6 +315,18 @@
 		autoScroll = isNearBottom;
 	}
 
+	// Prevent scroll events from propagating to parent when at scroll boundaries
+	function handleLogsWheel(e: WheelEvent) {
+		const el = e.currentTarget as HTMLDivElement;
+		const atTop = el.scrollTop <= 0;
+		const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+		// If scrolling up at top or scrolling down at bottom, prevent parent scroll
+		if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
+			e.preventDefault();
+		}
+	}
+
 	onMount(() => {
 		loadTask();
 
@@ -370,11 +382,13 @@
 			logsByAttempt = logBufferMap;
 			logBufferMap = {};
 			historicalDone = true;
-			// Default to latest attempt
+			// Default to latest attempt and auto-scroll to bottom
 			const keys = Object.keys(logsByAttempt).map(Number);
 			if (keys.length > 0) {
 				activeAttemptTab = Math.max(...keys);
 			}
+			lastLogCount = 0;
+			autoScroll = true;
 		});
 
 		return () => {
@@ -1339,7 +1353,7 @@
 											<ChevronDown class="w-3.5 h-3.5 transition-transform {showRetryContext ? 'rotate-180' : ''}" />
 										</button>
 										{#if showRetryContext}
-											<pre class="mt-2 text-xs font-mono bg-zinc-900/50 text-white rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap border border-border">{task.retry_context}</pre>
+											<pre class="mt-2 text-xs font-mono bg-zinc-900/50 text-white rounded-lg p-3 max-h-48 overflow-y-auto overscroll-contain whitespace-pre-wrap border border-border">{task.retry_context}</pre>
 										{/if}
 									</div>
 								{/if}
@@ -1446,7 +1460,8 @@
 						<div
 							bind:this={logsContainer}
 							onscroll={handleLogsScroll}
-							class="terminal-container h-[250px] sm:h-[400px] lg:h-[500px] w-full bg-zinc-950 p-3 sm:p-4 overflow-y-auto"
+							onwheel={handleLogsWheel}
+							class="terminal-container h-[250px] sm:h-[400px] lg:h-[500px] w-full bg-zinc-950 p-3 sm:p-4 overflow-y-auto overscroll-contain"
 						>
 						{#if logs.length > 0}
 							<pre class="log-output text-xs font-mono whitespace-pre-wrap leading-relaxed">{@html renderedLogs}</pre>

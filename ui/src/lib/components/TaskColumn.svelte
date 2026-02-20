@@ -42,7 +42,7 @@
 			</span>
 		</div>
 	</div>
-	<div class="space-y-2 sm:flex-1 overflow-y-auto p-2">
+	<div class="space-y-2 sm:flex-1 overflow-y-auto overscroll-contain p-2">
 		{#each tasks as task (task.id)}
 			<TaskCard
 				{task}
