@@ -2,6 +2,7 @@ import { API_BASE_URL } from './config/api';
 import type { Task } from './models/task';
 import type { Repo, GitHubRepo } from './models/repo';
 import type { Epic, ProposedTask } from './models/epic';
+import type { AgentMetrics } from './models/agent-metrics';
 
 export class VerveClient {
 	private baseUrl: string;
@@ -262,6 +263,16 @@ export class VerveClient {
 		if (!res.ok) {
 			throw new Error('Failed to bulk delete tasks');
 		}
+	}
+
+	// --- Agent Observability APIs ---
+
+	async getAgentMetrics(): Promise<AgentMetrics> {
+		const res = await fetch(`${this.baseUrl}/agents/metrics`);
+		if (!res.ok) {
+			throw new Error('Failed to fetch agent metrics');
+		}
+		return res.json();
 	}
 
 	// --- Settings APIs ---
