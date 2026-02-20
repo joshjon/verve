@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/joshjon/kit/errtag"
@@ -496,10 +497,11 @@ func (h *HTTPHandler) CompleteTask(c echo.Context) error {
 			}
 		}
 
-		// Retryable failure (e.g. Claude rate limit or session max usage exceeded):
-		// schedule a retry back to pending instead of marking as failed.
+		// Retryable failure (e.g. Claude rate limit, network error, or other
+		// transient issue): schedule a retry back to pending instead of marking
+		// as failed.
 		if req.Retryable && req.PrereqFailed == "" {
-			reason := "rate_limit: " + req.Error
+			reason := classifyRetryReason(req.Error)
 			if err := h.store.ScheduleRetry(ctx, id, reason); err != nil {
 				return jsonError(c, err)
 			}
@@ -1188,4 +1190,39 @@ func errorResponse(msg string) map[string]string {
 
 func statusOK() map[string]string {
 	return map[string]string{"status": "ok"}
+}
+
+// classifyRetryReason categorizes a retryable error message into a reason
+// string with a category prefix. The category is used by the circuit breaker
+// in Store.ScheduleRetry to detect consecutive same-type failures.
+func classifyRetryReason(errMsg string) string {
+	lower := strings.ToLower(errMsg)
+
+	// Check for rate limit / max usage errors
+	rateLimitPatterns := []string{"rate limit", "rate_limit", "too many requests", "max usage", "overloaded_error"}
+	for _, p := range rateLimitPatterns {
+		if strings.Contains(lower, p) {
+			return "rate_limit: " + errMsg
+		}
+	}
+
+	// Check for transient infrastructure errors (network, DNS, timeouts)
+	infraPatterns := []string{
+		"could not resolve host", "unable to access", "unable to look up",
+		"connection refused", "connection timed out", "connection reset",
+		"no such host", "network is unreachable", "temporary failure in name resolution",
+		"tls handshake timeout", "i/o timeout", "unexpected disconnect",
+		"the remote end hung up unexpectedly", "early eof",
+		"ssl_error", "gnutls_handshake", "failed to connect",
+		"failed to create container", "failed to start container",
+		"error waiting for container",
+	}
+	for _, p := range infraPatterns {
+		if strings.Contains(lower, p) {
+			return "transient: " + errMsg
+		}
+	}
+
+	// Default: use a generic retryable category
+	return "transient: " + errMsg
 }

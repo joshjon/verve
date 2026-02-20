@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -269,6 +270,67 @@ func TestIsRateLimitError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.line, func(t *testing.T) {
 			assert.Equal(t, tt.expected, isRateLimitError(tt.line))
+		})
+	}
+}
+
+func TestIsTransientError(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected bool
+	}{
+		{"fatal: unable to access 'https://github.com/org/repo.git/': Could not resolve host: github.com", true},
+		{"fatal: unable to access 'https://github.com/org/repo.git/'", true},
+		{"error: connection refused", true},
+		{"Connection timed out after 30 seconds", true},
+		{"read tcp: connection reset by peer", true},
+		{"dial tcp: lookup github.com: no such host", true},
+		{"network is unreachable", true},
+		{"Temporary failure in name resolution", true},
+		{"TLS handshake timeout", true},
+		{"i/o timeout", true},
+		{"fatal: the remote end hung up unexpectedly", true},
+		{"fatal: early EOF", true},
+		{"GnuTLS_handshake() failed: Error in the pull function", true},
+		{"Failed to connect to github.com port 443", true},
+		{"error: couldn't connect to server", true},
+		{"fatal: couldn't resolve host 'github.com'", true},
+		{"SSL_ERROR_SYSCALL", true},
+		{"fatal: unexpected disconnect while reading sideband packet", true},
+		// Non-transient errors
+		{"normal log line about building code", false},
+		{"successfully compiled the project", false},
+		{"tests failed with 3 errors", false},
+		{"syntax error on line 42", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isTransientError(tt.line), "line: %s", tt.line)
+		})
+	}
+}
+
+func TestIsDockerInfraError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"container create failure", fmt.Errorf("failed to create container verve-agent-tsk_123: connection refused"), true},
+		{"container start failure", fmt.Errorf("failed to start container verve-agent-tsk_123: OCI runtime error"), true},
+		{"log attach failure", fmt.Errorf("failed to attach logs: context canceled"), true},
+		{"container wait error", fmt.Errorf("error waiting for container: unexpected EOF"), true},
+		{"container conflict", fmt.Errorf("Conflict. The container name is already in use"), true},
+		{"generic application error", fmt.Errorf("exit code 1"), false},
+		{"compilation error", fmt.Errorf("build failed: syntax error"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isDockerInfraError(tt.err), "err: %v", tt.err)
 		})
 	}
 }
