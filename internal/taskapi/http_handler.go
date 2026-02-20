@@ -66,6 +66,9 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.DELETE("/tasks/:id", h.DeleteTask)
 	g.POST("/tasks/bulk-delete", h.BulkDeleteTasks)
 
+	// Agent observability
+	g.GET("/agents/metrics", h.GetAgentMetrics)
+
 	// Worker polling
 	g.GET("/tasks/poll", h.PollTask)
 
@@ -76,6 +79,18 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.PUT("/settings/default-model", h.SaveDefaultModel)
 	g.GET("/settings/default-model", h.GetDefaultModel)
 	g.DELETE("/settings/default-model", h.DeleteDefaultModel)
+}
+
+// --- Agent Observability Handlers ---
+
+// GetAgentMetrics handles GET /agents/metrics
+// Returns a snapshot of current agent activity and performance metrics.
+func (h *HTTPHandler) GetAgentMetrics(c echo.Context) error {
+	metrics, err := h.store.GetAgentMetrics(c.Request().Context())
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, metrics)
 }
 
 // --- Settings Handlers ---
