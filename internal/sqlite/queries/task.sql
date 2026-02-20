@@ -143,7 +143,12 @@ UPDATE task SET
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status IN ('review', 'failed');
 
--- name: Heartbeat :exec
+-- name: StopTask :execrows
+UPDATE task SET status = 'pending', ready = 0, close_reason = ?,
+  started_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ? AND status = 'running';
+
+-- name: Heartbeat :execrows
 UPDATE task SET last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status = 'running';
 
 -- name: ListStaleTasks :many

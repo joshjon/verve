@@ -33,7 +33,7 @@ type Querier interface {
 	EpicHeartbeat(ctx context.Context, id string) error
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (int64, error)
-	Heartbeat(ctx context.Context, id string) error
+	Heartbeat(ctx context.Context, id string) (int64, error)
 	ListActiveEpics(ctx context.Context) ([]*Epic, error)
 	ListEpics(ctx context.Context) ([]*Epic, error)
 	ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, error)
@@ -72,6 +72,7 @@ type Querier interface {
 	SetRetryContext(ctx context.Context, arg SetRetryContextParams) error
 	SetTaskPullRequest(ctx context.Context, arg SetTaskPullRequestParams) error
 	StartOverTask(ctx context.Context, arg StartOverTaskParams) (int64, error)
+	StopTask(ctx context.Context, arg StopTaskParams) (int64, error)
 	TaskExists(ctx context.Context, id string) (int64, error)
 	UpdateEpic(ctx context.Context, arg UpdateEpicParams) error
 	UpdateEpicStatus(ctx context.Context, arg UpdateEpicStatusParams) error

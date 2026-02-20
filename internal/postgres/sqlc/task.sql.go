@@ -226,13 +226,16 @@ func (q *Queries) HasTasksForRepo(ctx context.Context, repoID string) (bool, err
 	return exists, err
 }
 
-const heartbeat = `-- name: Heartbeat :exec
+const heartbeat = `-- name: Heartbeat :execrows
 UPDATE task SET last_heartbeat_at = NOW() WHERE id = $1 AND status = 'running'
 `
 
-func (q *Queries) Heartbeat(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, heartbeat, id)
-	return err
+func (q *Queries) Heartbeat(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, heartbeat, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listPendingTasks = `-- name: ListPendingTasks :many
@@ -990,6 +993,25 @@ func (q *Queries) StartOverTask(ctx context.Context, arg StartOverTaskParams) (i
 		arg.Description,
 		arg.AcceptanceCriteriaList,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const stopTask = `-- name: StopTask :execrows
+UPDATE task SET status = 'pending', ready = false, close_reason = $2,
+  started_at = NULL, updated_at = NOW()
+WHERE id = $1 AND status = 'running'
+`
+
+type StopTaskParams struct {
+	ID          string  `json:"id"`
+	CloseReason *string `json:"close_reason"`
+}
+
+func (q *Queries) StopTask(ctx context.Context, arg StopTaskParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stopTask, arg.ID, arg.CloseReason)
 	if err != nil {
 		return 0, err
 	}

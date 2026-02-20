@@ -145,7 +145,12 @@ UPDATE task SET
   updated_at = NOW()
 WHERE id = $1 AND status IN ('review', 'failed');
 
--- name: Heartbeat :exec
+-- name: StopTask :execrows
+UPDATE task SET status = 'pending', ready = false, close_reason = $2,
+  started_at = NULL, updated_at = NOW()
+WHERE id = $1 AND status = 'running';
+
+-- name: Heartbeat :execrows
 UPDATE task SET last_heartbeat_at = NOW() WHERE id = $1 AND status = 'running';
 
 -- name: ListStaleTasks :many

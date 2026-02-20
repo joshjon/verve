@@ -54,6 +54,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/:id/heartbeat", h.Heartbeat)
 	g.POST("/tasks/:id/complete", h.CompleteTask)
 	g.POST("/tasks/:id/close", h.CloseTask)
+	g.POST("/tasks/:id/stop", h.StopTask)
 	g.POST("/tasks/:id/retry", h.RetryTask)
 	g.POST("/tasks/:id/start-over", h.StartOverTask)
 	g.POST("/tasks/:id/feedback", h.FeedbackTask)
@@ -445,16 +446,20 @@ func (h *HTTPHandler) AppendLogs(c echo.Context) error {
 	return c.JSON(http.StatusOK, statusOK())
 }
 
-// Heartbeat handles POST /tasks/:id/heartbeat
+// Heartbeat handles POST /tasks/:id/heartbeat.
+// Returns {"stopped": true} when the task is no longer running — either because
+// it was explicitly stopped, closed, or deleted — so the worker can cancel the
+// agent container immediately and avoid wasting resources.
 func (h *HTTPHandler) Heartbeat(c echo.Context) error {
 	id, err := task.ParseTaskID(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
 	}
-	if err := h.store.Heartbeat(c.Request().Context(), id); err != nil {
+	stillRunning, err := h.store.Heartbeat(c.Request().Context(), id)
+	if err != nil {
 		return jsonError(c, err)
 	}
-	return c.JSON(http.StatusOK, statusOK())
+	return c.JSON(http.StatusOK, map[string]bool{"stopped": !stillRunning})
 }
 
 // CompleteTask handles POST /tasks/:id/complete
@@ -681,6 +686,28 @@ func (h *HTTPHandler) CloseTask(c echo.Context) error {
 	}
 
 	t, err = h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+// StopTask handles POST /tasks/:id/stop — interrupts a running task.
+// The task transitions from running → pending with ready=false so the worker
+// stops execution and the task won't be picked up until manually retried.
+func (h *HTTPHandler) StopTask(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	ctx := c.Request().Context()
+
+	if err := h.store.StopTask(ctx, id, "Stopped by user"); err != nil {
+		return jsonError(c, err)
+	}
+
+	t, err := h.store.ReadTask(ctx, id)
 	if err != nil {
 		return jsonError(c, err)
 	}

@@ -45,7 +45,9 @@
 		PlayCircle,
 		RotateCcw,
 		Pencil,
-		Trash2
+		Trash2,
+		StopCircle,
+		Square
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -134,6 +136,7 @@
 	let showEditDialog = $state(false);
 	let showDeleteDialog = $state(false);
 	let deleting = $state(false);
+	let stopping = $state(false);
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
@@ -261,6 +264,8 @@
 		return `https://github.com/${r.full_name}/tree/${task.branch_name}`;
 	});
 
+	const isStopped = $derived(task && !task.ready && task.status === 'pending' && task.close_reason === 'Stopped by user');
+	const canStop = $derived(task?.status === 'running');
 	const canClose = $derived(task && !['closed', 'merged', 'failed'].includes(task.status));
 	const canStartOver = $derived(task?.status === 'review' || task?.status === 'failed');
 	const canRetry = $derived(task?.status === 'failed');
@@ -448,6 +453,18 @@
 			error = (e as Error).message;
 		} finally {
 			syncing = false;
+		}
+	}
+
+	async function handleStop() {
+		if (!task || stopping) return;
+		stopping = true;
+		try {
+			task = await client.stopTask(task.id);
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			stopping = false;
 		}
 	}
 
@@ -840,8 +857,33 @@
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 			<!-- Left column: Task details -->
 			<div class="space-y-6">
+				<!-- Stopped Banner -->
+				{#if isStopped}
+					<div class="rounded-lg border border-red-500/30 bg-red-500/5 px-5 py-4 flex items-center justify-between gap-4">
+						<div class="space-y-1.5">
+							<div class="flex items-center gap-2.5">
+								<StopCircle class="w-5 h-5 text-red-500 shrink-0" />
+								<span class="text-sm font-medium text-red-600 dark:text-red-400">Stopped</span>
+							</div>
+							<p class="text-xs text-muted-foreground">This task was manually stopped. The agent has been interrupted. Click retry to run the task again.</p>
+						</div>
+						<Button
+							size="sm"
+							onclick={handleToggleReady}
+							disabled={togglingReady}
+							class="gap-1.5 shrink-0 bg-green-700 hover:bg-green-800 dark:bg-green-800 dark:hover:bg-green-900 text-white"
+						>
+							{#if togglingReady}
+								<Loader2 class="w-4 h-4 animate-spin" />
+								Retrying...
+							{:else}
+								<RefreshCw class="w-4 h-4" />
+								Retry
+							{/if}
+						</Button>
+					</div>
 				<!-- Not Ready Banner -->
-				{#if !task.ready && task.status === 'pending'}
+				{:else if !task.ready && task.status === 'pending'}
 					<div class="rounded-lg border border-orange-500/30 bg-orange-500/5 px-5 py-4 flex items-center justify-between gap-4">
 						<div class="space-y-1.5">
 							<div class="flex items-center gap-2.5">
@@ -1251,8 +1293,8 @@
 							{/if}
 						</Card.Content>
 					</Card.Root>
-				<!-- Close Reason -->
-				{:else if task.close_reason}
+				<!-- Close Reason (don't show for stopped tasks since the banner handles that) -->
+				{:else if task.close_reason && !isStopped}
 					<Card.Root class="border-gray-500/30">
 						<Card.Header class="pb-0 gap-0">
 							<Card.Title class="text-base flex items-center gap-2">
@@ -1302,18 +1344,36 @@
 							{parsedAgentStatus.confidence} confidence
 						</Badge>
 					{/if}
-					{#if canRetry}
-						<div class="ml-auto">
-							{#if showRetryForm}
-								<Button size="sm" variant="ghost" onclick={() => (showRetryForm = false)} class="gap-1">
-									<X class="w-4 h-4" />
-									Cancel
+					{#if canStop || canRetry}
+						<div class="ml-auto flex items-center gap-2">
+							{#if canStop}
+								<Button
+									size="sm"
+									variant="outline"
+									onclick={handleStop}
+									disabled={stopping}
+									class="gap-1 border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+								>
+									{#if stopping}
+										<Loader2 class="w-4 h-4 animate-spin" />
+									{:else}
+										<Square class="w-4 h-4" />
+									{/if}
+									Stop Agent
 								</Button>
-							{:else}
-								<Button size="sm" variant="outline" onclick={() => (showRetryForm = true)} class="gap-1">
-									<RefreshCw class="w-4 h-4" />
-									Retry
-								</Button>
+							{/if}
+							{#if canRetry}
+								{#if showRetryForm}
+									<Button size="sm" variant="ghost" onclick={() => (showRetryForm = false)} class="gap-1">
+										<X class="w-4 h-4" />
+										Cancel
+									</Button>
+								{:else}
+									<Button size="sm" variant="outline" onclick={() => (showRetryForm = true)} class="gap-1">
+										<RefreshCw class="w-4 h-4" />
+										Retry
+									</Button>
+								{/if}
 							{/if}
 						</div>
 					{/if}

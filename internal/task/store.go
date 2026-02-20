@@ -504,7 +504,9 @@ func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, attempt int, logs
 
 
 // Heartbeat updates the last heartbeat time for a running task.
-func (s *Store) Heartbeat(ctx context.Context, id TaskID) error {
+// Returns true if the task is still running, false if it was stopped, closed,
+// or deleted — signalling the worker to cancel execution.
+func (s *Store) Heartbeat(ctx context.Context, id TaskID) (bool, error) {
 	return s.repo.Heartbeat(ctx, id)
 }
 
@@ -562,6 +564,21 @@ func (s *Store) SetTaskBranch(ctx context.Context, id TaskID, branchName string)
 // ListTasksInReviewNoPR returns tasks in review that have a branch but no PR yet.
 func (s *Store) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
 	return s.repo.ListTasksInReviewNoPR(ctx)
+}
+
+// StopTask transitions a running task back to pending with ready=false,
+// effectively interrupting the worker agent. The task won't be picked up
+// again until the user manually retries it.
+func (s *Store) StopTask(ctx context.Context, id TaskID, reason string) error {
+	ok, err := s.repo.StopTask(ctx, id, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // task was not in running status
+	}
+	s.publishTaskUpdated(ctx, id)
+	return nil
 }
 
 // CloseTask closes a task with an optional reason.
