@@ -10,6 +10,7 @@ import (
 	"github.com/joshjon/kit/errtag"
 	"github.com/labstack/echo/v4"
 
+	"verve/internal/epic"
 	"verve/internal/github"
 	"verve/internal/githubtoken"
 	"verve/internal/repo"
@@ -21,13 +22,14 @@ import (
 type HTTPHandler struct {
 	store              *task.Store
 	repoStore          *repo.Store
+	epicStore          *epic.Store
 	githubTokenService *githubtoken.Service
 	settingService     *setting.Service
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, repoStore *repo.Store, githubTokenService *githubtoken.Service, settingService *setting.Service) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, githubTokenService: githubTokenService, settingService: settingService}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, epicStore *epic.Store, githubTokenService *githubtoken.Service, settingService *setting.Service) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, epicStore: epicStore, githubTokenService: githubTokenService, settingService: settingService}
 }
 
 // Register adds the endpoints to the provided Echo router group.
@@ -880,8 +882,25 @@ func (h *HTTPHandler) DeleteTask(c echo.Context) error {
 
 	ctx := c.Request().Context()
 
+	// Read task before deletion to check epic association
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
 	if err := h.store.DeleteTask(ctx, id); err != nil {
 		return jsonError(c, err)
+	}
+
+	// If the task belonged to an epic, remove it from the epic's task_ids
+	// and check if the epic should be marked as completed.
+	if t.EpicID != "" && h.epicStore != nil {
+		epicID, parseErr := epic.ParseEpicID(t.EpicID)
+		if parseErr == nil {
+			if err := h.epicStore.RemoveTaskAndCheck(ctx, epicID, id.String()); err != nil {
+				c.Logger().Errorf("failed to update epic after task deletion: %v", err)
+			}
+		}
 	}
 
 	return c.JSON(http.StatusOK, statusOK())

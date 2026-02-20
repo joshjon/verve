@@ -115,6 +115,53 @@ func (q *Queries) EpicHeartbeat(ctx context.Context, id string) error {
 	return err
 }
 
+const listActiveEpics = `-- name: ListActiveEpics :many
+SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic
+WHERE status = 'active'
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListActiveEpics(ctx context.Context) ([]*Epic, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveEpics)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Epic
+	for rows.Next() {
+		var i Epic
+		if err := rows.Scan(
+			&i.ID,
+			&i.RepoID,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.ProposedTasks,
+			&i.TaskIds,
+			&i.PlanningPrompt,
+			&i.SessionLog,
+			&i.NotReady,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClaimedAt,
+			&i.LastHeartbeatAt,
+			&i.Feedback,
+			&i.FeedbackType,
+			&i.Model,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEpics = `-- name: ListEpics :many
 SELECT id, repo_id, title, description, status, proposed_tasks, task_ids, planning_prompt, session_log, not_ready, created_at, updated_at, claimed_at, last_heartbeat_at, feedback, feedback_type, model FROM epic ORDER BY created_at DESC
 `

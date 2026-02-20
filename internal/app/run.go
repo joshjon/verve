@@ -118,6 +118,7 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	epicRepo := postgres.NewEpicRepository(pool)
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
 	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
+	epicStore.SetTaskStatusReader(epic.NewTaskStatusReaderFunc(taskStore.ReadTaskStatus))
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
@@ -158,6 +159,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte, logger lo
 	epicRepo := sqlite.NewEpicRepository(db)
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
 	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
+	epicStore.SetTaskStatusReader(epic.NewTaskStatusReaderFunc(taskStore.ReadTaskStatus))
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
 }
@@ -185,8 +187,8 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 		srv.Add(echo.GET, "/*", uiHandler)
 	}
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.githubToken, s.setting))
-	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo, s.setting))
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.epic, s.githubToken, s.setting))
+	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo, s.task, s.setting))
 	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken))
 
 	// Background PR sync.
@@ -201,6 +203,9 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 
 	// Background stale epic reaper.
 	go backgroundEpicReaper(ctx, logger, s, 1*time.Minute, 15*time.Minute)
+
+	// Background epic completion checker.
+	go backgroundEpicCompletion(ctx, logger, s, 30*time.Second)
 
 	return Serve(ctx, logger, srv)
 }
@@ -267,6 +272,26 @@ func backgroundEpicReaper(ctx context.Context, logger log.Logger, s stores, inte
 				logger.Error("failed to timeout stale epics", "error", err)
 			} else if count > 0 {
 				logger.Info("timed out stale epics", "count", count)
+			}
+		}
+	}
+}
+
+func backgroundEpicCompletion(ctx context.Context, logger log.Logger, s stores, interval time.Duration) {
+	logger = logger.With("component", "epic_completion")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			count, err := s.epic.CheckActiveEpicsCompletion(ctx)
+			if err != nil {
+				logger.Error("failed to check epic completion", "error", err)
+			} else if count > 0 {
+				logger.Info("epics completed", "count", count)
 			}
 		}
 	}

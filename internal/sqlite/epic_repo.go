@@ -200,6 +200,35 @@ func (r *EpicRepository) ListStaleEpics(ctx context.Context, threshold time.Time
 	return unmarshalEpicList(rows), nil
 }
 
+func (r *EpicRepository) ListActiveEpics(ctx context.Context) ([]*epic.Epic, error) {
+	rows, err := r.db.ListActiveEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
+func (r *EpicRepository) RemoveTaskID(ctx context.Context, id epic.EpicID, taskID string) error {
+	// SQLite doesn't support array_remove, so read-modify-write
+	existing, err := r.db.ReadEpic(ctx, id.String())
+	if err != nil {
+		return tagEpicErr(err)
+	}
+	var taskIDs []string
+	_ = json.Unmarshal([]byte(existing.TaskIds), &taskIDs)
+	filtered := make([]string, 0, len(taskIDs))
+	for _, tid := range taskIDs {
+		if tid != taskID {
+			filtered = append(filtered, tid)
+		}
+	}
+	taskIDsJSON, _ := json.Marshal(filtered)
+	return tagEpicErr(r.db.SetEpicTaskIDs(ctx, sqlc.SetEpicTaskIDsParams{
+		TaskIds: string(taskIDsJSON),
+		ID:      id.String(),
+	}))
+}
+
 func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
 	e := &epic.Epic{
 		ID:              epic.MustParseEpicID(in.ID),

@@ -90,3 +90,8 @@ WHERE claimed_at IS NOT NULL
   AND last_heartbeat_at < ?
   AND status IN ('planning', 'draft')
 ORDER BY last_heartbeat_at ASC;
+
+-- name: ListActiveEpics :many
+SELECT * FROM epic
+WHERE status = 'active'
+ORDER BY created_at ASC;

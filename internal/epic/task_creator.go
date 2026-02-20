@@ -40,6 +40,23 @@ func (f *TaskCreatorFunc) CreateTaskFromEpic(ctx context.Context, repoID, title,
 	return f.fn(ctx, repoID, title, description, dependsOn, acceptanceCriteria, epicID, ready, model)
 }
 
+// TaskStatusReadFunc is a function that reads a task status by ID.
+type TaskStatusReadFunc func(ctx context.Context, taskID string) (string, error)
+
+// TaskStatusReaderFunc adapts a function to the TaskStatusReader interface.
+type TaskStatusReaderFunc struct {
+	fn TaskStatusReadFunc
+}
+
+// NewTaskStatusReaderFunc creates a TaskStatusReader from a function.
+func NewTaskStatusReaderFunc(fn TaskStatusReadFunc) *TaskStatusReaderFunc {
+	return &TaskStatusReaderFunc{fn: fn}
+}
+
+func (f *TaskStatusReaderFunc) ReadTaskStatus(ctx context.Context, taskID string) (string, error) {
+	return f.fn(ctx, taskID)
+}
+
 // Now is a helper for generating timestamps.
 func Now() time.Time {
 	return time.Now()

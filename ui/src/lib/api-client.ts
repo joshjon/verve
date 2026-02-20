@@ -340,6 +340,14 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async getEpicTasks(id: string): Promise<{ id: string; title: string; status: string }[]> {
+		const res = await fetch(`${this.baseUrl}/epics/${id}/tasks`);
+		if (!res.ok) {
+			throw new Error('Failed to fetch epic tasks');
+		}
+		return res.json();
+	}
+
 	async deleteEpic(id: string): Promise<void> {
 		const res = await fetch(`${this.baseUrl}/epics/${id}`, {
 			method: 'DELETE'

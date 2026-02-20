@@ -26,4 +26,9 @@ type Repository interface {
 	ClearEpicFeedback(ctx context.Context, id EpicID) error
 	ReleaseEpicClaim(ctx context.Context, id EpicID) error
 	ListStaleEpics(ctx context.Context, threshold time.Time) ([]*Epic, error)
+
+	// ListActiveEpics returns all epics in active status.
+	ListActiveEpics(ctx context.Context) ([]*Epic, error)
+	// RemoveTaskID removes a task ID from an epic's task_ids array.
+	RemoveTaskID(ctx context.Context, id EpicID, taskID string) error
 }
