@@ -1261,6 +1261,79 @@ func TestCompleteTask_RetryableWithPrereqFailed_NotRetried(t *testing.T) {
 	assert.Equal(t, task.StatusFailed, tsk.Status, "prereq failures should not be retried even if retryable flag is set")
 }
 
+func TestCompleteTask_TransientFailure_SchedulesRetry(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"failed to create container verve-agent-tsk_123: connection refused","retryable":true}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusPending, tsk.Status, "expected task to be scheduled for retry on transient error")
+	assert.Equal(t, 2, tsk.Attempt, "expected attempt to be incremented")
+	assert.Contains(t, tsk.RetryReason, "transient:", "expected retry reason to have transient category prefix")
+}
+
+func TestCompleteTask_NetworkFailure_SchedulesRetry(t *testing.T) {
+	handler, taskRepo, _, testRepo := setupHandler()
+	e := echo.New()
+
+	tsk := task.NewTask(testRepo.ID.String(), "title", "desc", nil, nil, 0, false, "sonnet", true)
+	tsk.Status = task.StatusRunning
+	taskRepo.tasks[tsk.ID.String()] = tsk
+	taskRepo.taskStatuses[tsk.ID.String()] = tsk.Status
+
+	body := `{"success":false,"error":"fatal: unable to access 'https://github.com/org/repo.git/': Could not resolve host: github.com","retryable":true}`
+	c, rec := newContext(e, http.MethodPost, "/tasks/"+tsk.ID.String()+"/complete", body)
+	c.SetParamNames("id")
+	c.SetParamValues(tsk.ID.String())
+
+	err := handler.CompleteTask(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, task.StatusPending, tsk.Status, "expected task to be scheduled for retry on network error")
+	assert.Equal(t, 2, tsk.Attempt, "expected attempt to be incremented")
+	assert.Contains(t, tsk.RetryReason, "transient:", "expected retry reason to have transient category prefix")
+}
+
+func TestClassifyRetryReason(t *testing.T) {
+	tests := []struct {
+		name       string
+		errMsg     string
+		wantPrefix string
+	}{
+		{"rate limit", "Claude rate limit exceeded", "rate_limit: "},
+		{"max usage", "Claude max usage exceeded", "rate_limit: "},
+		{"too many requests", "API returned Too many requests", "rate_limit: "},
+		{"overloaded error", "overloaded_error from API", "rate_limit: "},
+		{"network error", "Could not resolve host: github.com", "transient: "},
+		{"connection refused", "connection refused", "transient: "},
+		{"connection timeout", "connection timed out", "transient: "},
+		{"DNS failure", "temporary failure in name resolution", "transient: "},
+		{"docker create error", "failed to create container: OCI error", "transient: "},
+		{"docker start error", "failed to start container: no space left", "transient: "},
+		{"unknown retryable", "some unknown error", "transient: "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := classifyRetryReason(tt.errMsg)
+			assert.True(t, strings.HasPrefix(result, tt.wantPrefix),
+				"expected prefix %q, got %q", tt.wantPrefix, result)
+			assert.Contains(t, result, tt.errMsg, "expected result to contain original error message")
+		})
+	}
+}
+
 func TestDeleteTask_FailedWithLogs(t *testing.T) {
 	handler, taskRepo, _, testRepo := setupHandler()
 	e := echo.New()

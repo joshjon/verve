@@ -357,6 +357,7 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	var prereqFailed string
 	var noChanges bool
 	var rateLimited bool
+	var transientError bool
 	var markerMu sync.Mutex
 
 	// Log callback - called from Docker log streaming goroutine
@@ -459,6 +460,14 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 			markerMu.Unlock()
 			taskLogger.Warn("detected Claude rate limit or max usage error")
 		}
+
+		// Detect transient infrastructure errors (network, DNS, timeouts)
+		if isTransientError(line) {
+			markerMu.Lock()
+			transientError = true
+			markerMu.Unlock()
+			taskLogger.Warn("detected transient infrastructure error", "line", line)
+		}
 	}
 
 	// Create agent config from worker config + server-provided credentials
@@ -519,13 +528,15 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 	capturedPrereqFailed := prereqFailed
 	capturedNoChanges := noChanges
 	capturedRateLimited := rateLimited
+	capturedTransientError := transientError
 	markerMu.Unlock()
 
 	// Report completion with PR info, agent status, and cost
 	switch {
 	case result.Error != nil:
-		taskLogger.Error("task failed", "error", result.Error)
-		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false, capturedRateLimited)
+		retryable := capturedRateLimited || capturedTransientError || isDockerInfraError(result.Error)
+		taskLogger.Error("task failed", "error", result.Error, "retryable", retryable)
+		_ = w.completeTask(ctx, task.ID, false, result.Error.Error(), "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false, retryable)
 	case result.Success:
 		if capturedNoChanges {
 			taskLogger.Info("task completed — no changes needed")
@@ -538,8 +549,9 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		if capturedPrereqFailed != "" {
 			errMsg = "prerequisite check failed"
 		}
-		taskLogger.Error("task failed", "exit_code", result.ExitCode)
-		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false, capturedRateLimited)
+		retryable := capturedRateLimited || capturedTransientError
+		taskLogger.Error("task failed", "exit_code", result.ExitCode, "retryable", retryable)
+		_ = w.completeTask(ctx, task.ID, false, errMsg, "", 0, "", capturedAgentStatus, capturedCostUSD, capturedPrereqFailed, false, retryable)
 	}
 }
 
@@ -781,6 +793,67 @@ func isRateLimitError(line string) bool {
 	lower := strings.ToLower(line)
 	for _, pattern := range rateLimitPatterns {
 		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// transientErrorPatterns are substrings in agent output that indicate
+// transient infrastructure errors (network issues, DNS failures, timeouts).
+// These are temporary and the task should be retried automatically.
+var transientErrorPatterns = []string{
+	"could not resolve host",
+	"unable to access",
+	"unable to look up",
+	"connection refused",
+	"connection timed out",
+	"connection reset by peer",
+	"no such host",
+	"network is unreachable",
+	"temporary failure in name resolution",
+	"tls handshake timeout",
+	"i/o timeout",
+	"unexpected disconnect",
+	"the remote end hung up unexpectedly",
+	"early eof",
+	"ssl_error",
+	"gnutls_handshake",
+	"failed to connect",
+	"couldn't connect to server",
+	"couldn't resolve host",
+}
+
+// isTransientError checks if a log line indicates a transient infrastructure
+// error such as a network failure, DNS issue, or connection timeout.
+func isTransientError(line string) bool {
+	lower := strings.ToLower(line)
+	for _, pattern := range transientErrorPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// isDockerInfraError checks if a RunResult error is a Docker infrastructure
+// error (container creation/start failure) that is likely transient and should
+// be retried.
+func isDockerInfraError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	infraPatterns := []string{
+		"failed to create container",
+		"failed to start container",
+		"failed to attach logs",
+		"error waiting for container",
+		"no such container",
+		"conflict",
+	}
+	for _, p := range infraPatterns {
+		if strings.Contains(msg, p) {
 			return true
 		}
 	}
