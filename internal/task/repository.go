@@ -76,4 +76,6 @@ type TaskRepository interface {
 	// ListStaleTasks returns running tasks whose last heartbeat is before the given time.
 	ListStaleTasks(ctx context.Context, before time.Time) ([]*Task, error)
 	DeleteTask(ctx context.Context, id TaskID) error
+	// ListTasksByEpic returns all tasks belonging to a given epic.
+	ListTasksByEpic(ctx context.Context, epicID string) ([]*Task, error)
 }

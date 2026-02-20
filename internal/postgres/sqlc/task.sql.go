@@ -382,6 +382,58 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 	return items, nil
 }
 
+const listTasksByEpic = `-- name: ListTasksByEpic :many
+SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, last_heartbeat_at, epic_id FROM task WHERE epic_id = $1 ORDER BY created_at ASC
+`
+
+func (q *Queries) ListTasksByEpic(ctx context.Context, epicID *string) ([]*Task, error) {
+	rows, err := q.db.Query(ctx, listTasksByEpic, epicID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.RepoID,
+			&i.Description,
+			&i.Status,
+			&i.PullRequestUrl,
+			&i.PrNumber,
+			&i.DependsOn,
+			&i.CloseReason,
+			&i.Attempt,
+			&i.MaxAttempts,
+			&i.RetryReason,
+			&i.AgentStatus,
+			&i.RetryContext,
+			&i.ConsecutiveFailures,
+			&i.CostUsd,
+			&i.MaxCostUsd,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SkipPr,
+			&i.BranchName,
+			&i.Title,
+			&i.AcceptanceCriteriaList,
+			&i.Model,
+			&i.StartedAt,
+			&i.Ready,
+			&i.LastHeartbeatAt,
+			&i.EpicID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTasksByRepo = `-- name: ListTasksByRepo :many
 SELECT id, repo_id, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, created_at, updated_at, skip_pr, branch_name, title, acceptance_criteria_list, model, started_at, ready, last_heartbeat_at, epic_id FROM task WHERE repo_id = $1 ORDER BY created_at DESC
 `

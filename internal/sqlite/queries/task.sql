@@ -148,3 +148,6 @@ UPDATE task SET last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE 
 
 -- name: ListStaleTasks :many
 SELECT * FROM task WHERE status = 'running' AND last_heartbeat_at IS NOT NULL AND last_heartbeat_at < ? ORDER BY started_at;
+
+-- name: ListTasksByEpic :many
+SELECT * FROM task WHERE epic_id = ? ORDER BY created_at ASC;

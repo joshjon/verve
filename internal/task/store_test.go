@@ -469,6 +469,10 @@ func (m *mockRepository) DeleteTask(_ context.Context, id TaskID) error {
 	return nil
 }
 
+func (m *mockRepository) ListTasksByEpic(_ context.Context, _ string) ([]*Task, error) {
+	return nil, nil
+}
+
 // --- Store tests ---
 
 func TestStore_CreateTask_Success(t *testing.T) {

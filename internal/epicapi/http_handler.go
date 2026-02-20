@@ -114,13 +114,37 @@ func (h *HTTPHandler) GetEpic(c echo.Context) error {
 }
 
 // DeleteEpic handles DELETE /epics/:id
+// Deletes the epic and all of its child tasks (including their logs).
 func (h *HTTPHandler) DeleteEpic(c echo.Context) error {
 	id, err := epic.ParseEpicID(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
 	}
 
-	if err := h.store.DeleteEpic(c.Request().Context(), id); err != nil {
+	ctx := c.Request().Context()
+
+	// Verify epic exists before proceeding.
+	if _, err := h.store.ReadEpic(ctx, id); err != nil {
+		return jsonError(c, err)
+	}
+
+	// Delete all child tasks by querying on epic_id (covers tasks that may
+	// have been removed from the epic's task_ids array but still reference it).
+	// Each DeleteTask call also deletes the task's logs and removes it from
+	// other tasks' depends_on lists.
+	if h.taskStore != nil {
+		tasks, listErr := h.taskStore.ListTasksByEpic(ctx, id.String())
+		if listErr != nil {
+			c.Logger().Errorf("failed to list tasks for epic %s: %v", id, listErr)
+		}
+		for _, t := range tasks {
+			if err := h.taskStore.DeleteTask(ctx, t.ID); err != nil {
+				c.Logger().Errorf("failed to delete task %s during epic deletion: %v", t.ID, err)
+			}
+		}
+	}
+
+	if err := h.store.DeleteEpic(ctx, id); err != nil {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, statusOK())

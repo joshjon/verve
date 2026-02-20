@@ -122,6 +122,11 @@ func (s *Store) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, er
 	return s.repo.ListTasksByRepo(ctx, repoID)
 }
 
+// ListTasksByEpic returns all tasks belonging to a given epic.
+func (s *Store) ListTasksByEpic(ctx context.Context, epicID string) ([]*Task, error) {
+	return s.repo.ListTasksByEpic(ctx, epicID)
+}
+
 // ListTasksInReviewByRepo returns tasks in review status for a given repo.
 func (s *Store) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error) {
 	return s.repo.ListTasksInReviewByRepo(ctx, repoID)
