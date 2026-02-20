@@ -19,10 +19,11 @@ func main() {
 	logger := log.NewLogger(log.WithDevelopment())
 
 	cfg := app.Config{
-		Port:          7400,
-		UI:            os.Getenv("UI") == "true",
-		SQLiteDir:     os.Getenv("SQLITE_DIR"),
-		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		Port:                     7400,
+		UI:                       os.Getenv("UI") == "true",
+		SQLiteDir:                os.Getenv("SQLITE_DIR"),
+		EncryptionKey:            os.Getenv("ENCRYPTION_KEY"),
+		GitHubInsecureSkipVerify: os.Getenv("GITHUB_INSECURE_SKIP_VERIFY") == "true",
 		Postgres: app.PostgresConfig{
 			User:     os.Getenv("POSTGRES_USER"),
 			Password: os.Getenv("POSTGRES_PASSWORD"),
@@ -43,6 +44,10 @@ func main() {
 
 	if cfg.EncryptionKey == "" {
 		logger.Warn("ENCRYPTION_KEY not set, GitHub token storage will be unavailable")
+	}
+
+	if cfg.GitHubInsecureSkipVerify {
+		logger.Warn("GITHUB_INSECURE_SKIP_VERIFY is enabled — TLS certificate verification is disabled for GitHub API calls")
 	}
 
 	if err := app.Run(ctx, logger, cfg); err != nil {

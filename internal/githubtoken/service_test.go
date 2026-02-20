@@ -76,7 +76,7 @@ func TestIsValidTokenPrefix(t *testing.T) {
 
 func TestService_SaveAndGetToken(t *testing.T) {
 	repo := &mockTokenRepo{}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	err := svc.SaveToken(context.Background(), "ghp_testtoken123")
 	require.NoError(t, err, "save")
@@ -93,7 +93,7 @@ func TestService_SaveAndGetToken(t *testing.T) {
 
 func TestService_SaveFineGrainedToken(t *testing.T) {
 	repo := &mockTokenRepo{}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	err := svc.SaveToken(context.Background(), "github_pat_testtoken123")
 	require.NoError(t, err, "save")
@@ -103,7 +103,7 @@ func TestService_SaveFineGrainedToken(t *testing.T) {
 
 func TestService_GetClient(t *testing.T) {
 	repo := &mockTokenRepo{}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	// Before save, client should be nil
 	assert.Nil(t, svc.GetClient(), "expected nil client before save")
@@ -116,7 +116,7 @@ func TestService_GetClient(t *testing.T) {
 
 func TestService_DeleteToken(t *testing.T) {
 	repo := &mockTokenRepo{}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	_ = svc.SaveToken(context.Background(), "ghp_testtoken123")
 	require.True(t, svc.HasToken(), "expected token to be saved")
@@ -140,7 +140,7 @@ func TestService_Load(t *testing.T) {
 	repo.stored = true
 
 	// Now load it
-	svc := NewService(repo, key)
+	svc := NewService(repo, key, false)
 	err = svc.Load(context.Background())
 	require.NoError(t, err, "load")
 
@@ -150,7 +150,7 @@ func TestService_Load(t *testing.T) {
 
 func TestService_Load_NoToken(t *testing.T) {
 	repo := &mockTokenRepo{stored: false}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	err := svc.Load(context.Background())
 	require.NoError(t, err, "load with no token should not error")
@@ -160,7 +160,7 @@ func TestService_Load_NoToken(t *testing.T) {
 
 func TestService_Load_ReadError(t *testing.T) {
 	repo := &mockTokenRepo{readErr: errors.New("db error")}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	err := svc.Load(context.Background())
 	assert.Error(t, err, "expected error from load")
@@ -168,7 +168,7 @@ func TestService_Load_ReadError(t *testing.T) {
 
 func TestService_SaveToken_RepoError(t *testing.T) {
 	repo := &mockTokenRepo{upsertErr: errors.New("db error")}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	err := svc.SaveToken(context.Background(), "ghp_test")
 	assert.Error(t, err, "expected error from save")
@@ -176,7 +176,7 @@ func TestService_SaveToken_RepoError(t *testing.T) {
 
 func TestService_DeleteToken_RepoError(t *testing.T) {
 	repo := &mockTokenRepo{deleteErr: errors.New("db error")}
-	svc := NewService(repo, validKey())
+	svc := NewService(repo, validKey(), false)
 
 	_ = svc.SaveToken(context.Background(), "ghp_test")
 	repo.deleteErr = errors.New("db error")

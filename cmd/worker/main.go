@@ -21,12 +21,13 @@ func main() {
 
 	// Load configuration from environment
 	cfg := worker.Config{
-		APIURL:               getEnvOrDefault("API_URL", "http://localhost:7400"),
-		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
-		ClaudeCodeOAuthToken: os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
-		AgentImage:           getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
-		MaxConcurrentTasks:   getEnvOrDefaultInt(logger, "MAX_CONCURRENT_TASKS", 3),
-		DryRun:               os.Getenv("DRY_RUN") == "true",
+		APIURL:                   getEnvOrDefault("API_URL", "http://localhost:7400"),
+		AnthropicAPIKey:          os.Getenv("ANTHROPIC_API_KEY"),
+		ClaudeCodeOAuthToken:     os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
+		AgentImage:               getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
+		MaxConcurrentTasks:       getEnvOrDefaultInt(logger, "MAX_CONCURRENT_TASKS", 3),
+		DryRun:                   os.Getenv("DRY_RUN") == "true",
+		GitHubInsecureSkipVerify: os.Getenv("GITHUB_INSECURE_SKIP_VERIFY") == "true",
 	}
 
 	// Validate required configuration — need at least one auth method
@@ -38,6 +39,10 @@ func main() {
 	authMethod := "api_key"
 	if cfg.ClaudeCodeOAuthToken != "" {
 		authMethod = "oauth"
+	}
+
+	if cfg.GitHubInsecureSkipVerify {
+		logger.Warn("GITHUB_INSECURE_SKIP_VERIFY is enabled — TLS certificate verification is disabled for GitHub operations in agent containers")
 	}
 
 	logger.Info("worker configured",

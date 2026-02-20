@@ -12,13 +12,30 @@ import (
 )
 
 func TestNewClient_EmptyToken(t *testing.T) {
-	c := NewClient("")
+	c := NewClient("", false)
 	assert.Nil(t, c, "expected nil client for empty token")
 }
 
 func TestNewClient_ValidToken(t *testing.T) {
-	c := NewClient("ghp_test")
+	c := NewClient("ghp_test", false)
 	assert.NotNil(t, c, "expected non-nil client for valid token")
+}
+
+func TestNewClient_InsecureSkipVerify(t *testing.T) {
+	c := NewClient("ghp_test", true)
+	require.NotNil(t, c, "expected non-nil client")
+
+	transport, ok := c.httpClient.Transport.(*http.Transport)
+	require.True(t, ok, "expected *http.Transport")
+	assert.True(t, transport.TLSClientConfig.InsecureSkipVerify, "expected InsecureSkipVerify=true")
+}
+
+func TestNewClient_SecureByDefault(t *testing.T) {
+	c := NewClient("ghp_test", false)
+	require.NotNil(t, c, "expected non-nil client")
+
+	// Default http.Client has nil Transport, which uses http.DefaultTransport
+	assert.Nil(t, c.httpClient.Transport, "expected nil transport (default) when insecureSkipVerify=false")
 }
 
 func TestClient_IsPRMerged(t *testing.T) {

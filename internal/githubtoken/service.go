@@ -36,8 +36,9 @@ type Repository interface {
 // Service manages the GitHub token lifecycle: encryption, storage, and
 // in-memory caching of the decrypted token and GitHub client.
 type Service struct {
-	repo Repository
-	key  []byte
+	repo               Repository
+	key                []byte
+	insecureSkipVerify bool
 
 	mu     sync.RWMutex
 	token  string
@@ -45,10 +46,11 @@ type Service struct {
 }
 
 // NewService creates a new GitHubTokenService.
-func NewService(repo Repository, encryptionKey []byte) *Service {
+func NewService(repo Repository, encryptionKey []byte, insecureSkipVerify bool) *Service {
 	return &Service{
-		repo: repo,
-		key:  encryptionKey,
+		repo:               repo,
+		key:                encryptionKey,
+		insecureSkipVerify: insecureSkipVerify,
 	}
 }
 
@@ -71,7 +73,7 @@ func (s *Service) Load(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.token = plaintext
-	s.client = github.NewClient(plaintext)
+	s.client = github.NewClient(plaintext, s.insecureSkipVerify)
 	return nil
 }
 
@@ -90,7 +92,7 @@ func (s *Service) SaveToken(ctx context.Context, plaintext string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.token = plaintext
-	s.client = github.NewClient(plaintext)
+	s.client = github.NewClient(plaintext, s.insecureSkipVerify)
 	return nil
 }
 
