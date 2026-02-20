@@ -150,3 +150,6 @@ UPDATE task SET last_heartbeat_at = NOW() WHERE id = $1 AND status = 'running';
 
 -- name: ListStaleTasks :many
 SELECT * FROM task WHERE status = 'running' AND last_heartbeat_at IS NOT NULL AND last_heartbeat_at < $1 ORDER BY started_at;
+
+-- name: ListTasksByEpic :many
+SELECT * FROM task WHERE epic_id = $1 ORDER BY created_at ASC;

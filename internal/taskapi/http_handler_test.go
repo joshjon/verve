@@ -390,6 +390,10 @@ func (m *mockTaskRepo) DeleteTask(_ context.Context, id task.TaskID) error {
 	return nil
 }
 
+func (m *mockTaskRepo) ListTasksByEpic(_ context.Context, _ string) ([]*task.Task, error) {
+	return nil, nil
+}
+
 // --- Mock repo repository ---
 
 type mockRepoRepo struct {

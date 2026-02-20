@@ -295,15 +295,21 @@ func (s *Store) CloseEpic(ctx context.Context, id EpicID) error {
 	return nil
 }
 
-// DeleteEpic deletes an epic (only if in draft status).
+// DeleteEpic deletes an epic. If the epic is being planned, the agent is
+// signalled to exit. Callers are responsible for deleting child tasks before
+// calling this method to avoid FK violations.
 func (s *Store) DeleteEpic(ctx context.Context, id EpicID) error {
 	e, err := s.repo.ReadEpic(ctx, id)
 	if err != nil {
 		return err
 	}
-	if e.Status != StatusDraft {
-		return fmt.Errorf("can only delete epics in draft status")
+
+	// Signal agent to exit if epic is in planning or draft state with a claim
+	if e.Status == StatusPlanning || e.Status == StatusDraft {
+		_ = s.repo.SetEpicFeedback(ctx, id, "", string(FeedbackClosed))
+		s.notifyFeedback(id.String())
 	}
+
 	return s.repo.DeleteEpic(ctx, id)
 }
 

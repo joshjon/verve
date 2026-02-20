@@ -425,6 +425,14 @@ func (r *TaskRepository) DeleteTask(ctx context.Context, id task.TaskID) error {
 	return tagTaskErr(r.db.DeleteTask(ctx, id.String()))
 }
 
+func (r *TaskRepository) ListTasksByEpic(ctx context.Context, epicID string) ([]*task.Task, error) {
+	rows, err := r.db.ListTasksByEpic(ctx, &epicID)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalTaskList(rows), nil
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {

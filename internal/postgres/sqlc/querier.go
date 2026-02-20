@@ -42,6 +42,7 @@ type Querier interface {
 	ListStaleEpics(ctx context.Context, lastHeartbeatAt pgtype.Timestamptz) ([]*Epic, error)
 	ListStaleTasks(ctx context.Context, lastHeartbeatAt pgtype.Timestamptz) ([]*Task, error)
 	ListTasks(ctx context.Context) ([]*Task, error)
+	ListTasksByEpic(ctx context.Context, epicID *string) ([]*Task, error)
 	ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error)
 	ListTasksInReview(ctx context.Context) ([]*Task, error)
 	ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error)

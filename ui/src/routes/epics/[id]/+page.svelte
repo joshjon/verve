@@ -58,6 +58,8 @@
 	let confirming = $state(false);
 	let notReady = $state(false);
 	let closing = $state(false);
+	let showDeleteConfirm = $state(false);
+	let deleting = $state(false);
 
 	// Polling
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -242,6 +244,22 @@
 		}
 	}
 
+	async function handleDelete() {
+		if (!epic) return;
+		deleting = true;
+		error = null;
+		try {
+			await client.deleteEpic(epic.id);
+			epicStore.removeEpic(epic.id);
+			goto('/epics');
+		} catch (err) {
+			error = (err as Error).message;
+		} finally {
+			deleting = false;
+			showDeleteConfirm = false;
+		}
+	}
+
 	function getStatusColor(status: string) {
 		switch (status) {
 			case 'draft':
@@ -346,6 +364,10 @@
 						Close Epic
 					</Button>
 				{/if}
+				<Button variant="outline" size="sm" onclick={() => (showDeleteConfirm = true)} class="gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10">
+					<Trash2 class="w-3.5 h-3.5" />
+					Delete
+				</Button>
 			</div>
 		</header>
 
@@ -726,3 +748,37 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Delete confirmation dialog -->
+{#if showDeleteConfirm}
+	<div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" role="dialog">
+		<div class="bg-background border rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+			<div class="flex items-center gap-3 mb-4">
+				<div class="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
+					<Trash2 class="w-5 h-5 text-red-400" />
+				</div>
+				<div>
+					<h3 class="font-semibold">Delete Epic</h3>
+					<p class="text-sm text-muted-foreground">This action cannot be undone.</p>
+				</div>
+			</div>
+			<p class="text-sm text-muted-foreground mb-1">
+				This will permanently delete the epic <strong class="text-foreground">{epic?.title}</strong> and all of its {epic?.task_ids?.length ?? 0} child task{(epic?.task_ids?.length ?? 0) !== 1 ? 's' : ''}, including their logs.
+			</p>
+			<div class="flex items-center gap-2 justify-end mt-6">
+				<Button variant="ghost" size="sm" onclick={() => (showDeleteConfirm = false)} disabled={deleting}>
+					Cancel
+				</Button>
+				<Button variant="destructive" size="sm" onclick={handleDelete} disabled={deleting} class="gap-1.5">
+					{#if deleting}
+						<Loader2 class="w-3.5 h-3.5 animate-spin" />
+						Deleting...
+					{:else}
+						<Trash2 class="w-3.5 h-3.5" />
+						Delete Epic
+					{/if}
+				</Button>
+			</div>
+		</div>
+	</div>
+{/if}
