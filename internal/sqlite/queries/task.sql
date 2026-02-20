@@ -170,3 +170,6 @@ DELETE FROM task_log WHERE task_id IN (SELECT id FROM task WHERE epic_id = ?);
 
 -- name: BulkDeleteTasksByEpic :exec
 DELETE FROM task WHERE epic_id = ?;
+
+-- name: DeleteExpiredLogs :execrows
+DELETE FROM task_log WHERE created_at < ?;

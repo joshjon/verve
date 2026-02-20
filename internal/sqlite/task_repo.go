@@ -481,6 +481,11 @@ func (r *TaskRepository) BulkDeleteTasksByIDs(ctx context.Context, ids []string)
 	return nil
 }
 
+func (r *TaskRepository) DeleteExpiredLogs(ctx context.Context, before time.Time) (int64, error) {
+	n, err := r.db.DeleteExpiredLogs(ctx, before)
+	return n, tagTaskErr(err)
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {

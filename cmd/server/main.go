@@ -42,6 +42,15 @@ func main() {
 		cfg.TaskTimeout = d
 	}
 
+	if v := os.Getenv("LOG_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			logger.Error("invalid LOG_RETENTION", "value", v, "error", err)
+			os.Exit(1)
+		}
+		cfg.LogRetention = d
+	}
+
 	if cfg.EncryptionKey == "" {
 		logger.Warn("ENCRYPTION_KEY not set, GitHub token storage will be unavailable")
 	}

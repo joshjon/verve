@@ -12,6 +12,7 @@ type Config struct {
 	GitHubInsecureSkipVerify   bool           // Disable TLS certificate verification for GitHub API calls
 	CorsOrigins                []string
 	TaskTimeout                time.Duration // How long before a running task with no heartbeat is considered stale (default: 5m)
+	LogRetention               time.Duration // How long to keep task logs before deleting them (0 = keep forever)
 }
 
 // PostgresConfig holds PostgreSQL connection parameters.

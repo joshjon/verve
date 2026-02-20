@@ -503,6 +503,13 @@ func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, attempt int, logs
 }
 
 
+// DeleteExpiredLogs deletes all log entries older than the given retention duration.
+// Returns the number of log batches deleted.
+func (s *Store) DeleteExpiredLogs(ctx context.Context, retention time.Duration) (int64, error) {
+	before := time.Now().Add(-retention)
+	return s.repo.DeleteExpiredLogs(ctx, before)
+}
+
 // Heartbeat updates the last heartbeat time for a running task.
 // Returns true if the task is still running, false if it was stopped, closed,
 // or deleted — signalling the worker to cancel execution.

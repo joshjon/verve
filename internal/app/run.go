@@ -207,6 +207,12 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	// Background epic completion checker.
 	go backgroundEpicCompletion(ctx, logger, s, 30*time.Second)
 
+	// Background log retention cleanup.
+	if cfg.LogRetention > 0 {
+		logger.Info("log retention enabled", "retention", cfg.LogRetention.String())
+		go backgroundLogRetention(ctx, logger, s, 1*time.Hour, cfg.LogRetention)
+	}
+
 	return Serve(ctx, logger, srv)
 }
 
@@ -435,6 +441,34 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, interval t
 					// If pending, do nothing — wait for checks to complete.
 				}
 			}
+		}
+	}
+}
+
+func backgroundLogRetention(ctx context.Context, logger log.Logger, s stores, interval, retention time.Duration) {
+	logger = logger.With("component", "log_retention")
+
+	cleanup := func() {
+		count, err := s.task.DeleteExpiredLogs(ctx, retention)
+		if err != nil {
+			logger.Error("failed to delete expired logs", "error", err)
+		} else if count > 0 {
+			logger.Info("deleted expired logs", "count", count, "retention", retention.String())
+		}
+	}
+
+	// Run immediately on startup.
+	cleanup()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cleanup()
 		}
 	}
 }
