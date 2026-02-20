@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,13 +28,23 @@ type Client struct {
 
 // NewClient creates a new GitHub API client.
 // Returns nil if token is empty.
-func NewClient(token string) *Client {
+// If insecureSkipVerify is true, TLS certificate verification is disabled.
+// This may be required in networks with TLS-intercepting proxies.
+func NewClient(token string, insecureSkipVerify bool) *Client {
 	if token == "" {
 		return nil
 	}
+	httpClient := &http.Client{}
+	if insecureSkipVerify {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec // intentional for TLS-intercepting proxies
+			},
+		}
+	}
 	return &Client{
 		token:      token,
-		httpClient: &http.Client{},
+		httpClient: httpClient,
 	}
 }
 

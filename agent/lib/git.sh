@@ -9,6 +9,11 @@ configure_git() {
     echo "https://${GITHUB_TOKEN}@github.com" > /home/agent/.git-credentials
     git config --global user.name "Verve Agent"
     git config --global user.email ""
+
+    if [ "${GITHUB_INSECURE_SKIP_VERIFY}" = "true" ]; then
+        log_agent "TLS certificate verification disabled for git (GITHUB_INSECURE_SKIP_VERIFY=true)"
+        git config --global http.sslVerify false
+    fi
 }
 
 clone_repo() {

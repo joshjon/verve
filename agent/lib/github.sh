@@ -3,6 +3,13 @@
 
 # Depends on: log.sh (sourced by entrypoint.sh)
 
+# _curl_opts returns extra curl flags when TLS verification is disabled.
+_curl_opts() {
+    if [ "${GITHUB_INSECURE_SKIP_VERIFY}" = "true" ]; then
+        echo "--insecure"
+    fi
+}
+
 # Check whether an open pull request already exists for a given head branch.
 # Returns 0 (true) if a PR exists, 1 (false) otherwise.
 # Sets PR_URL to the HTML URL of the existing PR when found.
@@ -11,7 +18,7 @@ pr_exists_for_branch() {
     local head="$1"
 
     local response
-    response=$(curl -s -w "\n%{http_code}" \
+    response=$(curl -s -w "\n%{http_code}" $(_curl_opts) \
         -H "Authorization: token ${GITHUB_TOKEN}" \
         -H "Accept: application/vnd.github.v3+json" \
         "https://api.github.com/repos/${GITHUB_REPO}/pulls?head=${GITHUB_REPO%%/*}:${head}&state=open")
@@ -41,7 +48,7 @@ create_pr() {
     json_body=$(printf '%s' "$body" | jq -Rs .)
 
     local response
-    response=$(curl -s -w "\n%{http_code}" -X POST \
+    response=$(curl -s -w "\n%{http_code}" $(_curl_opts) -X POST \
         -H "Authorization: token ${GITHUB_TOKEN}" \
         -H "Accept: application/vnd.github.v3+json" \
         "https://api.github.com/repos/${GITHUB_REPO}/pulls" \

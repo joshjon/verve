@@ -93,12 +93,13 @@ type AgentConfig struct {
 	APIURL             string // For epic agent to call back to server
 
 	// Common fields
-	GitHubToken          string
-	GitHubRepo           string
-	AnthropicAPIKey      string
-	ClaudeCodeOAuthToken string // OAuth token (subscription-based, alternative to API key)
-	ClaudeModel          string
-	DryRun               bool
+	GitHubToken                string
+	GitHubRepo                 string
+	AnthropicAPIKey            string
+	ClaudeCodeOAuthToken       string // OAuth token (subscription-based, alternative to API key)
+	ClaudeModel                string
+	DryRun                     bool
+	GitHubInsecureSkipVerify   bool
 }
 
 // LogCallback is called for each log line from the container
@@ -117,6 +118,10 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		"WORK_TYPE=" + workType,
 		"GITHUB_TOKEN=" + cfg.GitHubToken,
 		"GITHUB_REPO=" + cfg.GitHubRepo,
+	}
+
+	if cfg.GitHubInsecureSkipVerify {
+		env = append(env, "GITHUB_INSECURE_SKIP_VERIFY=true")
 	}
 
 	// Pass whichever auth method is configured (OAuth token takes precedence)

@@ -80,12 +80,12 @@ func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKe
 		} else {
 			logger.Warn("Postgres not configured, using in-memory SQLite (data will not persist)")
 		}
-		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey, logger)
+		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey, cfg.GitHubInsecureSkipVerify, logger)
 	}
-	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey)
+	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey, cfg.GitHubInsecureSkipVerify)
 }
 
-func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte) (stores, func(), error) {
+func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte, ghInsecureSkipVerify bool) (stores, func(), error) {
 	pool, err := pgdb.Dial(ctx, cfg.User, cfg.Password, cfg.HostPort, cfg.Database)
 	if err != nil {
 		return stores{}, nil, fmt.Errorf("dial postgres: %w", err)
@@ -109,7 +109,7 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	var ghTokenService *githubtoken.Service
 	if encryptionKey != nil {
 		ghTokenRepo := postgres.NewGitHubTokenRepository(pool)
-		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey)
+		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey, ghInsecureSkipVerify)
 	}
 
 	settingRepo := postgres.NewSettingRepository(pool)
@@ -123,7 +123,7 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context, dir string, encryptionKey []byte, logger log.Logger) (stores, func(), error) {
+func initSQLite(ctx context.Context, dir string, encryptionKey []byte, ghInsecureSkipVerify bool, logger log.Logger) (stores, func(), error) {
 	var opts []sqlitedb.OpenOption
 	if dir != "" {
 		opts = append(opts, sqlitedb.WithDir(dir), sqlitedb.WithDBName("verve"))
@@ -150,7 +150,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte, logger lo
 	var ghTokenService *githubtoken.Service
 	if encryptionKey != nil {
 		ghTokenRepo := sqlite.NewGitHubTokenRepository(db)
-		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey)
+		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey, ghInsecureSkipVerify)
 	}
 
 	settingRepo := sqlite.NewSettingRepository(db)

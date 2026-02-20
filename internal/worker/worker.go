@@ -18,12 +18,13 @@ const workTypeEpic = "epic"
 
 // Config holds the worker configuration
 type Config struct {
-	APIURL               string
-	AnthropicAPIKey      string // API key auth (pay-per-use)
-	ClaudeCodeOAuthToken string // OAuth token auth (subscription-based, alternative to API key)
-	AgentImage           string // Docker image for agent - defaults to verve-agent:latest
-	MaxConcurrentTasks   int    // Maximum concurrent tasks (default: 1)
-	DryRun               bool   // Skip Claude and make a dummy change instead
+	APIURL                   string
+	AnthropicAPIKey          string // API key auth (pay-per-use)
+	ClaudeCodeOAuthToken     string // OAuth token auth (subscription-based, alternative to API key)
+	AgentImage               string // Docker image for agent - defaults to verve-agent:latest
+	MaxConcurrentTasks       int    // Maximum concurrent tasks (default: 1)
+	DryRun                   bool   // Skip Claude and make a dummy change instead
+	GitHubInsecureSkipVerify bool   // Disable TLS certificate verification for GitHub operations in agent containers
 }
 
 type Task struct {
@@ -446,22 +447,23 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 
 	// Create agent config from worker config + server-provided credentials
 	agentCfg := AgentConfig{
-		WorkType:             "task",
-		TaskID:               task.ID,
-		TaskTitle:            task.Title,
-		TaskDescription:      task.Description,
-		GitHubToken:          githubToken,
-		GitHubRepo:           repoFullName,
-		AnthropicAPIKey:      w.config.AnthropicAPIKey,
-		ClaudeCodeOAuthToken: w.config.ClaudeCodeOAuthToken,
-		ClaudeModel:          task.Model,
-		DryRun:               w.config.DryRun,
-		SkipPR:               task.SkipPR,
-		Attempt:              task.Attempt,
-		RetryReason:          task.RetryReason,
-		AcceptanceCriteria:   task.AcceptanceCriteria,
-		RetryContext:         task.RetryContext,
-		PreviousStatus:       task.AgentStatus,
+		WorkType:                 "task",
+		TaskID:                   task.ID,
+		TaskTitle:                task.Title,
+		TaskDescription:          task.Description,
+		GitHubToken:              githubToken,
+		GitHubRepo:               repoFullName,
+		AnthropicAPIKey:          w.config.AnthropicAPIKey,
+		ClaudeCodeOAuthToken:     w.config.ClaudeCodeOAuthToken,
+		ClaudeModel:              task.Model,
+		DryRun:                   w.config.DryRun,
+		GitHubInsecureSkipVerify: w.config.GitHubInsecureSkipVerify,
+		SkipPR:                   task.SkipPR,
+		Attempt:                  task.Attempt,
+		RetryReason:              task.RetryReason,
+		AcceptanceCriteria:       task.AcceptanceCriteria,
+		RetryContext:             task.RetryContext,
+		PreviousStatus:           task.AgentStatus,
 	}
 
 	// Start heartbeat goroutine
@@ -520,17 +522,18 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 	streamer := newEpicLogStreamer(ctx, w, ep.ID)
 
 	agentCfg := AgentConfig{
-		WorkType:             workTypeEpic,
-		EpicID:               ep.ID,
-		EpicTitle:            ep.Title,
-		EpicDescription:      ep.Description,
-		EpicPlanningPrompt:   ep.PlanningPrompt,
-		APIURL:               w.config.APIURL,
-		GitHubToken:          githubToken,
-		GitHubRepo:           repoFullName,
-		AnthropicAPIKey:      w.config.AnthropicAPIKey,
-		ClaudeCodeOAuthToken: w.config.ClaudeCodeOAuthToken,
-		ClaudeModel:          ep.Model,
+		WorkType:                 workTypeEpic,
+		EpicID:                   ep.ID,
+		EpicTitle:                ep.Title,
+		EpicDescription:          ep.Description,
+		EpicPlanningPrompt:       ep.PlanningPrompt,
+		APIURL:                   w.config.APIURL,
+		GitHubToken:              githubToken,
+		GitHubRepo:               repoFullName,
+		AnthropicAPIKey:          w.config.AnthropicAPIKey,
+		ClaudeCodeOAuthToken:     w.config.ClaudeCodeOAuthToken,
+		ClaudeModel:              ep.Model,
+		GitHubInsecureSkipVerify: w.config.GitHubInsecureSkipVerify,
 	}
 
 	// Start heartbeat goroutine
