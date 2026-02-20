@@ -179,6 +179,21 @@ func (r *EpicRepository) ListStaleEpics(ctx context.Context, threshold time.Time
 	return unmarshalEpicList(rows), nil
 }
 
+func (r *EpicRepository) ListActiveEpics(ctx context.Context) ([]*epic.Epic, error) {
+	rows, err := r.db.ListActiveEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unmarshalEpicList(rows), nil
+}
+
+func (r *EpicRepository) RemoveTaskID(ctx context.Context, id epic.EpicID, taskID string) error {
+	return tagEpicErr(r.db.RemoveEpicTaskID(ctx, sqlc.RemoveEpicTaskIDParams{
+		ID:          id.String(),
+		ArrayRemove: taskID,
+	}))
+}
+
 func unmarshalEpic(in *sqlc.Epic) *epic.Epic {
 	e := &epic.Epic{
 		ID:           epic.MustParseEpicID(in.ID),

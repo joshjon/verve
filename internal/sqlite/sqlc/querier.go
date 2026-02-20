@@ -30,6 +30,7 @@ type Querier interface {
 	FeedbackRetryTask(ctx context.Context, arg FeedbackRetryTaskParams) (int64, error)
 	HasTasksForRepo(ctx context.Context, repoID string) (int64, error)
 	Heartbeat(ctx context.Context, id string) error
+	ListActiveEpics(ctx context.Context) ([]*Epic, error)
 	ListEpics(ctx context.Context) ([]*Epic, error)
 	ListEpicsByRepo(ctx context.Context, repoID string) ([]*Epic, error)
 	ListPendingTasks(ctx context.Context) ([]*Task, error)

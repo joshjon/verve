@@ -21,13 +21,24 @@
 		PauseCircle,
 		CheckCircle2,
 		AlertCircle,
+		AlertTriangle,
 		RefreshCw,
-		Clock
+		Clock,
+		CircleDot,
+		GitMerge,
+		XCircle
 	} from 'lucide-svelte';
 
 	let epic = $state<Epic | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+
+	// Epic task statuses
+	type EpicTask = { id: string; title: string; status: string };
+	let epicTasks = $state<EpicTask[]>([]);
+	let failedTasks = $derived(epicTasks.filter((t) => t.status === 'failed'));
+	let isActive = $derived(epic?.status === 'active');
+	let isCompleted = $derived(epic?.status === 'completed');
 
 	// Planning session state
 	let sessionMessage = $state('');
@@ -98,10 +109,23 @@
 			if (epic.status === 'planning') {
 				startPolling();
 			}
+			// Load task statuses if epic has created tasks
+			if (epic.task_ids.length > 0) {
+				await loadEpicTasks();
+			}
 		} catch (err) {
 			error = (err as Error).message;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadEpicTasks() {
+		if (!epic) return;
+		try {
+			epicTasks = await client.getEpicTasks(epic.id);
+		} catch {
+			// Non-critical — don't block the page
 		}
 	}
 
@@ -242,6 +266,29 @@
 		const t = epic.proposed_tasks.find((pt) => pt.temp_id === tempId);
 		return t ? t.title : tempId;
 	}
+
+	function getTaskStatusColor(status: string): string {
+		switch (status) {
+			case 'pending':
+				return 'text-gray-400';
+			case 'running':
+				return 'text-blue-400';
+			case 'review':
+				return 'text-amber-400';
+			case 'merged':
+				return 'text-green-400';
+			case 'closed':
+				return 'text-gray-500';
+			case 'failed':
+				return 'text-red-400';
+			default:
+				return 'text-muted-foreground';
+		}
+	}
+
+	function getTaskForId(taskId: string): EpicTask | undefined {
+		return epicTasks.find((t) => t.id === taskId);
+	}
 </script>
 
 <div class="p-4 sm:p-6 flex-1 min-h-0 flex flex-col max-w-6xl mx-auto w-full">
@@ -331,6 +378,33 @@
 								</p>
 							</div>
 						{/if}
+					</div>
+				</Card.Content>
+			</Card.Root>
+		{/if}
+
+		<!-- Failed tasks warning banner -->
+		{#if isActive && failedTasks.length > 0}
+			<Card.Root class="mb-6 border-red-500/20 bg-red-500/5">
+				<Card.Content class="p-4">
+					<div class="flex items-start gap-3">
+						<AlertTriangle class="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+						<div>
+							<p class="text-sm font-medium text-red-400">
+								{failedTasks.length} failed task{failedTasks.length !== 1 ? 's' : ''} preventing epic completion
+							</p>
+							<div class="mt-2 space-y-1">
+								{#each failedTasks as ft}
+									<a
+										href="/tasks/{ft.id}"
+										class="flex items-center gap-1.5 text-xs text-red-400/80 hover:text-red-400 hover:underline"
+									>
+										<XCircle class="w-3 h-3" />
+										{ft.title}
+									</a>
+								{/each}
+							</div>
+						</div>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -620,12 +694,28 @@
 							<h3 class="text-xs font-semibold mb-2">Created Tasks</h3>
 							<div class="space-y-1.5">
 								{#each epic.task_ids as taskId}
+									{@const taskInfo = getTaskForId(taskId)}
 									<a
 										href="/tasks/{taskId}"
-										class="flex items-center gap-2 text-xs text-primary hover:underline"
+										class="flex items-center gap-2 text-xs hover:underline {taskInfo ? getTaskStatusColor(taskInfo.status) : 'text-primary'}"
 									>
-										<CheckCircle2 class="w-3 h-3" />
-										{taskId}
+										{#if taskInfo?.status === 'merged'}
+											<GitMerge class="w-3 h-3" />
+										{:else if taskInfo?.status === 'closed'}
+											<XCircle class="w-3 h-3" />
+										{:else if taskInfo?.status === 'failed'}
+											<AlertCircle class="w-3 h-3" />
+										{:else if taskInfo?.status === 'running'}
+											<Loader2 class="w-3 h-3 animate-spin" />
+										{:else if taskInfo?.status === 'review'}
+											<CircleDot class="w-3 h-3" />
+										{:else}
+											<CheckCircle2 class="w-3 h-3" />
+										{/if}
+										<span class="truncate">{taskInfo?.title ?? taskId}</span>
+										{#if taskInfo}
+											<span class="text-[10px] opacity-60 shrink-0">{taskInfo.status}</span>
+										{/if}
 									</a>
 								{/each}
 							</div>

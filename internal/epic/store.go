@@ -14,11 +14,17 @@ type TaskCreator interface {
 	CreateTaskFromEpic(ctx context.Context, repoID, title, description string, dependsOn, acceptanceCriteria []string, epicID string, ready bool, model string) (string, error)
 }
 
+// TaskStatusReader reads task statuses for epic completion checking.
+type TaskStatusReader interface {
+	ReadTaskStatus(ctx context.Context, taskID string) (string, error)
+}
+
 // Store wraps a Repository and adds application-level concerns for epics.
 type Store struct {
-	repo        Repository
-	taskCreator TaskCreator
-	logger      log.Logger
+	repo             Repository
+	taskCreator      TaskCreator
+	taskStatusReader TaskStatusReader
+	logger           log.Logger
 
 	// Pending epic notification (same pattern as task.Store)
 	pendingMu sync.Mutex
@@ -38,6 +44,12 @@ func NewStore(repo Repository, taskCreator TaskCreator, logger log.Logger) *Stor
 		pendingCh:     make(chan struct{}, 1),
 		feedbackChans: make(map[string]chan struct{}),
 	}
+}
+
+// SetTaskStatusReader sets the TaskStatusReader used for epic completion checks.
+// This is set after construction to avoid circular dependencies.
+func (s *Store) SetTaskStatusReader(reader TaskStatusReader) {
+	s.taskStatusReader = reader
 }
 
 // WaitForPending returns a channel that signals when a planning epic might be available.
@@ -319,6 +331,96 @@ func (s *Store) TimeoutStaleEpics(ctx context.Context, timeout time.Duration) (i
 		}
 		count++
 		s.notifyPending()
+	}
+	return count, nil
+}
+
+// RemoveTaskAndCheck removes a task ID from an epic's task_ids list and
+// checks if the epic should be marked as completed.
+func (s *Store) RemoveTaskAndCheck(ctx context.Context, id EpicID, taskID string) error {
+	if err := s.repo.RemoveTaskID(ctx, id, taskID); err != nil {
+		return err
+	}
+	return s.CheckAndCompleteEpic(ctx, id)
+}
+
+// CheckAndCompleteEpic checks whether all tasks in an active epic have reached
+// a terminal state (merged or closed). If so, the epic is transitioned to completed.
+// Tasks in failed status prevent completion — the epic stays active.
+func (s *Store) CheckAndCompleteEpic(ctx context.Context, id EpicID) error {
+	if s.taskStatusReader == nil {
+		return nil
+	}
+
+	e, err := s.repo.ReadEpic(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Only check active epics
+	if e.Status != StatusActive {
+		return nil
+	}
+
+	// An epic with no tasks shouldn't auto-complete
+	if len(e.TaskIDs) == 0 {
+		return nil
+	}
+
+	for _, taskID := range e.TaskIDs {
+		status, err := s.taskStatusReader.ReadTaskStatus(ctx, taskID)
+		if err != nil {
+			// Task may have been deleted without updating epic task_ids;
+			// treat missing tasks as not blocking completion.
+			continue
+		}
+		switch status {
+		case "merged", "closed":
+			// Terminal success — doesn't block
+			continue
+		case "failed":
+			// Failed tasks prevent completion
+			return nil
+		default:
+			// Task is still in progress (pending, running, review)
+			return nil
+		}
+	}
+
+	// All tasks are in terminal success state — complete the epic
+	s.logger.Info("all tasks completed, marking epic as completed", "epic_id", id.String())
+	return s.repo.UpdateEpicStatus(ctx, id, StatusCompleted)
+}
+
+// CheckActiveEpicsCompletion checks all active epics for completion.
+// This is intended to be called from a background loop.
+func (s *Store) CheckActiveEpicsCompletion(ctx context.Context) (int, error) {
+	if s.taskStatusReader == nil {
+		return 0, nil
+	}
+
+	epics, err := s.repo.ListActiveEpics(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, e := range epics {
+		if len(e.TaskIDs) == 0 {
+			continue
+		}
+		if err := s.CheckAndCompleteEpic(ctx, e.ID); err != nil {
+			s.logger.Error("failed to check epic completion", "epic_id", e.ID.String(), "error", err)
+			continue
+		}
+		// Re-read to check if status changed
+		updated, err := s.repo.ReadEpic(ctx, e.ID)
+		if err != nil {
+			continue
+		}
+		if updated.Status == StatusCompleted {
+			count++
+		}
 	}
 	return count, nil
 }

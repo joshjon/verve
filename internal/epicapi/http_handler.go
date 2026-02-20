@@ -10,18 +10,20 @@ import (
 	"verve/internal/epic"
 	"verve/internal/repo"
 	"verve/internal/setting"
+	"verve/internal/task"
 )
 
 // HTTPHandler handles epic HTTP requests.
 type HTTPHandler struct {
 	store          *epic.Store
 	repoStore      *repo.Store
+	taskStore      *task.Store
 	settingService *setting.Service
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *epic.Store, repoStore *repo.Store, settingService *setting.Service) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, settingService: settingService}
+func NewHTTPHandler(store *epic.Store, repoStore *repo.Store, taskStore *task.Store, settingService *setting.Service) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, taskStore: taskStore, settingService: settingService}
 }
 
 // Register adds the epic endpoints to the provided Echo router group.
@@ -32,6 +34,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 
 	// Epic operations (globally unique IDs)
 	g.GET("/epics/:id", h.GetEpic)
+	g.GET("/epics/:id/tasks", h.GetEpicTasks)
 	g.DELETE("/epics/:id", h.DeleteEpic)
 
 	// Planning session
@@ -247,6 +250,48 @@ func (h *HTTPHandler) CloseEpic(c echo.Context) error {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, e)
+}
+
+// EpicTaskSummary contains the status summary for a task in an epic.
+type EpicTaskSummary struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+}
+
+// GetEpicTasks handles GET /epics/:id/tasks
+// Returns the status of all tasks in the epic.
+func (h *HTTPHandler) GetEpicTasks(c echo.Context) error {
+	id, err := epic.ParseEpicID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid epic ID"))
+	}
+
+	ctx := c.Request().Context()
+	e, err := h.store.ReadEpic(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
+	summaries := make([]EpicTaskSummary, 0, len(e.TaskIDs))
+	for _, taskIDStr := range e.TaskIDs {
+		taskID, parseErr := task.ParseTaskID(taskIDStr)
+		if parseErr != nil {
+			continue
+		}
+		t, readErr := h.taskStore.ReadTask(ctx, taskID)
+		if readErr != nil {
+			// Task may have been deleted
+			continue
+		}
+		summaries = append(summaries, EpicTaskSummary{
+			ID:     t.ID.String(),
+			Title:  t.Title,
+			Status: string(t.Status),
+		})
+	}
+
+	return c.JSON(http.StatusOK, summaries)
 }
 
 func jsonError(c echo.Context, err error) error {

@@ -99,6 +99,19 @@ func (s *Store) ReadTask(ctx context.Context, id TaskID) (*Task, error) {
 	return s.repo.ReadTask(ctx, id)
 }
 
+// ReadTaskStatus reads a task's status by its string ID.
+func (s *Store) ReadTaskStatus(ctx context.Context, idStr string) (string, error) {
+	id, err := ParseTaskID(idStr)
+	if err != nil {
+		return "", err
+	}
+	status, err := s.repo.ReadTaskStatus(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return string(status), nil
+}
+
 // ListTasks returns all tasks.
 func (s *Store) ListTasks(ctx context.Context) ([]*Task, error) {
 	return s.repo.ListTasks(ctx)
