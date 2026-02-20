@@ -1,12 +1,6 @@
-# dotenvx - NEVER read private keys
-.env.keys
-
 .env
-.env.prod
-.env.dev
-.env.local
-.env.*.local
-.env.local.*
+.env.server
+.env.worker
 
 # Age/SOPS keys
 key.txt
