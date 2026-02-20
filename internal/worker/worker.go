@@ -18,14 +18,15 @@ const workTypeEpic = "epic"
 
 // Config holds the worker configuration
 type Config struct {
-	APIURL                   string
-	AnthropicAPIKey          string // API key auth (pay-per-use)
-	AnthropicBaseURL         string // Custom base URL for Anthropic API (e.g. for proxies or self-hosted endpoints)
-	ClaudeCodeOAuthToken     string // OAuth token auth (subscription-based, alternative to API key)
-	AgentImage               string // Docker image for agent - defaults to verve-agent:latest
-	MaxConcurrentTasks       int    // Maximum concurrent tasks (default: 1)
-	DryRun                   bool   // Skip Claude and make a dummy change instead
-	GitHubInsecureSkipVerify bool   // Disable TLS certificate verification for GitHub operations in agent containers
+	APIURL                    string
+	AnthropicAPIKey           string // API key auth (pay-per-use)
+	AnthropicBaseURL          string // Custom base URL for Anthropic API (e.g. for proxies or self-hosted endpoints)
+	ClaudeCodeOAuthToken      string // OAuth token auth (subscription-based, alternative to API key)
+	AgentImage                string // Docker image for agent - defaults to verve-agent:latest
+	MaxConcurrentTasks        int    // Maximum concurrent tasks (default: 1)
+	DryRun                    bool   // Skip Claude and make a dummy change instead
+	GitHubInsecureSkipVerify  bool   // Disable TLS certificate verification for GitHub operations in agent containers
+	StripAnthropicBetaHeaders bool   // Strip anthropic-beta headers via a local reverse proxy (for Bedrock proxy compatibility)
 }
 
 type Task struct {
@@ -71,6 +72,9 @@ type Worker struct {
 	logger       log.Logger
 	pollInterval time.Duration
 
+	// Beta header proxy (started when StripAnthropicBetaHeaders is enabled)
+	betaProxy *BetaHeaderProxy
+
 	// Concurrency control
 	maxConcurrent int
 	semaphore     chan struct{}
@@ -91,18 +95,30 @@ func New(cfg Config, logger log.Logger) (*Worker, error) {
 		maxConcurrent = 1
 	}
 
+	var betaProxy *BetaHeaderProxy
+	if cfg.StripAnthropicBetaHeaders {
+		betaProxy, err = StartBetaHeaderProxy(context.Background(), cfg.AnthropicBaseURL, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start beta header proxy: %w", err)
+		}
+	}
+
 	return &Worker{
 		config:        cfg,
 		docker:        docker,
 		client:        &http.Client{Timeout: 60 * time.Second},
 		logger:        logger,
 		pollInterval:  5 * time.Second,
+		betaProxy:     betaProxy,
 		maxConcurrent: maxConcurrent,
 		semaphore:     make(chan struct{}, maxConcurrent),
 	}, nil
 }
 
 func (w *Worker) Close() error {
+	if w.betaProxy != nil {
+		_ = w.betaProxy.Stop(context.Background())
+	}
 	return w.docker.Close()
 }
 
@@ -492,6 +508,9 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 		RetryContext:             task.RetryContext,
 		PreviousStatus:           task.AgentStatus,
 	}
+	if w.betaProxy != nil {
+		agentCfg.AnthropicBaseURL = w.betaProxy.URL()
+	}
 
 	// Create a cancellable context for the agent execution.
 	// The heartbeat loop can cancel this if the task is stopped.
@@ -578,6 +597,9 @@ func (w *Worker) executeEpicPlanning(ctx context.Context, ep *Epic, githubToken,
 		ClaudeCodeOAuthToken:     w.config.ClaudeCodeOAuthToken,
 		ClaudeModel:              ep.Model,
 		GitHubInsecureSkipVerify: w.config.GitHubInsecureSkipVerify,
+	}
+	if w.betaProxy != nil {
+		agentCfg.AnthropicBaseURL = w.betaProxy.URL()
 	}
 
 	// Start heartbeat goroutine
