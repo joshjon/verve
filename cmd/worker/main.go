@@ -23,6 +23,7 @@ func main() {
 	cfg := worker.Config{
 		APIURL:                   getEnvOrDefault("API_URL", "http://localhost:7400"),
 		AnthropicAPIKey:          os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicBaseURL:         os.Getenv("ANTHROPIC_BASE_URL"),
 		ClaudeCodeOAuthToken:     os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
 		AgentImage:               getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
 		MaxConcurrentTasks:       getEnvOrDefaultInt(logger, "MAX_CONCURRENT_TASKS", 3),

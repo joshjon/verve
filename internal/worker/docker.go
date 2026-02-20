@@ -96,6 +96,7 @@ type AgentConfig struct {
 	GitHubToken                string
 	GitHubRepo                 string
 	AnthropicAPIKey            string
+	AnthropicBaseURL           string // Custom base URL for Anthropic API (e.g. for proxies or self-hosted endpoints)
 	ClaudeCodeOAuthToken       string // OAuth token (subscription-based, alternative to API key)
 	ClaudeModel                string
 	DryRun                     bool
@@ -129,6 +130,10 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+cfg.ClaudeCodeOAuthToken)
 	} else {
 		env = append(env, "ANTHROPIC_API_KEY="+cfg.AnthropicAPIKey)
+	}
+
+	if cfg.AnthropicBaseURL != "" {
+		env = append(env, "ANTHROPIC_BASE_URL="+cfg.AnthropicBaseURL)
 	}
 
 	if workType == workTypeEpic {
