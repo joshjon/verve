@@ -481,6 +481,40 @@ func (c *Client) DeleteBranch(ctx context.Context, owner, repoName, branch strin
 	return nil
 }
 
+// UpdatePR updates the title and body of an existing pull request.
+func (c *Client) UpdatePR(ctx context.Context, owner, repoName string, prNumber int, title, body string) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repoName, prNumber)
+
+	payload := map[string]string{
+		"title": title,
+		"body":  body,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		return err
+	}
+	c.setHeaders(req)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
 // FindPRForBranch searches for an open PR with the given head branch.
 // Returns the PR URL, number, and nil error if found. Returns empty/0 if no PR exists.
 func (c *Client) FindPRForBranch(ctx context.Context, owner, repo, branch string) (string, int, error) {

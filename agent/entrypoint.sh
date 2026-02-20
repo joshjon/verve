@@ -76,6 +76,7 @@ elif [ "${ATTEMPT:-1}" -le 1 ] || [ "${BRANCH_EXISTS_ON_REMOTE}" != "true" ]; th
     generate_and_create_pr "${BRANCH}" "${DEFAULT_BRANCH}"
 elif pr_exists_for_branch "${BRANCH}"; then
     log_agent "Retry: pushed fixes to existing PR (${PR_URL})"
+    generate_and_update_pr "${PR_NUMBER}" "${PR_URL}" "${BRANCH}" "${DEFAULT_BRANCH}"
 else
     log_agent "Retry: no existing PR found for branch, creating one..."
     generate_and_create_pr "${BRANCH}" "${DEFAULT_BRANCH}"

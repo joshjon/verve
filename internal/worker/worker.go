@@ -383,6 +383,22 @@ func (w *Worker) executeTask(ctx context.Context, task *Task, githubToken, repoF
 			}
 		}
 
+		// Parse PR updated marker (retry with existing PR)
+		if strings.HasPrefix(cleanLine, "VERVE_PR_UPDATED:") {
+			jsonStr := strings.TrimPrefix(cleanLine, "VERVE_PR_UPDATED:")
+			var prInfo struct {
+				URL    string `json:"url"`
+				Number int    `json:"number"`
+			}
+			if err := json.Unmarshal([]byte(jsonStr), &prInfo); err == nil {
+				markerMu.Lock()
+				prURL = prInfo.URL
+				prNumber = prInfo.Number
+				markerMu.Unlock()
+				taskLogger.Info("captured PR update", "url", prURL, "number", prNumber)
+			}
+		}
+
 		// Parse branch pushed marker (skip-PR mode)
 		if strings.HasPrefix(cleanLine, "VERVE_BRANCH_PUSHED:") {
 			jsonStr := strings.TrimPrefix(cleanLine, "VERVE_BRANCH_PUSHED:")
