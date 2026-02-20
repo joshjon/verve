@@ -175,6 +175,18 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 	return err
 }
 
+const deleteExpiredLogs = `-- name: DeleteExpiredLogs :execrows
+DELETE FROM task_log WHERE created_at < $1
+`
+
+func (q *Queries) DeleteExpiredLogs(ctx context.Context, createdAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredLogs, createdAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteTask = `-- name: DeleteTask :exec
 DELETE FROM task WHERE id = $1
 `

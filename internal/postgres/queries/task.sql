@@ -178,3 +178,6 @@ DELETE FROM task_log WHERE task_id = ANY($1::text[]);
 
 -- name: BulkDeleteTasksByIDs :exec
 DELETE FROM task WHERE id = ANY($1::text[]);
+
+-- name: DeleteExpiredLogs :execrows
+DELETE FROM task_log WHERE created_at < $1;

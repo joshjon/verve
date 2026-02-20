@@ -503,6 +503,10 @@ func (m *mockRepository) BulkDeleteTasksByIDs(_ context.Context, _ []string) err
 	return nil
 }
 
+func (m *mockRepository) DeleteExpiredLogs(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+
 // --- Store tests ---
 
 func TestStore_CreateTask_Success(t *testing.T) {

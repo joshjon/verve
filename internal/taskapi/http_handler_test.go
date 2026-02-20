@@ -424,6 +424,10 @@ func (m *mockTaskRepo) BulkDeleteTasksByIDs(_ context.Context, _ []string) error
 	return nil
 }
 
+func (m *mockTaskRepo) DeleteExpiredLogs(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+
 // --- Mock repo repository ---
 
 type mockRepoRepo struct {

@@ -25,6 +25,7 @@ type Querier interface {
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	CreateTask(ctx context.Context, arg CreateTaskParams) error
 	DeleteEpic(ctx context.Context, id string) error
+	DeleteExpiredLogs(ctx context.Context, createdAt time.Time) (int64, error)
 	DeleteGitHubToken(ctx context.Context) error
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteSetting(ctx context.Context, key string) error

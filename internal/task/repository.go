@@ -92,4 +92,7 @@ type TaskRepository interface {
 	BulkDeleteTasksByEpic(ctx context.Context, epicID string) error
 	// BulkDeleteTasksByIDs deletes tasks (and their logs) by their IDs.
 	BulkDeleteTasksByIDs(ctx context.Context, ids []string) error
+	// DeleteExpiredLogs deletes all log entries older than the given time.
+	// Returns the number of log batches deleted.
+	DeleteExpiredLogs(ctx context.Context, before time.Time) (int64, error)
 }
