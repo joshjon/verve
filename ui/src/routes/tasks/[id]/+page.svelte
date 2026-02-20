@@ -703,23 +703,6 @@
 							</Button>
 						{/if}
 					{/if}
-					{#if canStop}
-						<Button
-							size="sm"
-							variant="outline"
-							onclick={handleStop}
-							disabled={stopping}
-							class="gap-1 border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10"
-						>
-							{#if stopping}
-								<Loader2 class="w-4 h-4 animate-spin" />
-							{:else}
-								<Square class="w-4 h-4" />
-							{/if}
-							<span class="hidden sm:inline">Stop Agent</span>
-							<span class="sm:hidden">Stop</span>
-						</Button>
-					{/if}
 					{#if canClose}
 						{#if showCloseForm}
 							<Button size="sm" variant="ghost" onclick={() => (showCloseForm = false)} class="gap-1">
@@ -1345,18 +1328,36 @@
 							{parsedAgentStatus.confidence} confidence
 						</Badge>
 					{/if}
-					{#if canRetry}
-						<div class="ml-auto">
-							{#if showRetryForm}
-								<Button size="sm" variant="ghost" onclick={() => (showRetryForm = false)} class="gap-1">
-									<X class="w-4 h-4" />
-									Cancel
+					{#if canStop || canRetry}
+						<div class="ml-auto flex items-center gap-2">
+							{#if canStop}
+								<Button
+									size="sm"
+									variant="outline"
+									onclick={handleStop}
+									disabled={stopping}
+									class="gap-1 border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10"
+								>
+									{#if stopping}
+										<Loader2 class="w-4 h-4 animate-spin" />
+									{:else}
+										<Square class="w-4 h-4" />
+									{/if}
+									Stop Agent
 								</Button>
-							{:else}
-								<Button size="sm" variant="outline" onclick={() => (showRetryForm = true)} class="gap-1">
-									<RefreshCw class="w-4 h-4" />
-									Retry
-								</Button>
+							{/if}
+							{#if canRetry}
+								{#if showRetryForm}
+									<Button size="sm" variant="ghost" onclick={() => (showRetryForm = false)} class="gap-1">
+										<X class="w-4 h-4" />
+										Cancel
+									</Button>
+								{:else}
+									<Button size="sm" variant="outline" onclick={() => (showRetryForm = true)} class="gap-1">
+										<RefreshCw class="w-4 h-4" />
+										Retry
+									</Button>
+								{/if}
 							{/if}
 						</div>
 					{/if}
