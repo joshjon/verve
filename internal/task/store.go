@@ -602,6 +602,100 @@ func (s *Store) ClearEpicIDForTasks(ctx context.Context, epicID string) error {
 	return s.repo.ClearEpicIDForTasks(ctx, epicID)
 }
 
+// BulkDeleteTasksByEpic deletes all tasks (and their logs) belonging to an epic
+// and publishes deletion events for each affected task.
+func (s *Store) BulkDeleteTasksByEpic(ctx context.Context, epicID string) error {
+	// Read tasks before deleting so we can publish events and clean up dependencies.
+	tasks, err := s.repo.ListTasksByEpic(ctx, epicID)
+	if err != nil {
+		return err
+	}
+
+	// Remove deleted tasks from other tasks' depends_on lists.
+	deletedIDs := make(map[string]bool, len(tasks))
+	for _, t := range tasks {
+		deletedIDs[t.ID.String()] = true
+	}
+	allTasks, err := s.repo.ListTasks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, t := range allTasks {
+		if deletedIDs[t.ID.String()] {
+			continue
+		}
+		for _, depID := range t.DependsOn {
+			if deletedIDs[depID] {
+				_ = s.repo.RemoveDependency(ctx, t.ID, depID)
+			}
+		}
+	}
+
+	if err := s.repo.BulkDeleteTasksByEpic(ctx, epicID); err != nil {
+		return err
+	}
+
+	// Publish deletion events.
+	for _, t := range tasks {
+		s.broker.Publish(ctx, Event{Type: EventTaskDeleted, RepoID: t.RepoID, TaskID: t.ID})
+	}
+	return nil
+}
+
+// BulkDeleteTasksByIDs deletes multiple tasks (and their logs) by ID
+// and publishes deletion events for each affected task.
+func (s *Store) BulkDeleteTasksByIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// Read tasks before deleting so we can publish events and clean up dependencies.
+	type taskInfo struct {
+		ID     TaskID
+		RepoID string
+	}
+	toDelete := make([]taskInfo, 0, len(ids))
+	deletedIDs := make(map[string]bool, len(ids))
+	for _, idStr := range ids {
+		id, err := ParseTaskID(idStr)
+		if err != nil {
+			continue
+		}
+		t, err := s.repo.ReadTask(ctx, id)
+		if err != nil {
+			continue
+		}
+		toDelete = append(toDelete, taskInfo{ID: id, RepoID: t.RepoID})
+		deletedIDs[idStr] = true
+	}
+
+	// Remove deleted tasks from other tasks' depends_on lists.
+	allTasks, err := s.repo.ListTasks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, t := range allTasks {
+		if deletedIDs[t.ID.String()] {
+			continue
+		}
+		for _, depID := range t.DependsOn {
+			if deletedIDs[depID] {
+				_ = s.repo.RemoveDependency(ctx, t.ID, depID)
+			}
+		}
+	}
+
+	if err := s.repo.BulkDeleteTasksByIDs(ctx, ids); err != nil {
+		return err
+	}
+
+	// Publish deletion events.
+	for _, t := range toDelete {
+		s.broker.Publish(ctx, Event{Type: EventTaskDeleted, RepoID: t.RepoID, TaskID: t.ID})
+	}
+	return nil
+}
+
 // DeleteTask deletes a task, its logs, and removes it from any other tasks' dependency lists.
 func (s *Store) DeleteTask(ctx context.Context, id TaskID) error {
 	// Read task before deletion for event publishing

@@ -161,3 +161,15 @@ WHERE epic_id = $1 AND status NOT IN ('closed', 'merged');
 -- name: ClearEpicIDForTasks :exec
 UPDATE task SET epic_id = NULL, updated_at = NOW()
 WHERE epic_id = $1;
+
+-- name: BulkDeleteTaskLogsByEpic :exec
+DELETE FROM task_log WHERE task_id IN (SELECT id FROM task WHERE epic_id = $1);
+
+-- name: BulkDeleteTasksByEpic :exec
+DELETE FROM task WHERE epic_id = $1;
+
+-- name: BulkDeleteTaskLogsByIDs :exec
+DELETE FROM task_log WHERE task_id = ANY($1::text[]);
+
+-- name: BulkDeleteTasksByIDs :exec
+DELETE FROM task WHERE id = ANY($1::text[]);

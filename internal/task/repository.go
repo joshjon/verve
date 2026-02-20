@@ -82,4 +82,8 @@ type TaskRepository interface {
 	BulkCloseTasksByEpic(ctx context.Context, epicID, reason string) error
 	// ClearEpicIDForTasks removes the epic_id FK from all tasks for a given epic.
 	ClearEpicIDForTasks(ctx context.Context, epicID string) error
+	// BulkDeleteTasksByEpic deletes all tasks (and their logs) for a given epic.
+	BulkDeleteTasksByEpic(ctx context.Context, epicID string) error
+	// BulkDeleteTasksByIDs deletes tasks (and their logs) by their IDs.
+	BulkDeleteTasksByIDs(ctx context.Context, ids []string) error
 }

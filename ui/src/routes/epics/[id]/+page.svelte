@@ -925,7 +925,7 @@
 				</div>
 			</div>
 			<p class="text-sm text-muted-foreground mb-1">
-				This will permanently delete the epic <strong class="text-foreground">{epic?.title}</strong> and close all of its {epic?.task_ids?.length ?? 0} remaining child task{(epic?.task_ids?.length ?? 0) !== 1 ? 's' : ''}.
+				This will permanently delete the epic <strong class="text-foreground">{epic?.title}</strong> and delete all of its {epic?.task_ids?.length ?? 0} child task{(epic?.task_ids?.length ?? 0) !== 1 ? 's' : ''}.
 			</p>
 			<div class="flex items-center gap-2 justify-end mt-6">
 				<Button variant="ghost" size="sm" onclick={() => (showDeleteConfirm = false)} disabled={deleting}>

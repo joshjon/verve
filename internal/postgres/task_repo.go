@@ -402,6 +402,25 @@ func (r *TaskRepository) ClearEpicIDForTasks(ctx context.Context, epicID string)
 	return tagTaskErr(r.db.ClearEpicIDForTasks(ctx, &epicID))
 }
 
+func (r *TaskRepository) BulkDeleteTasksByEpic(ctx context.Context, epicID string) error {
+	// Delete logs first (FK constraint)
+	if err := r.db.BulkDeleteTaskLogsByEpic(ctx, &epicID); err != nil {
+		return tagTaskErr(err)
+	}
+	return tagTaskErr(r.db.BulkDeleteTasksByEpic(ctx, &epicID))
+}
+
+func (r *TaskRepository) BulkDeleteTasksByIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	// Delete logs first (FK constraint)
+	if err := r.db.BulkDeleteTaskLogsByIDs(ctx, ids); err != nil {
+		return tagTaskErr(err)
+	}
+	return tagTaskErr(r.db.BulkDeleteTasksByIDs(ctx, ids))
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {

@@ -144,26 +144,21 @@
 		deleting = true;
 		deleteProgress = { completed: 0, total: tasksToDelete.length, errors: [] };
 
-		// Delete all tasks in parallel
-		const deletePromises = tasksToDelete.map(async (taskId) => {
-			try {
-				await client.deleteTask(taskId);
-				deleteProgress.completed++;
-			} catch (e) {
-				deleteProgress.errors.push(`${taskId}: ${(e as Error).message}`);
-			}
-		});
-
-		await Promise.all(deletePromises);
+		try {
+			await client.bulkDeleteTasks(tasksToDelete);
+			deleteProgress.completed = tasksToDelete.length;
+		} catch (e) {
+			deleteProgress.errors.push((e as Error).message);
+		}
 
 		deleting = false;
 		showDeleteDialog = false;
 		selectionMode = false;
 		selectedTaskIds.clear();
 
-		// Show error if any deletions failed
+		// Show error if deletion failed
 		if (deleteProgress.errors.length > 0) {
-			taskStore.error = `Failed to delete ${deleteProgress.errors.length} task(s)`;
+			taskStore.error = `Failed to delete tasks: ${deleteProgress.errors.join(', ')}`;
 		}
 	}
 

@@ -444,6 +444,34 @@ func (r *TaskRepository) ClearEpicIDForTasks(ctx context.Context, epicID string)
 	return tagTaskErr(r.db.ClearEpicIDForTasks(ctx, &epicID))
 }
 
+func (r *TaskRepository) BulkDeleteTasksByEpic(ctx context.Context, epicID string) error {
+	// Delete logs first (FK constraint)
+	if err := r.db.BulkDeleteTaskLogsByEpic(ctx, &epicID); err != nil {
+		return tagTaskErr(err)
+	}
+	return tagTaskErr(r.db.BulkDeleteTasksByEpic(ctx, &epicID))
+}
+
+func (r *TaskRepository) BulkDeleteTasksByIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	// SQLite doesn't support ANY($1::text[]), so we build the query dynamically.
+	placeholders := "?" + strings.Repeat(",?", len(ids)-1)
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	// Delete logs first (FK constraint)
+	if _, err := r.dbtx.ExecContext(ctx, "DELETE FROM task_log WHERE task_id IN ("+placeholders+")", args...); err != nil {
+		return tagTaskErr(err)
+	}
+	if _, err := r.dbtx.ExecContext(ctx, "DELETE FROM task WHERE id IN ("+placeholders+")", args...); err != nil {
+		return tagTaskErr(err)
+	}
+	return nil
+}
+
 func (r *TaskRepository) ListTasksInReviewNoPR(ctx context.Context) ([]*task.Task, error) {
 	rows, err := r.db.ListTasksInReviewNoPR(ctx)
 	if err != nil {
