@@ -626,13 +626,78 @@ func TestStore_RetryTask_DifferentCategory(t *testing.T) {
 	repo.tasks[tsk.ID.String()] = tsk
 	repo.taskStatuses[tsk.ID.String()] = StatusReview
 
-	// Different category should NOT trip circuit breaker
-	err := store.RetryTask(context.Background(), tsk.ID, "merge_conflict", "merge conflict detected")
+	// Different non-conflict category should NOT trip circuit breaker
+	err := store.RetryTask(context.Background(), tsk.ID, "ci_failure:changelog", "changelog check failed")
 	require.NoError(t, err)
 
 	// Should have set consecutive failures to 1 (reset for new category)
 	require.Len(t, repo.setConsFails, 1)
 	assert.Equal(t, 1, repo.setConsFails[0])
+}
+
+func TestStore_RetryTask_MergeConflictIgnoresMaxAttempts(t *testing.T) {
+	repo := newMockRepo()
+	repo.feedbackRetryResult = true
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Attempt = 5
+	tsk.MaxAttempts = 5
+	tsk.Status = StatusReview
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusReview
+
+	// Merge conflict retries should NOT be blocked by max attempts
+	err := store.RetryTask(context.Background(), tsk.ID, "merge_conflict", "merge_conflict: PR has conflicts with base branch")
+	require.NoError(t, err)
+
+	assert.NotEqual(t, StatusFailed, tsk.Status,
+		"merge conflict retry should not fail task at max attempts")
+	// Both attempt and max_attempts should be incremented
+	assert.Equal(t, 6, tsk.Attempt, "attempt should be incremented")
+	assert.Equal(t, 6, tsk.MaxAttempts, "max_attempts should be incremented to preserve budget")
+}
+
+func TestStore_RetryTask_MergeConflictIgnoresCircuitBreaker(t *testing.T) {
+	repo := newMockRepo()
+	repo.feedbackRetryResult = true
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusReview
+	tsk.ConsecutiveFailures = 5
+	tsk.RetryReason = "merge_conflict: PR has conflicts with base branch"
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusReview
+
+	// Merge conflict retries should NOT be blocked by circuit breaker
+	// even with many consecutive failures
+	err := store.RetryTask(context.Background(), tsk.ID, "merge_conflict", "merge_conflict: PR has conflicts with base branch")
+	require.NoError(t, err)
+
+	assert.NotEqual(t, StatusFailed, tsk.Status,
+		"merge conflict retry should not fail task due to circuit breaker")
+}
+
+func TestStore_RetryTask_MergeConflictRespectsMaxBudget(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 5.0, false, "", true)
+	tsk.CostUSD = 6.0
+	tsk.Status = StatusReview
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusReview
+
+	// Even merge conflict retries should respect the cost budget
+	err := store.RetryTask(context.Background(), tsk.ID, "merge_conflict", "merge_conflict: PR has conflicts with base branch")
+	require.NoError(t, err)
+
+	assert.Equal(t, StatusFailed, tsk.Status,
+		"merge conflict retry should still fail when budget exceeded")
 }
 
 func TestStore_ManualRetryTask(t *testing.T) {
