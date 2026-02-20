@@ -553,6 +553,81 @@ const MOCK_EPIC_MAP: Record<string, typeof MOCK_EPIC_DRAFT> = {
 	epc_active01: MOCK_EPIC_ACTIVE
 };
 
+// Mock agent metrics data for the agents observability page.
+const MOCK_AGENT_METRICS = {
+	running_agents: 2,
+	pending_tasks: 3,
+	review_tasks: 1,
+	total_tasks: 14,
+	completed_tasks: 7,
+	failed_tasks: 1,
+	total_cost_usd: 4.52,
+	active_agents: [
+		{
+			task_id: 'tsk_running01',
+			task_title: 'Fix database connection pooling',
+			repo_id: 'repo_mock01',
+			started_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(), // 12 min ago
+			running_for_ms: 12 * 60 * 1000,
+			attempt: 1,
+			cost_usd: 0.12,
+			model: 'claude-sonnet-4-20250514'
+		},
+		{
+			task_id: 'tsk_retry_running01',
+			task_title: 'Fix flaky integration tests',
+			repo_id: 'repo_mock01',
+			started_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago
+			running_for_ms: 5 * 60 * 1000,
+			attempt: 2,
+			cost_usd: 0.62,
+			model: 'claude-sonnet-4-20250514'
+		}
+	],
+	recent_completions: [
+		{
+			task_id: 'tsk_review01',
+			task_title: 'Add dark mode support',
+			repo_id: 'repo_mock01',
+			status: 'merged',
+			duration_ms: 180000,
+			cost_usd: 0.45,
+			attempt: 1,
+			finished_at: new Date(Date.now() - 30 * 60 * 1000).toISOString() // 30 min ago
+		},
+		{
+			task_id: 'tsk_merged01',
+			task_title: 'Update API documentation',
+			repo_id: 'repo_mock01',
+			status: 'merged',
+			duration_ms: 120000,
+			cost_usd: 0.30,
+			attempt: 1,
+			finished_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 hours ago
+		},
+		{
+			task_id: 'tsk_failed01',
+			task_title: 'Migrate to new ORM',
+			repo_id: 'repo_mock01',
+			status: 'failed',
+			duration_ms: 300000,
+			cost_usd: 0.85,
+			attempt: 2,
+			finished_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString() // 4 hours ago
+		},
+		{
+			task_id: 'tsk_closed01',
+			task_title: 'Refactor legacy auth module',
+			repo_id: 'repo_mock01',
+			status: 'closed',
+			duration_ms: 95000,
+			cost_usd: 0.18,
+			attempt: 1,
+			finished_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() // 6 hours ago
+		}
+	]
+};
+
 // Intercept all API calls so the UI renders with mock data instead of hitting a real server.
 // Routes are registered most-specific first because Playwright matches in FIFO order.
 async function setupMockAPI(page: import('@playwright/test').Page) {
@@ -564,6 +639,11 @@ async function setupMockAPI(page: import('@playwright/test').Page) {
 	// Default model
 	await page.route('**/api/v1/settings/default-model', (route) =>
 		route.fulfill({ json: { model: 'claude-sonnet-4-20250514' } })
+	);
+
+	// Agent metrics
+	await page.route('**/api/v1/agents/metrics', (route) =>
+		route.fulfill({ json: MOCK_AGENT_METRICS })
 	);
 
 	// Repos list
@@ -826,6 +906,21 @@ test.describe('UI Screenshots', () => {
 		const dialog = page.locator('[role="dialog"]');
 		await dialog.screenshot({
 			path: `screenshots/create-task-dialog-${testInfo.project.name}.png`
+		});
+	});
+
+	// --- Agents Screenshots ---
+
+	test('agents dashboard', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto('/agents');
+
+		// Wait for metrics to load.
+		await page.waitForTimeout(2000);
+
+		await page.screenshot({
+			path: `screenshots/agents-dashboard-${testInfo.project.name}.png`,
+			fullPage: true
 		});
 	});
 
