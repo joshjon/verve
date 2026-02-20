@@ -234,6 +234,21 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		}
 	}
 
+	// When the Anthropic base URL uses host.docker.internal (e.g. the beta
+	// header stripping proxy), ensure the container can resolve it.
+	if strings.Contains(cfg.AnthropicBaseURL, "host.docker.internal") {
+		hasHostMapping := false
+		for _, h := range hostConfig.ExtraHosts {
+			if strings.HasPrefix(h, "host.docker.internal:") {
+				hasHostMapping = true
+				break
+			}
+		}
+		if !hasHostMapping {
+			hostConfig.ExtraHosts = append(hostConfig.ExtraHosts, "host.docker.internal:host-gateway")
+		}
+	}
+
 	resp, err := d.client.ContainerCreate(ctx,
 		&container.Config{
 			Image: d.agentImage,
