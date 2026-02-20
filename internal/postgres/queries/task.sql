@@ -153,3 +153,11 @@ SELECT * FROM task WHERE status = 'running' AND last_heartbeat_at IS NOT NULL AN
 
 -- name: ListTasksByEpic :many
 SELECT * FROM task WHERE epic_id = $1 ORDER BY created_at ASC;
+
+-- name: BulkCloseTasksByEpic :exec
+UPDATE task SET status = 'closed', close_reason = $2, updated_at = NOW()
+WHERE epic_id = $1 AND status NOT IN ('closed', 'merged');
+
+-- name: ClearEpicIDForTasks :exec
+UPDATE task SET epic_id = NULL, updated_at = NOW()
+WHERE epic_id = $1;

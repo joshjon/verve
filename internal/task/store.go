@@ -551,6 +551,35 @@ func (s *Store) CloseTask(ctx context.Context, id TaskID, reason string) error {
 	return nil
 }
 
+// BulkCloseTasksByEpic closes all non-terminal tasks for an epic and publishes
+// update events for each affected task.
+func (s *Store) BulkCloseTasksByEpic(ctx context.Context, epicID, reason string) error {
+	// Read tasks before closing so we can publish events.
+	tasks, err := s.repo.ListTasksByEpic(ctx, epicID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.BulkCloseTasksByEpic(ctx, epicID, reason); err != nil {
+		return err
+	}
+
+	// Publish update events for tasks that were actually closed.
+	for _, t := range tasks {
+		if t.Status != StatusClosed && t.Status != StatusMerged {
+			s.publishTaskUpdated(ctx, t.ID)
+		}
+	}
+	return nil
+}
+
+// ClearEpicIDForTasks removes the epic_id foreign key from all tasks belonging
+// to the given epic. This must be called before deleting an epic to avoid FK
+// constraint violations.
+func (s *Store) ClearEpicIDForTasks(ctx context.Context, epicID string) error {
+	return s.repo.ClearEpicIDForTasks(ctx, epicID)
+}
+
 // DeleteTask deletes a task, its logs, and removes it from any other tasks' dependency lists.
 func (s *Store) DeleteTask(ctx context.Context, id TaskID) error {
 	// Read task before deletion for event publishing

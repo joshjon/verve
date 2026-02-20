@@ -473,6 +473,14 @@ func (m *mockRepository) ListTasksByEpic(_ context.Context, _ string) ([]*Task, 
 	return nil, nil
 }
 
+func (m *mockRepository) BulkCloseTasksByEpic(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockRepository) ClearEpicIDForTasks(_ context.Context, _ string) error {
+	return nil
+}
+
 // --- Store tests ---
 
 func TestStore_CreateTask_Success(t *testing.T) {

@@ -39,6 +39,21 @@ func (q *Queries) AppendTaskLogs(ctx context.Context, arg AppendTaskLogsParams) 
 	return err
 }
 
+const bulkCloseTasksByEpic = `-- name: BulkCloseTasksByEpic :exec
+UPDATE task SET status = 'closed', close_reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE epic_id = ? AND status NOT IN ('closed', 'merged')
+`
+
+type BulkCloseTasksByEpicParams struct {
+	CloseReason *string
+	EpicID      *string
+}
+
+func (q *Queries) BulkCloseTasksByEpic(ctx context.Context, arg BulkCloseTasksByEpicParams) error {
+	_, err := q.db.ExecContext(ctx, bulkCloseTasksByEpic, arg.CloseReason, arg.EpicID)
+	return err
+}
+
 const claimTask = `-- name: ClaimTask :execrows
 UPDATE task SET status = 'running', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ? AND status = 'pending' AND ready = 1
@@ -50,6 +65,16 @@ func (q *Queries) ClaimTask(ctx context.Context, id string) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const clearEpicIDForTasks = `-- name: ClearEpicIDForTasks :exec
+UPDATE task SET epic_id = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE epic_id = ?
+`
+
+func (q *Queries) ClearEpicIDForTasks(ctx context.Context, epicID *string) error {
+	_, err := q.db.ExecContext(ctx, clearEpicIDForTasks, epicID)
+	return err
 }
 
 const closeTask = `-- name: CloseTask :exec
