@@ -2,7 +2,7 @@
 	import type { Task } from '$lib/models/task';
 	import * as Card from '$lib/components/ui/card';
 	import { goto } from '$app/navigation';
-	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2, PauseCircle } from 'lucide-svelte';
+	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2, PauseCircle, StopCircle } from 'lucide-svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
 
 	let {
@@ -30,6 +30,7 @@
 	}
 
 	const hasDependencies = $derived(task.depends_on && task.depends_on.length > 0);
+	const isStopped = $derived(!task.ready && task.status === 'pending' && task.close_reason === 'Stopped by user');
 	const branchURL = $derived.by(() => {
 		if (!task.branch_name) return null;
 		const r = repoStore.repos.find((r) => r.id === task.repo_id);
@@ -86,7 +87,15 @@
 				#{task.attempt}
 			</span>
 		{/if}
-		{#if !task.ready && task.status === 'pending'}
+		{#if isStopped}
+			<span
+				class="inline-flex items-center gap-0.5 text-[10px] font-medium text-red-600 dark:text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded-full border border-red-500/20"
+				title="Stopped — agent was interrupted. Click to retry."
+			>
+				<StopCircle class="w-3 h-3" />
+				Stopped
+			</span>
+		{:else if !task.ready && task.status === 'pending'}
 			<span
 				class="inline-flex items-center gap-0.5 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded-full border border-orange-500/20"
 				title="Not ready — this task won't be picked up by agents until marked as ready"

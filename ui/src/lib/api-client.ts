@@ -143,6 +143,17 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async stopTask(id: string): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/stop`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' }
+		});
+		if (!res.ok) {
+			throw new Error('Failed to stop task');
+		}
+		return res.json();
+	}
+
 	async closeTask(id: string, reason?: string): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}/close`, {
 			method: 'POST',
