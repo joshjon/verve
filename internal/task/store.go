@@ -477,7 +477,9 @@ func (s *Store) AppendTaskLogs(ctx context.Context, id TaskID, attempt int, logs
 
 
 // Heartbeat updates the last heartbeat time for a running task.
-func (s *Store) Heartbeat(ctx context.Context, id TaskID) error {
+// Returns true if the task is still running, false if it was stopped, closed,
+// or deleted — signalling the worker to cancel execution.
+func (s *Store) Heartbeat(ctx context.Context, id TaskID) (bool, error) {
 	return s.repo.Heartbeat(ctx, id)
 }
 

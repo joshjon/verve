@@ -445,16 +445,20 @@ func (h *HTTPHandler) AppendLogs(c echo.Context) error {
 	return c.JSON(http.StatusOK, statusOK())
 }
 
-// Heartbeat handles POST /tasks/:id/heartbeat
+// Heartbeat handles POST /tasks/:id/heartbeat.
+// Returns {"stopped": true} when the task is no longer running — either because
+// it was explicitly stopped, closed, or deleted — so the worker can cancel the
+// agent container immediately and avoid wasting resources.
 func (h *HTTPHandler) Heartbeat(c echo.Context) error {
 	id, err := task.ParseTaskID(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
 	}
-	if err := h.store.Heartbeat(c.Request().Context(), id); err != nil {
+	stillRunning, err := h.store.Heartbeat(c.Request().Context(), id)
+	if err != nil {
 		return jsonError(c, err)
 	}
-	return c.JSON(http.StatusOK, statusOK())
+	return c.JSON(http.StatusOK, map[string]bool{"stopped": !stillRunning})
 }
 
 // CompleteTask handles POST /tasks/:id/complete

@@ -465,8 +465,8 @@ func (m *mockRepository) StopTask(_ context.Context, id TaskID, reason string) (
 	return true, nil
 }
 
-func (m *mockRepository) Heartbeat(_ context.Context, _ TaskID) error {
-	return nil
+func (m *mockRepository) Heartbeat(_ context.Context, _ TaskID) (bool, error) {
+	return true, nil
 }
 
 func (m *mockRepository) ListStaleTasks(_ context.Context, _ time.Time) ([]*Task, error) {

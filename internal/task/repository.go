@@ -75,7 +75,10 @@ type TaskRepository interface {
 	// recording the stop reason. Returns false if the task was not in running status.
 	StopTask(ctx context.Context, id TaskID, reason string) (bool, error)
 	// Heartbeat updates the last heartbeat time for a running task.
-	Heartbeat(ctx context.Context, id TaskID) error
+	// Returns true if the task is still running (row was updated), false if the
+	// task no longer exists or is no longer in running status (e.g. stopped,
+	// closed, or deleted).
+	Heartbeat(ctx context.Context, id TaskID) (bool, error)
 	// ListStaleTasks returns running tasks whose last heartbeat is before the given time.
 	ListStaleTasks(ctx context.Context, before time.Time) ([]*Task, error)
 	DeleteTask(ctx context.Context, id TaskID) error

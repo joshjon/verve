@@ -164,13 +164,16 @@ func (q *Queries) HasTasksForRepo(ctx context.Context, repoID string) (int64, er
 	return column_1, err
 }
 
-const heartbeat = `-- name: Heartbeat :exec
+const heartbeat = `-- name: Heartbeat :execrows
 UPDATE task SET last_heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status = 'running'
 `
 
-func (q *Queries) Heartbeat(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, heartbeat, id)
-	return err
+func (q *Queries) Heartbeat(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, heartbeat, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const listPendingTasks = `-- name: ListPendingTasks :many
