@@ -632,7 +632,7 @@ func (s *Store) BulkDeleteTasksByIDs(ctx context.Context, ids []string) error {
 		ID     TaskID
 		RepoID string
 	}
-	var toDelete []taskInfo
+	toDelete := make([]taskInfo, 0, len(ids))
 	deletedIDs := make(map[string]bool, len(ids))
 	for _, idStr := range ids {
 		id, err := ParseTaskID(idStr)
