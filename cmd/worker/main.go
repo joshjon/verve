@@ -27,9 +27,9 @@ func main() {
 		ClaudeCodeOAuthToken:      os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
 		AgentImage:                getEnvOrDefault("AGENT_IMAGE", "verve-agent:latest"),
 		MaxConcurrentTasks:        getEnvOrDefaultInt(logger, "MAX_CONCURRENT_TASKS", 3),
-		DryRun:                    os.Getenv("DRY_RUN") == "true",
-		GitHubInsecureSkipVerify:  os.Getenv("GITHUB_INSECURE_SKIP_VERIFY") == "true",
-		StripAnthropicBetaHeaders: os.Getenv("STRIP_ANTHROPIC_BETA_HEADERS") == "true",
+		DryRun:                    envBool("DRY_RUN"),
+		GitHubInsecureSkipVerify:  envBool("GITHUB_INSECURE_SKIP_VERIFY"),
+		StripAnthropicBetaHeaders: envBool("STRIP_ANTHROPIC_BETA_HEADERS"),
 	}
 
 	// Validate required configuration — need at least one auth method
@@ -77,6 +77,10 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func envBool(key string) bool {
+	return os.Getenv(key) == "true"
 }
 
 func getEnvOrDefaultInt(logger log.Logger, key string, defaultValue int) int {
