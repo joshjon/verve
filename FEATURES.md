@@ -93,7 +93,7 @@
 
 - **Repository management**: Add/remove repos, list accessible repos for authenticated user
 - **PR status sync**: Checks merged status, CI results, and mergeability
-- **CI failure analysis**: Fetches failed check run logs (last 50 lines per job, 4KB total)
+- **CI failure analysis**: Fetches failed check run logs (last 150 lines of the failed step, 8KB total)
 - **Background sync**: Every 30 seconds, syncs all tasks in `review` status
 - **Auto-retry on CI failure**: Retries with `ci_failure` category and truncated logs as context
 - **Auto-retry on merge conflict**: Retries with `merge_conflict` category for automatic rebase
