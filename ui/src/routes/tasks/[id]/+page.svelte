@@ -47,7 +47,6 @@
 		Pencil,
 		Trash2,
 		StopCircle,
-		Square,
 		Filter
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
@@ -1418,7 +1417,7 @@
 									{#if stopping}
 										<Loader2 class="w-4 h-4 animate-spin" />
 									{:else}
-										<Square class="w-4 h-4" />
+										<StopCircle class="w-4 h-4" />
 									{/if}
 									Stop Agent
 								</Button>
