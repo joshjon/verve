@@ -294,7 +294,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 			hasPending = true
 			continue
 		}
-		if run.Conclusion != nil && *run.Conclusion == "failure" {
+		if run.Conclusion != nil && *run.Conclusion == string(CheckStatusFailure) {
 			failedNames = append(failedNames, run.Name)
 			failedRunIDs = append(failedRunIDs, run.ID)
 		}
@@ -416,7 +416,7 @@ func (c *Client) getFailedStepName(ctx context.Context, owner, repoName string, 
 // GitHub Actions job logs. Steps are delimited by ##[group]<step name> and
 // ##[endgroup] markers in the raw log output. Returns only the lines for the
 // matching step, or all lines if the step is not found.
-func extractStepLogs(rawLog string, stepName string) string {
+func extractStepLogs(rawLog, stepName string) string {
 	if stepName == "" {
 		return rawLog
 	}
