@@ -916,15 +916,15 @@ test.describe('UI Screenshots', () => {
 		await page.goto('/agents');
 
 		// Wait for metrics to load - ensure we see actual data, not loading state.
-		// Wait for the page title
-		await page.waitForSelector('text=Metrics', { timeout: 5000 });
-		// Wait for specific metric cards to be rendered with actual data
-		await page.waitForSelector('text=Pending', { timeout: 5000 });
-		await page.waitForSelector('text=In Review', { timeout: 5000 });
-		// Wait for the Tasks section header to appear
-		await page.waitForSelector('text=Tasks', { timeout: 5000 });
-		// Additional wait to ensure all metrics are fully rendered and loading state is gone
-		await page.waitForTimeout(1500);
+		// Wait for the metric cards container to appear (only shows when metrics loaded)
+		await page.waitForSelector('div.grid.grid-cols-2.sm\\:grid-cols-3.lg\\:grid-cols-6', {
+			timeout: 5000
+		});
+		// Wait for specific numeric values to be rendered in the metric cards
+		// Looking for the actual metric value containers, not just the labels
+		await page.waitForSelector('.text-2xl.font-bold', { timeout: 5000 });
+		// Additional wait to ensure all components have rendered
+		await page.waitForTimeout(1000);
 
 		await page.screenshot({
 			path: `screenshots/metrics-dashboard-${testInfo.project.name}.png`,
