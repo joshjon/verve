@@ -64,6 +64,11 @@
 	let editDescription = $state('');
 	let editCriteria = $state<string[]>([]);
 
+	// Session log auto-scroll
+	let sessionLogContainer: HTMLDivElement | null = $state(null);
+	let sessionAutoScroll = $state(true);
+	let lastSessionLogCount = $state(0);
+
 	// Confirmation state
 	let confirming = $state(false);
 	let notReady = $state(false);
@@ -348,6 +353,39 @@
 
 	function getTaskForId(taskId: string): EpicTask | undefined {
 		return epicTasks.find((t) => t.id === taskId);
+	}
+
+	// Auto-scroll session log when new entries arrive
+	$effect(() => {
+		const logCount = epic?.session_log?.length ?? 0;
+		if (logCount > lastSessionLogCount) {
+			lastSessionLogCount = logCount;
+			if (sessionAutoScroll && sessionLogContainer) {
+				requestAnimationFrame(() => {
+					if (sessionLogContainer) {
+						sessionLogContainer.scrollTop = sessionLogContainer.scrollHeight;
+					}
+				});
+			}
+		}
+	});
+
+	function handleSessionLogScroll(e: Event) {
+		const el = e.target as HTMLDivElement;
+		// Check if user is near bottom (within 50px)
+		const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+		sessionAutoScroll = isNearBottom;
+	}
+
+	function handleSessionLogWheel(e: WheelEvent) {
+		const el = e.currentTarget as HTMLDivElement;
+		const atTop = el.scrollTop <= 0;
+		const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+		// If scrolling up at top or scrolling down at bottom, prevent parent scroll
+		if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
+			e.preventDefault();
+		}
 	}
 
 	function getTaskStatusBadge(status: string): { bg: string; text: string; label: string } {
@@ -848,7 +886,12 @@
 							{/if}
 
 							<!-- Session log -->
-							<div class="flex-1 overflow-y-auto overscroll-contain space-y-2 min-h-0 mb-3 max-h-[40vh]">
+							<div
+								bind:this={sessionLogContainer}
+								onscroll={handleSessionLogScroll}
+								onwheel={handleSessionLogWheel}
+								class="flex-1 overflow-y-auto overscroll-contain space-y-2 min-h-0 mb-3 max-h-[40vh]"
+							>
 								{#each epic.session_log as line}
 									<div class="text-xs {line.startsWith('user:') ? 'text-blue-400' : line.startsWith('system:') ? 'text-violet-400' : 'text-muted-foreground'}">
 										{line}

@@ -625,6 +625,17 @@ const MOCK_AGENT_METRICS = {
 			attempt: 1,
 			finished_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() // 6 hours ago
 		}
+	],
+	workers: [
+		{
+			worker_id: 'wrk_mock01',
+			max_concurrent_tasks: 4,
+			active_tasks: 2,
+			connected_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+			last_poll_at: new Date(Date.now() - 5 * 1000).toISOString(), // 5 seconds ago
+			uptime_ms: 2 * 60 * 60 * 1000,
+			polling: true
+		}
 	]
 };
 
