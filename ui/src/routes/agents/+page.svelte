@@ -14,8 +14,7 @@
 		RefreshCw,
 		Cpu,
 		Server,
-		Layers,
-		Wifi
+		Layers
 	} from 'lucide-svelte';
 
 	let metrics = $state<AgentMetrics | null>(null);
@@ -103,7 +102,7 @@
 	<header class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6">
 		<div>
 			<div class="flex items-center gap-3">
-				<h1 class="text-xl sm:text-2xl font-bold">Agents</h1>
+				<h1 class="text-xl sm:text-2xl font-bold">Metrics</h1>
 				{#if metrics}
 					<span
 						class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {metrics.running_agents > 0 ? 'bg-green-500/15 text-green-400' : 'bg-muted text-muted-foreground'}"
@@ -146,6 +145,12 @@
 			<div class="text-muted-foreground text-sm">Loading metrics...</div>
 		</div>
 	{:else if metrics}
+		<!-- Tasks -->
+		<div class="mb-6">
+			<h2 class="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+				<Activity class="w-4 h-4" />
+				Tasks
+			</h2>
 		<!-- Summary Cards -->
 		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
 			<div class="bg-card border border-border rounded-lg p-4">
@@ -211,6 +216,7 @@
 				</div>
 			</div>
 		{/if}
+		</div>
 
 		<!-- Connected Workers -->
 		<div class="mb-6">
@@ -253,7 +259,7 @@
 								<div class="flex items-center justify-between text-xs">
 									<span class="text-muted-foreground flex items-center gap-1">
 										<Layers class="w-3 h-3" />
-										Capacity
+										Agent capacity
 									</span>
 									<span class="font-medium">
 										{worker.active_tasks} / {worker.max_concurrent_tasks}
@@ -271,13 +277,6 @@
 										Uptime
 									</span>
 									<span class="font-medium">{formatDuration(worker.uptime_ms)}</span>
-								</div>
-								<div class="flex items-center justify-between text-xs">
-									<span class="text-muted-foreground flex items-center gap-1">
-										<Wifi class="w-3 h-3" />
-										Last poll
-									</span>
-									<span class="font-medium">{formatTimeAgo(worker.last_poll_at)}</span>
 								</div>
 							</div>
 						</div>

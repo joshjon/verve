@@ -909,17 +909,24 @@ test.describe('UI Screenshots', () => {
 		});
 	});
 
-	// --- Agents Screenshots ---
+	// --- Metrics Screenshots ---
 
-	test('agents dashboard', async ({ page }, testInfo) => {
+	test('metrics dashboard', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
 		await page.goto('/agents');
 
-		// Wait for metrics to load.
-		await page.waitForTimeout(2000);
+		// Wait for metrics to load - ensure we see actual data, not loading state.
+		// Wait for the Tasks heading to appear
+		await page.waitForSelector('h2:has-text("Tasks")', { timeout: 5000 });
+		// Wait for specific numeric values to be rendered in the metric cards
+		await page.waitForSelector('.text-2xl.font-bold', { timeout: 5000 });
+		// Wait for Connected Workers section to ensure full page load
+		await page.waitForSelector('h2:has-text("Connected Workers")', { timeout: 5000 });
+		// Additional wait to ensure all components have rendered
+		await page.waitForTimeout(1500);
 
 		await page.screenshot({
-			path: `screenshots/agents-dashboard-${testInfo.project.name}.png`,
+			path: `screenshots/metrics-dashboard-${testInfo.project.name}.png`,
 			fullPage: true
 		});
 	});
