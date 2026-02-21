@@ -63,6 +63,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/tasks/:id/feedback", h.FeedbackTask)
 	g.POST("/tasks/:id/sync", h.SyncTaskStatus)
 	g.GET("/tasks/:id/checks", h.GetTaskChecks)
+	g.GET("/tasks/:id/diff", h.GetTaskDiff)
 	g.DELETE("/tasks/:id/dependency", h.RemoveDependency)
 	g.PUT("/tasks/:id/ready", h.SetReady)
 	g.PATCH("/tasks/:id", h.UpdateTask)
@@ -1062,6 +1063,47 @@ func (h *HTTPHandler) GetTaskChecks(c echo.Context) error {
 		CheckRunsSkipped: result.CheckRunsSkipped,
 		Checks:           result.Checks,
 	})
+}
+
+// GetTaskDiff handles GET /tasks/:id/diff
+// Returns the PR diff for a task from GitHub.
+func (h *HTTPHandler) GetTaskDiff(c echo.Context) error {
+	id, err := task.ParseTaskID(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, errorResponse("invalid task ID"))
+	}
+
+	ctx := c.Request().Context()
+
+	t, err := h.store.ReadTask(ctx, id)
+	if err != nil {
+		return jsonError(c, err)
+	}
+
+	if t.PRNumber <= 0 {
+		return c.JSON(http.StatusOK, DiffResponse{Diff: ""})
+	}
+
+	gh := h.githubClient()
+	if gh == nil {
+		return c.JSON(http.StatusServiceUnavailable, errorResponse("GitHub token not configured"))
+	}
+
+	repoID, parseErr := repo.ParseRepoID(t.RepoID)
+	if parseErr != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("invalid repo ID on task"))
+	}
+	r, readErr := h.repoStore.ReadRepo(ctx, repoID)
+	if readErr != nil {
+		return jsonError(c, readErr)
+	}
+
+	diff, err := gh.GetPRDiff(ctx, r.Owner, r.Name, t.PRNumber)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, errorResponse("failed to fetch PR diff: "+err.Error()))
+	}
+
+	return c.JSON(http.StatusOK, DiffResponse{Diff: diff})
 }
 
 // StreamLogs handles GET /tasks/:id/logs as a Server-Sent Events stream.

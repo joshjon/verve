@@ -181,6 +181,14 @@ export class VerveClient {
 		return res.json();
 	}
 
+	async getTaskDiff(id: string): Promise<{ diff: string }> {
+		const res = await fetch(`${this.baseUrl}/tasks/${id}/diff`);
+		if (!res.ok) {
+			throw new Error('Failed to fetch task diff');
+		}
+		return res.json();
+	}
+
 	async retryTask(id: string, instructions?: string): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}/retry`, {
 			method: 'POST',
