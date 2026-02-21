@@ -539,6 +539,41 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 	return strings.Join(parts, "\n\n"), nil
 }
 
+// maxDiffSize is the maximum number of bytes to read from a PR diff response
+// to avoid memory issues with very large diffs.
+const maxDiffSize = 5 * 1024 * 1024 // 5MB
+
+// GetPRDiff fetches the unified diff for a pull request using the GitHub API.
+// It uses the Accept: application/vnd.github.v3.diff header to get raw diff text.
+// The response body is limited to maxDiffSize bytes.
+func (c *Client) GetPRDiff(ctx context.Context, owner, repo string, prNumber int) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repo, prNumber)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github.v3.diff")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiffSize))
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
+}
+
 // ClosePR closes an open pull request and returns the head branch name.
 func (c *Client) ClosePR(ctx context.Context, owner, repoName string, prNumber int) (headBranch string, err error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", owner, repoName, prNumber)

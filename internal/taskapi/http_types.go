@@ -113,6 +113,11 @@ type CheckStatusResponse struct {
 	Checks           []github.IndividualCheck `json:"checks,omitempty"`
 }
 
+// DiffResponse is the response body for the task diff endpoint.
+type DiffResponse struct {
+	Diff string `json:"diff"`
+}
+
 // PollTaskResponse wraps a claimed task with the credentials and repo info
 // needed by the worker to execute it. The GitHub token is included so that
 // workers don't need their own token configuration.
