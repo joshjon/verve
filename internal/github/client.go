@@ -294,7 +294,7 @@ func (c *Client) GetPRCheckStatus(ctx context.Context, owner, repo string, prNum
 			hasPending = true
 			continue
 		}
-		if run.Conclusion != nil && *run.Conclusion == "failure" {
+		if run.Conclusion != nil && *run.Conclusion == string(CheckStatusFailure) {
 			failedNames = append(failedNames, run.Name)
 			failedRunIDs = append(failedRunIDs, run.ID)
 		}
@@ -371,8 +371,100 @@ func (c *Client) GetPRMergeability(ctx context.Context, owner, repo string, prNu
 	}, nil
 }
 
+// getFailedStepName fetches job metadata from GitHub API and returns the name
+// of the first step with conclusion "failure". Returns empty string if no
+// failed step is found or on error.
+func (c *Client) getFailedStepName(ctx context.Context, owner, repoName string, jobID int64) string {
+	jobURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/jobs/%d", owner, repoName, jobID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jobURL, http.NoBody)
+	if err != nil {
+		return ""
+	}
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var job struct {
+		Steps []struct {
+			Name       string  `json:"name"`
+			Status     string  `json:"status"`
+			Conclusion *string `json:"conclusion"`
+			Number     int     `json:"number"`
+		} `json:"steps"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
+		return ""
+	}
+
+	for _, step := range job.Steps {
+		if step.Conclusion != nil && *step.Conclusion == "failure" {
+			return step.Name
+		}
+	}
+	return ""
+}
+
+// extractStepLogs extracts log lines belonging to a specific step from raw
+// GitHub Actions job logs. Steps are delimited by ##[group]<step name> and
+// ##[endgroup] markers in the raw log output. Returns only the lines for the
+// matching step, or all lines if the step is not found.
+func extractStepLogs(rawLog, stepName string) string {
+	if stepName == "" {
+		return rawLog
+	}
+
+	lines := strings.Split(rawLog, "\n")
+	var stepLines []string
+	inStep := false
+
+	for _, line := range lines {
+		// GitHub Actions step markers appear as:
+		// 2024-01-01T00:00:00.0000000Z ##[group]Step Name
+		if strings.Contains(line, "##[group]") {
+			// Extract the step name after ##[group]
+			idx := strings.Index(line, "##[group]")
+			groupName := line[idx+len("##[group]"):]
+			groupName = strings.TrimSpace(groupName)
+
+			if groupName == stepName {
+				inStep = true
+				continue
+			} else if inStep {
+				// We've reached the next step, stop collecting
+				break
+			}
+		}
+		if strings.Contains(line, "##[endgroup]") && inStep {
+			// End of the matched step section; continue because more
+			// log lines for the same step may follow after endgroup
+			// (endgroup closes a collapsible section within a step,
+			// not the step itself).
+			continue
+		}
+		if inStep {
+			stepLines = append(stepLines, line)
+		}
+	}
+
+	// If we found step-specific lines, return them; otherwise fall back to
+	// the full log so the caller still gets useful output.
+	if len(stepLines) > 0 {
+		return strings.Join(stepLines, "\n")
+	}
+	return rawLog
+}
+
 // GetFailedCheckLogs fetches the log output of failed check runs for a PR.
-// Returns a combined, truncated string of failed job logs (~4KB max).
+// For each failed job it identifies the exact failed step and returns the last
+// 150 lines of that step's logs. Returns a combined, truncated string (~8KB max).
 func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string, prNumber int) (string, error) {
 	checkResult, err := c.GetPRCheckStatus(ctx, owner, repoName, prNumber)
 	if err != nil {
@@ -382,8 +474,8 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 		return "", nil
 	}
 
-	const maxTotalBytes = 4096
-	const maxLinesPerJob = 50
+	const maxTotalBytes = 8192
+	const maxLinesPerStep = 150
 	parts := make([]string, 0, len(checkResult.FailedRunIDs))
 	totalLen := 0
 
@@ -397,6 +489,9 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 			name = checkResult.FailedNames[i]
 		}
 
+		// Identify the exact failed step within this job.
+		failedStep := c.getFailedStepName(ctx, owner, repoName, jobID)
+
 		logURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/actions/jobs/%d/logs", owner, repoName, jobID)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL, http.NoBody)
 		if err != nil {
@@ -409,7 +504,7 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 			continue
 		}
 
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32*1024))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		_ = resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
@@ -417,10 +512,13 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 			continue
 		}
 
-		// Take last N lines
-		lines := strings.Split(string(body), "\n")
-		if len(lines) > maxLinesPerJob {
-			lines = lines[len(lines)-maxLinesPerJob:]
+		// Extract only the failed step's logs.
+		stepLog := extractStepLogs(string(body), failedStep)
+
+		// Take last N lines of the failed step.
+		lines := strings.Split(stepLog, "\n")
+		if len(lines) > maxLinesPerStep {
+			lines = lines[len(lines)-maxLinesPerStep:]
 		}
 		tail := strings.Join(lines, "\n")
 
@@ -429,7 +527,11 @@ func (c *Client) GetFailedCheckLogs(ctx context.Context, owner, repoName string,
 			tail = tail[len(tail)-remaining:]
 		}
 
-		part := fmt.Sprintf("=== Failed: %s ===\n%s", name, tail)
+		stepLabel := name
+		if failedStep != "" {
+			stepLabel = fmt.Sprintf("%s > %s", name, failedStep)
+		}
+		part := fmt.Sprintf("=== Failed: %s ===\n%s", stepLabel, tail)
 		parts = append(parts, part)
 		totalLen += len(part)
 	}

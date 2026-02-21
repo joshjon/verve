@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -298,6 +299,164 @@ func TestCheckStatusConstants(t *testing.T) {
 	assert.Equal(t, CheckStatus("pending"), CheckStatusPending)
 	assert.Equal(t, CheckStatus("success"), CheckStatusSuccess)
 	assert.Equal(t, CheckStatus("failure"), CheckStatusFailure)
+}
+
+func TestExtractStepLogs(t *testing.T) {
+	tests := []struct {
+		name     string
+		rawLog   string
+		stepName string
+		want     string
+	}{
+		{
+			name:     "empty step name returns full log",
+			rawLog:   "line1\nline2\nline3",
+			stepName: "",
+			want:     "line1\nline2\nline3",
+		},
+		{
+			name: "extracts specific step",
+			rawLog: "2024-01-01T00:00:00.0000000Z ##[group]Set up job\n" +
+				"setting up...\n" +
+				"2024-01-01T00:00:01.0000000Z ##[group]Run tests\n" +
+				"running test 1\n" +
+				"running test 2\n" +
+				"FAIL: test 2 failed\n" +
+				"2024-01-01T00:00:02.0000000Z ##[group]Post cleanup\n" +
+				"cleaning up...",
+			stepName: "Run tests",
+			want:     "running test 1\nrunning test 2\nFAIL: test 2 failed",
+		},
+		{
+			name: "step not found returns full log",
+			rawLog: "2024-01-01T00:00:00.0000000Z ##[group]Set up job\n" +
+				"setting up...\n" +
+				"2024-01-01T00:00:01.0000000Z ##[group]Build\n" +
+				"building...",
+			stepName: "Run tests",
+			want: "2024-01-01T00:00:00.0000000Z ##[group]Set up job\n" +
+				"setting up...\n" +
+				"2024-01-01T00:00:01.0000000Z ##[group]Build\n" +
+				"building...",
+		},
+		{
+			name: "last step in log without trailing group marker",
+			rawLog: "2024-01-01T00:00:00.0000000Z ##[group]Set up job\n" +
+				"setting up...\n" +
+				"2024-01-01T00:00:01.0000000Z ##[group]Take UI screenshots\n" +
+				"screenshot 1 ok\n" +
+				"screenshot 2 FAILED\n" +
+				"Error: element not found",
+			stepName: "Take UI screenshots",
+			want:     "screenshot 1 ok\nscreenshot 2 FAILED\nError: element not found",
+		},
+		{
+			name: "handles endgroup markers within step",
+			rawLog: "2024-01-01T00:00:00.0000000Z ##[group]Run tests\n" +
+				"test output line 1\n" +
+				"2024-01-01T00:00:00.5000000Z ##[endgroup]\n" +
+				"test output line 2\n" +
+				"2024-01-01T00:00:01.0000000Z ##[group]Cleanup\n" +
+				"cleanup...",
+			stepName: "Run tests",
+			want:     "test output line 1\ntest output line 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractStepLogs(tt.rawLog, tt.stepName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestGetFailedCheckLogs_StepExtraction(t *testing.T) {
+	failureConclusion := "failure"
+	successConclusion := "success"
+
+	// Simulate a GitHub API server that serves:
+	// 1. PR details (head SHA)
+	// 2. Check runs (one failed job)
+	// 3. Commit statuses (empty)
+	// 4. Job details with step info
+	// 5. Job logs with step markers
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/pulls/1"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"head": map[string]string{"sha": "abc123"},
+			})
+		case strings.Contains(path, "/check-runs") && !strings.Contains(path, "/actions/jobs/"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"check_runs": []map[string]any{
+					{
+						"id":         42,
+						"name":       "Capture UI screenshots",
+						"status":     "completed",
+						"conclusion": &failureConclusion,
+						"html_url":   "https://github.com/owner/repo/actions/runs/1/jobs/42",
+					},
+				},
+			})
+		case strings.HasSuffix(path, "/status"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"state":    "success",
+				"statuses": []any{},
+			})
+		case strings.HasSuffix(path, "/actions/jobs/42") && !strings.HasSuffix(path, "/logs"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"steps": []map[string]any{
+					{"name": "Set up job", "status": "completed", "conclusion": &successConclusion, "number": 1},
+					{"name": "Checkout code", "status": "completed", "conclusion": &successConclusion, "number": 2},
+					{"name": "Take UI screenshots", "status": "completed", "conclusion": &failureConclusion, "number": 3},
+					{"name": "Upload artifacts", "status": "completed", "conclusion": nil, "number": 4},
+				},
+			})
+		case strings.HasSuffix(path, "/actions/jobs/42/logs"):
+			w.Write([]byte(
+				"2024-01-01T00:00:00.0000000Z ##[group]Set up job\n" +
+					"setup line 1\n" +
+					"setup line 2\n" +
+					"2024-01-01T00:00:01.0000000Z ##[group]Checkout code\n" +
+					"checkout line 1\n" +
+					"2024-01-01T00:00:02.0000000Z ##[group]Take UI screenshots\n" +
+					"screenshot 1 ok\n" +
+					"screenshot 2 ok\n" +
+					"screenshot 3 FAILED\n" +
+					"Error: element not visible on page\n" +
+					"2024-01-01T00:00:03.0000000Z ##[group]Upload artifacts\n" +
+					"uploading...",
+			))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := &Client{
+		token:      "test-token",
+		httpClient: server.Client(),
+	}
+	server.Client().Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		r.URL.Scheme = "http"
+		r.URL.Host = server.Listener.Addr().String()
+		return http.DefaultTransport.RoundTrip(r)
+	})
+
+	result, err := c.GetFailedCheckLogs(context.Background(), "owner", "repo", 1)
+	require.NoError(t, err)
+
+	// Should contain the failed step name in the header
+	assert.Contains(t, result, "=== Failed: Capture UI screenshots > Take UI screenshots ===")
+	// Should contain the failed step's logs
+	assert.Contains(t, result, "screenshot 3 FAILED")
+	assert.Contains(t, result, "Error: element not visible on page")
+	// Should NOT contain logs from other steps
+	assert.NotContains(t, result, "setup line 1")
+	assert.NotContains(t, result, "checkout line 1")
+	assert.NotContains(t, result, "uploading...")
 }
 
 // roundTripFunc is a helper to override HTTP transport for tests.
