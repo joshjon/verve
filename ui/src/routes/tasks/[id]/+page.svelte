@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { client } from '$lib/api-client';
 	import type { Task, TaskStatus } from '$lib/models/task';
+	import type { Epic } from '$lib/models/epic';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
@@ -47,7 +48,8 @@
 		Pencil,
 		Trash2,
 		StopCircle,
-		Filter
+		Filter,
+		Layers
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
@@ -198,6 +200,7 @@
 	let lastLogCount = $state(0);
 	let claudeOnly = $state(false);
 	let showRetryContext = $state(false);
+	let epic = $state<Epic | null>(null);
 	let checkStatus = $state<{
 		status: 'pending' | 'success' | 'failure' | 'error';
 		summary?: string;
@@ -470,10 +473,22 @@
 			if (task.status === 'review' && task.pr_number) {
 				loadCheckStatus();
 			}
+			if (task.epic_id) {
+				loadEpic(task.epic_id);
+			}
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadEpic(epicId: string) {
+		try {
+			epic = await client.getEpic(epicId);
+		} catch {
+			// Epic may have been deleted; ignore errors
+			epic = null;
 		}
 	}
 
@@ -718,6 +733,16 @@
 					<StatusIcon class="w-3 h-3" />
 					{currentStatusConfig?.label}
 				</Badge>
+				{#if epic}
+					<button
+						class="inline-flex items-center gap-1.5 text-xs bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-md hover:bg-indigo-500/25 transition-colors cursor-pointer border border-indigo-500/20"
+						onclick={() => goto(`/epics/${epic!.id}`)}
+						title="Part of epic: {epic!.title}"
+					>
+						<Layers class="w-3 h-3" />
+						<span class="max-w-[200px] truncate">{epic!.title}</span>
+					</button>
+				{/if}
 				{#if task.duration_ms}
 					<span class="text-xs text-muted-foreground flex items-center gap-1.5">
 						<Timer class="w-3.5 h-3.5" />
