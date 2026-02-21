@@ -34,8 +34,9 @@ func ParseModelsEnv(s string) []ModelOption {
 	if s == "" {
 		return nil
 	}
-	var models []ModelOption
-	for _, part := range strings.Split(s, ",") {
+	parts := strings.Split(s, ",")
+	models := make([]ModelOption, 0, len(parts))
+	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
