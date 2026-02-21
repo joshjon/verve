@@ -307,22 +307,32 @@
 				<div class="space-y-2">
 					{#each metrics.active_agents as agent (agent.task_id)}
 						<a
-							href="/tasks/{agent.task_id}"
+							href={agent.is_planning ? `/epics/${agent.epic_id}` : `/tasks/${agent.task_id}`}
 							class="block bg-card border border-border rounded-lg p-4 hover:border-primary/30 transition-colors"
 						>
 							<div class="flex items-start justify-between gap-3">
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2 mb-1">
 										<span class="relative flex h-2 w-2 shrink-0">
-											<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-											<span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+											{#if agent.is_planning}
+												<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+												<span class="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+											{:else}
+												<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+												<span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+											{/if}
 										</span>
 										<span class="font-medium text-sm truncate">{agent.task_title || agent.task_id}</span>
+										{#if agent.is_planning}
+											<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-violet-500/10 text-violet-400">
+												Planning
+											</span>
+										{/if}
 									</div>
 									<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
 										<span class="flex items-center gap-1">
 											<Clock class="w-3 h-3" />
-											Running for {formatDuration(agent.running_for_ms)}
+											{agent.is_planning ? 'Planning for' : 'Running for'} {formatDuration(agent.running_for_ms)}
 										</span>
 										{#if agent.cost_usd > 0}
 											<span class="flex items-center gap-1">

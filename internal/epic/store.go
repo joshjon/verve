@@ -398,6 +398,45 @@ func (s *Store) CheckAndCompleteEpic(ctx context.Context, id EpicID) error {
 	return s.repo.UpdateEpicStatus(ctx, id, StatusCompleted)
 }
 
+// ListPlanningEpicsForMetrics returns epics that are actively being planned
+// by a worker agent (claimed epics in planning or draft status). This is used
+// by the task metrics to include planning agents in the active agents count.
+func (s *Store) ListPlanningEpicsForMetrics(ctx context.Context) ([]PlanningEpicForMetrics, error) {
+	epics, err := s.repo.ListEpics(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]PlanningEpicForMetrics, 0, len(epics))
+	for _, e := range epics {
+		// Only include epics that are actively claimed by a worker
+		if e.ClaimedAt == nil {
+			continue
+		}
+		// Only planning or draft status (draft means agent proposed tasks, still active)
+		if e.Status != StatusPlanning && e.Status != StatusDraft {
+			continue
+		}
+		result = append(result, PlanningEpicForMetrics{
+			ID:        e.ID.String(),
+			Title:     e.Title,
+			RepoID:    e.RepoID,
+			Model:     e.Model,
+			ClaimedAt: e.ClaimedAt,
+		})
+	}
+	return result, nil
+}
+
+// PlanningEpicForMetrics is a minimal struct for epic planning metrics.
+type PlanningEpicForMetrics struct {
+	ID        string
+	Title     string
+	RepoID    string
+	Model     string
+	ClaimedAt *time.Time
+}
+
 // CheckActiveEpicsCompletion checks all active epics for completion.
 // This is intended to be called from a background loop.
 func (s *Store) CheckActiveEpicsCompletion(ctx context.Context) (int, error) {

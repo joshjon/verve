@@ -93,6 +93,86 @@ func TestStore_GetAgentMetrics_Counts(t *testing.T) {
 	assert.Equal(t, "failed", metrics.RecentCompletions[0].Status)
 }
 
+func TestStore_GetAgentMetrics_IncludesPlanningEpics(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	// Create a running task
+	now := time.Now()
+	startedAt := now.Add(-10 * time.Minute)
+	running := NewTask("repo_1", "running task", "desc", nil, nil, 0, false, "sonnet", true)
+	running.Status = StatusRunning
+	running.StartedAt = &startedAt
+	repo.tasks[running.ID.String()] = running
+
+	// Set up a mock planning epic lister
+	claimedAt := now.Add(-5 * time.Minute)
+	store.SetPlanningEpicLister(NewPlanningEpicListerFunc(
+		func(ctx context.Context) ([]PlanningEpic, error) {
+			return []PlanningEpic{
+				{
+					ID:        "epc_planning1",
+					Title:     "Plan user auth feature",
+					RepoID:    "repo_1",
+					Model:     "opus",
+					ClaimedAt: &claimedAt,
+				},
+			}, nil
+		},
+	))
+
+	metrics, err := store.GetAgentMetrics(context.Background())
+	require.NoError(t, err)
+
+	// Running agents should include both the running task and the planning epic
+	assert.Equal(t, 2, metrics.RunningAgents)
+	require.Len(t, metrics.ActiveAgents, 2)
+
+	// Find the planning agent in the list
+	var planningAgent *ActiveAgent
+	var taskAgent *ActiveAgent
+	for i := range metrics.ActiveAgents {
+		if metrics.ActiveAgents[i].IsPlanning {
+			planningAgent = &metrics.ActiveAgents[i]
+		} else {
+			taskAgent = &metrics.ActiveAgents[i]
+		}
+	}
+
+	// Verify task agent
+	require.NotNil(t, taskAgent)
+	assert.Equal(t, running.ID.String(), taskAgent.TaskID)
+	assert.False(t, taskAgent.IsPlanning)
+
+	// Verify planning agent
+	require.NotNil(t, planningAgent)
+	assert.Equal(t, "epc_planning1", planningAgent.TaskID)
+	assert.Equal(t, "Plan user auth feature", planningAgent.TaskTitle)
+	assert.Equal(t, "repo_1", planningAgent.RepoID)
+	assert.Equal(t, "opus", planningAgent.Model)
+	assert.Equal(t, "epc_planning1", planningAgent.EpicID)
+	assert.True(t, planningAgent.IsPlanning)
+	assert.Equal(t, "Plan user auth feature", planningAgent.EpicTitle)
+	assert.True(t, planningAgent.RunningFor > 0)
+
+	// TotalTasks should only count actual tasks, not epics
+	assert.Equal(t, 1, metrics.TotalTasks)
+}
+
+func TestStore_GetAgentMetrics_NoPlanningEpicLister(t *testing.T) {
+	repo := newMockRepo()
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	// No epic lister set — should still work fine (backward compat)
+	metrics, err := store.GetAgentMetrics(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, metrics.RunningAgents)
+	assert.Empty(t, metrics.ActiveAgents)
+}
+
 func TestStore_GetAgentMetrics_RecentCompletionsLimit(t *testing.T) {
 	repo := newMockRepo()
 	broker := NewBroker(nil)
