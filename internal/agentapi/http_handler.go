@@ -2,6 +2,7 @@ package agentapi
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -10,23 +11,26 @@ import (
 	"verve/internal/githubtoken"
 	"verve/internal/repo"
 	"verve/internal/task"
+	"verve/internal/workertracker"
 )
 
 // HTTPHandler handles agent-facing API requests.
 type HTTPHandler struct {
-	taskStore    *task.Store
-	epicStore    *epic.Store
-	repoStore    *repo.Store
-	githubToken  *githubtoken.Service
+	taskStore       *task.Store
+	epicStore       *epic.Store
+	repoStore       *repo.Store
+	githubToken     *githubtoken.Service
+	workerRegistry  *workertracker.Registry
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(taskStore *task.Store, epicStore *epic.Store, repoStore *repo.Store, githubToken *githubtoken.Service) *HTTPHandler {
+func NewHTTPHandler(taskStore *task.Store, epicStore *epic.Store, repoStore *repo.Store, githubToken *githubtoken.Service, workerRegistry *workertracker.Registry) *HTTPHandler {
 	return &HTTPHandler{
-		taskStore:   taskStore,
-		epicStore:   epicStore,
-		repoStore:   repoStore,
-		githubToken: githubToken,
+		taskStore:      taskStore,
+		epicStore:      epicStore,
+		repoStore:      repoStore,
+		githubToken:    githubToken,
+		workerRegistry: workerRegistry,
 	}
 }
 
@@ -34,6 +38,9 @@ func NewHTTPHandler(taskStore *task.Store, epicStore *epic.Store, repoStore *rep
 func (h *HTTPHandler) Register(g *echo.Group) {
 	// Unified poll (epics first, then tasks)
 	g.GET("/poll", h.Poll)
+
+	// Worker observability
+	g.GET("/workers", h.ListWorkers)
 
 	// Task agent endpoints
 	g.POST("/tasks/:id/logs", h.TaskAppendLogs)
@@ -53,6 +60,18 @@ func (h *HTTPHandler) Poll(c echo.Context) error {
 	timeout := 30 * time.Second
 	deadline := time.Now().Add(timeout)
 	ctx := c.Request().Context()
+
+	// Track worker metadata from query parameters
+	workerID := c.QueryParam("worker_id")
+	if workerID != "" && h.workerRegistry != nil {
+		maxConcurrent, _ := strconv.Atoi(c.QueryParam("max_concurrent"))
+		activeTasks, _ := strconv.Atoi(c.QueryParam("active_tasks"))
+		if maxConcurrent <= 0 {
+			maxConcurrent = 1
+		}
+		h.workerRegistry.RecordPollStart(workerID, maxConcurrent, activeTasks)
+		defer h.workerRegistry.RecordPollEnd(workerID)
+	}
 
 	for {
 		// Try epics first (higher priority)
@@ -378,6 +397,21 @@ func (h *HTTPHandler) EpicAppendLogs(c echo.Context) error {
 		return jsonError(c, err)
 	}
 	return c.JSON(http.StatusOK, statusOK())
+}
+
+// --- Worker Observability ---
+
+// ListWorkers handles GET /workers — returns actively polling workers.
+func (h *HTTPHandler) ListWorkers(c echo.Context) error {
+	if h.workerRegistry == nil {
+		return c.JSON(http.StatusOK, []struct{}{})
+	}
+	// Workers that haven't polled in 2 minutes are considered stale
+	workers := h.workerRegistry.ListWorkers(2 * time.Minute)
+	if workers == nil {
+		workers = []workertracker.WorkerInfo{}
+	}
+	return c.JSON(http.StatusOK, workers)
 }
 
 // --- Helpers ---

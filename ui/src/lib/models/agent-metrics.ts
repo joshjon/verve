@@ -21,6 +21,16 @@ export interface CompletedAgent {
 	finished_at: string;
 }
 
+export interface WorkerInfo {
+	worker_id: string;
+	max_concurrent_tasks: number;
+	active_tasks: number;
+	connected_at: string;
+	last_poll_at: string;
+	uptime_ms: number;
+	polling: boolean;
+}
+
 export interface AgentMetrics {
 	running_agents: number;
 	pending_tasks: number;
@@ -31,4 +41,5 @@ export interface AgentMetrics {
 	total_cost_usd: number;
 	active_agents: ActiveAgent[];
 	recent_completions: CompletedAgent[];
+	workers: WorkerInfo[];
 }

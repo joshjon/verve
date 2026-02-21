@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { client } from '$lib/api-client';
-	import type { AgentMetrics, ActiveAgent, CompletedAgent } from '$lib/models/agent-metrics';
+	import type { AgentMetrics, ActiveAgent, CompletedAgent, WorkerInfo } from '$lib/models/agent-metrics';
 	import {
 		Activity,
 		Clock,
@@ -12,7 +12,10 @@
 		Eye,
 		AlertCircle,
 		RefreshCw,
-		Cpu
+		Cpu,
+		Server,
+		Layers,
+		Wifi
 	} from 'lucide-svelte';
 
 	let metrics = $state<AgentMetrics | null>(null);
@@ -107,10 +110,15 @@
 					>
 						{metrics.running_agents} running
 					</span>
+					<span
+						class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {metrics.workers.length > 0 ? 'bg-blue-500/15 text-blue-400' : 'bg-muted text-muted-foreground'}"
+					>
+						{metrics.workers.length} {metrics.workers.length === 1 ? 'worker' : 'workers'}
+					</span>
 				{/if}
 			</div>
 			<p class="text-muted-foreground text-sm mt-1 hidden sm:block">
-				Monitor running agents and track performance metrics
+				Monitor running agents, connected workers, and track performance metrics
 			</p>
 		</div>
 		<div class="flex items-center gap-2 sm:gap-3">
@@ -203,6 +211,80 @@
 				</div>
 			</div>
 		{/if}
+
+		<!-- Connected Workers -->
+		<div class="mb-6">
+			<h2 class="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+				<Server class="w-4 h-4" />
+				Connected Workers
+				{#if metrics.workers.length > 0}
+					<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-400">
+						{metrics.workers.length}
+					</span>
+				{/if}
+			</h2>
+			{#if metrics.workers.length === 0}
+				<div class="bg-card border border-border rounded-lg p-8 text-center">
+					<Server class="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+					<p class="text-muted-foreground text-sm">No workers connected</p>
+					<p class="text-muted-foreground text-xs mt-1">Workers will appear here when they start polling for tasks</p>
+				</div>
+			{:else}
+				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+					{#each metrics.workers as worker (worker.worker_id)}
+						<div class="bg-card border border-border rounded-lg p-4">
+							<div class="flex items-center justify-between mb-3">
+								<div class="flex items-center gap-2">
+									<span class="relative flex h-2 w-2 shrink-0">
+										{#if worker.polling}
+											<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+											<span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+										{:else}
+											<span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+										{/if}
+									</span>
+									<span class="text-xs font-mono text-muted-foreground">{worker.worker_id.slice(0, 8)}</span>
+								</div>
+								<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium {worker.polling ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}">
+									{worker.polling ? 'Polling' : 'Active'}
+								</span>
+							</div>
+							<div class="space-y-2">
+								<div class="flex items-center justify-between text-xs">
+									<span class="text-muted-foreground flex items-center gap-1">
+										<Layers class="w-3 h-3" />
+										Capacity
+									</span>
+									<span class="font-medium">
+										{worker.active_tasks} / {worker.max_concurrent_tasks}
+									</span>
+								</div>
+								<div class="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+									<div
+										class="h-full rounded-full transition-all duration-500 {worker.active_tasks >= worker.max_concurrent_tasks ? 'bg-amber-500' : 'bg-blue-500'}"
+										style="width: {worker.max_concurrent_tasks > 0 ? Math.min((worker.active_tasks / worker.max_concurrent_tasks) * 100, 100) : 0}%"
+									></div>
+								</div>
+								<div class="flex items-center justify-between text-xs">
+									<span class="text-muted-foreground flex items-center gap-1">
+										<Clock class="w-3 h-3" />
+										Uptime
+									</span>
+									<span class="font-medium">{formatDuration(worker.uptime_ms)}</span>
+								</div>
+								<div class="flex items-center justify-between text-xs">
+									<span class="text-muted-foreground flex items-center gap-1">
+										<Wifi class="w-3 h-3" />
+										Last poll
+									</span>
+									<span class="font-medium">{formatTimeAgo(worker.last_poll_at)}</span>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
 
 		<!-- Active Agents -->
 		<div class="mb-6">

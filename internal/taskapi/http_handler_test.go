@@ -533,7 +533,7 @@ func setupHandler() (*HTTPHandler, *mockTaskRepo, *mockRepoRepo, *repo.Repo) {
 	settingRepo := newMockSettingRepo()
 	settingService := setting.NewService(settingRepo)
 
-	handler := NewHTTPHandler(taskStore, repoStore, nil, nil, settingService)
+	handler := NewHTTPHandler(taskStore, repoStore, nil, nil, settingService, nil)
 
 	// Pre-create a repo for use in tests
 	r, _ := repo.NewRepo("owner/test-repo")

@@ -28,6 +28,7 @@ import (
 	litemigrations "verve/internal/sqlite/migrations"
 	"verve/internal/task"
 	"verve/internal/taskapi"
+	"verve/internal/workertracker"
 )
 
 type stores struct {
@@ -187,9 +188,11 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 		srv.Add(echo.GET, "/*", uiHandler)
 	}
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.epic, s.githubToken, s.setting))
+	workerReg := workertracker.New()
+
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.epic, s.githubToken, s.setting, workerReg))
 	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo, s.task, s.setting))
-	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken))
+	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken, workerReg))
 
 	// Background PR sync.
 	go backgroundSync(ctx, logger, s, 30*time.Second)
