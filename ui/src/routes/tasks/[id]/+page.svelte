@@ -197,7 +197,7 @@
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
-	let claudeOnly = $state(true);
+	let claudeOnly = $state(false);
 	let showRetryContext = $state(false);
 	let checkStatus = $state<{
 		status: 'pending' | 'success' | 'failure' | 'error';
