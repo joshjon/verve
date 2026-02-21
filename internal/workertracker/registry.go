@@ -84,7 +84,7 @@ func (r *Registry) ListWorkers(staleness time.Duration) []WorkerInfo {
 	now := time.Now()
 	cutoff := now.Add(-staleness)
 
-	var result []WorkerInfo
+	result := make([]WorkerInfo, 0, len(r.workers))
 	for id, entry := range r.workers {
 		if entry.info.LastPollAt.Before(cutoff) {
 			delete(r.workers, id)
