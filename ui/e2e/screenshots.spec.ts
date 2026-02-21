@@ -584,6 +584,26 @@ const MOCK_AGENT_METRICS = {
 			model: 'claude-sonnet-4-20250514'
 		}
 	],
+	workers: [
+		{
+			worker_id: 'wrk_abc12345',
+			max_concurrent_tasks: 4,
+			active_tasks: 2,
+			connected_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3 hours ago
+			last_poll_at: new Date(Date.now() - 5 * 1000).toISOString(), // 5 seconds ago
+			uptime_ms: 3 * 60 * 60 * 1000,
+			polling: false
+		},
+		{
+			worker_id: 'wrk_def67890',
+			max_concurrent_tasks: 2,
+			active_tasks: 0,
+			connected_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 min ago
+			last_poll_at: new Date(Date.now() - 2 * 1000).toISOString(), // 2 seconds ago
+			uptime_ms: 45 * 60 * 1000,
+			polling: true
+		}
+	],
 	recent_completions: [
 		{
 			task_id: 'tsk_review01',
