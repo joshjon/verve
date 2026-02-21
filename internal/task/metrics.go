@@ -3,6 +3,8 @@ package task
 import (
 	"context"
 	"time"
+
+	"verve/internal/workertracker"
 )
 
 // AgentMetrics provides a snapshot of agent activity and performance.
@@ -29,6 +31,9 @@ type AgentMetrics struct {
 
 	// Recent completions (last 10 tasks that reached a terminal state)
 	RecentCompletions []CompletedAgent `json:"recent_completions"`
+
+	// Workers actively polling for tasks
+	Workers []workertracker.WorkerInfo `json:"workers"`
 }
 
 // ActiveAgent describes a single running agent session.

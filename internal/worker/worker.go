@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joshjon/kit/log"
 )
 
@@ -75,6 +76,9 @@ type Worker struct {
 	// Beta header proxy (started when StripAnthropicBetaHeaders is enabled)
 	betaProxy *BetaHeaderProxy
 
+	// Unique identifier for this worker instance
+	workerID string
+
 	// Concurrency control
 	maxConcurrent int
 	semaphore     chan struct{}
@@ -110,6 +114,7 @@ func New(cfg Config, logger log.Logger) (*Worker, error) {
 		logger:        logger,
 		pollInterval:  5 * time.Second,
 		betaProxy:     betaProxy,
+		workerID:      uuid.New().String(),
 		maxConcurrent: maxConcurrent,
 		semaphore:     make(chan struct{}, maxConcurrent),
 	}, nil
@@ -229,6 +234,17 @@ func (w *Worker) poll(ctx context.Context) (*PollResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Send worker metadata as query parameters for server-side tracking
+	w.activeMu.Lock()
+	activeTasks := w.activeTasks
+	w.activeMu.Unlock()
+
+	q := req.URL.Query()
+	q.Set("worker_id", w.workerID)
+	q.Set("max_concurrent", fmt.Sprintf("%d", w.maxConcurrent))
+	q.Set("active_tasks", fmt.Sprintf("%d", activeTasks))
+	req.URL.RawQuery = q.Encode()
 
 	resp, err := w.client.Do(req)
 	if err != nil {

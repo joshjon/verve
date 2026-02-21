@@ -17,6 +17,7 @@ import (
 	"verve/internal/repo"
 	"verve/internal/setting"
 	"verve/internal/task"
+	"verve/internal/workertracker"
 )
 
 // HTTPHandler handles task and repo HTTP requests.
@@ -26,11 +27,12 @@ type HTTPHandler struct {
 	epicStore          *epic.Store
 	githubTokenService *githubtoken.Service
 	settingService     *setting.Service
+	workerRegistry     *workertracker.Registry
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, repoStore *repo.Store, epicStore *epic.Store, githubTokenService *githubtoken.Service, settingService *setting.Service) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, epicStore: epicStore, githubTokenService: githubTokenService, settingService: settingService}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, epicStore *epic.Store, githubTokenService *githubtoken.Service, settingService *setting.Service, workerRegistry *workertracker.Registry) *HTTPHandler {
+	return &HTTPHandler{store: store, repoStore: repoStore, epicStore: epicStore, githubTokenService: githubTokenService, settingService: settingService, workerRegistry: workerRegistry}
 }
 
 // Register adds the endpoints to the provided Echo router group.
@@ -90,6 +92,13 @@ func (h *HTTPHandler) GetAgentMetrics(c echo.Context) error {
 	metrics, err := h.store.GetAgentMetrics(c.Request().Context())
 	if err != nil {
 		return jsonError(c, err)
+	}
+	// Attach worker info from the registry
+	if h.workerRegistry != nil {
+		metrics.Workers = h.workerRegistry.ListWorkers(2 * time.Minute)
+	}
+	if metrics.Workers == nil {
+		metrics.Workers = []workertracker.WorkerInfo{}
 	}
 	return c.JSON(http.StatusOK, metrics)
 }
