@@ -3,6 +3,7 @@ package setting
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 )
 
@@ -11,6 +12,45 @@ const KeyDefaultModel = "default_model"
 
 // ErrNotFound is returned when a setting key does not exist.
 var ErrNotFound = errors.New("setting not found")
+
+// DefaultModels is the built-in list of Claude model options when CLAUDE_MODELS
+// is not set.
+var DefaultModels = []ModelOption{
+	{Value: "haiku", Label: "Haiku"},
+	{Value: "sonnet", Label: "Sonnet"},
+	{Value: "opus", Label: "Opus"},
+}
+
+// ModelOption describes an available model for the UI.
+type ModelOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// ParseModelsEnv parses a comma-separated CLAUDE_MODELS environment variable
+// into a slice of ModelOption. Each entry is "value" or "value:label".
+// Example: "haiku,sonnet,opus" or "claude-3-haiku:Haiku,claude-3-sonnet:Sonnet".
+func ParseModelsEnv(s string) []ModelOption {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	models := make([]ModelOption, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		value := part
+		label := part
+		if idx := strings.Index(part, ":"); idx > 0 {
+			value = part[:idx]
+			label = part[idx+1:]
+		}
+		models = append(models, ModelOption{Value: value, Label: label})
+	}
+	return models
+}
 
 // Repository defines data access for key-value settings.
 type Repository interface {

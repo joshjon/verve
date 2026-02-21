@@ -682,7 +682,16 @@ async function setupMockAPI(page: import('@playwright/test').Page) {
 
 	// Default model
 	await page.route('**/api/v1/settings/default-model', (route) =>
-		route.fulfill({ json: { model: 'claude-sonnet-4-20250514' } })
+		route.fulfill({ json: { model: 'claude-sonnet-4-20250514', configured: true } })
+	);
+
+	// Available models list
+	await page.route('**/api/v1/settings/models', (route) =>
+		route.fulfill({ json: [
+			{ value: 'haiku', label: 'Haiku' },
+			{ value: 'sonnet', label: 'Sonnet' },
+			{ value: 'opus', label: 'Opus' }
+		] })
 	);
 
 	// Agent metrics

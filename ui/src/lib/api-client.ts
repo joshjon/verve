@@ -314,10 +314,18 @@ export class VerveClient {
 		}
 	}
 
-	async getDefaultModel(): Promise<{ model: string }> {
+	async getDefaultModel(): Promise<{ model: string; configured: boolean }> {
 		const res = await fetch(`${this.baseUrl}/settings/default-model`);
 		if (!res.ok) {
 			throw new Error('Failed to get default model');
+		}
+		return res.json();
+	}
+
+	async listModels(): Promise<{ value: string; label: string }[]> {
+		const res = await fetch(`${this.baseUrl}/settings/models`);
+		if (!res.ok) {
+			throw new Error('Failed to list models');
 		}
 		return res.json();
 	}

@@ -12,22 +12,32 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 
 	let { children } = $props();
-	let openTokenDialog = $state(false);
+	let openSettingsDialog = $state(false);
 	let tokenConfigured = $state<boolean | null>(null);
+	let modelConfigured = $state<boolean | null>(null);
+
+	// All required settings are configured
+	const allConfigured = $derived(tokenConfigured === true && modelConfigured === true);
+	const settingsRequired = $derived(tokenConfigured === false || modelConfigured === false);
 
 	onMount(async () => {
 		try {
-			const status = await client.getGitHubTokenStatus();
-			tokenConfigured = status.configured;
-			if (!status.configured) {
-				openTokenDialog = true;
+			const [tokenStatus, modelStatus] = await Promise.all([
+				client.getGitHubTokenStatus(),
+				client.getDefaultModel()
+			]);
+			tokenConfigured = tokenStatus.configured;
+			modelConfigured = modelStatus.configured;
+			if (!tokenStatus.configured || !modelStatus.configured) {
+				openSettingsDialog = true;
 			}
 		} catch {
 			tokenConfigured = false;
-			openTokenDialog = true;
+			modelConfigured = false;
+			openSettingsDialog = true;
 		}
 
-		if (tokenConfigured) {
+		if (tokenConfigured && modelConfigured) {
 			await loadRepos();
 		}
 	});
@@ -44,9 +54,10 @@
 		}
 	}
 
-	function handleTokenConfigured() {
+	function handleConfigured() {
 		tokenConfigured = true;
-		openTokenDialog = false;
+		modelConfigured = true;
+		openSettingsDialog = false;
 		loadRepos();
 	}
 </script>
@@ -63,10 +74,10 @@
 					<VerveLogo size={32} />
 					<span class="font-bold text-xl tracking-tight hidden sm:inline">Verve</span>
 				</a>
-				{#if tokenConfigured}
+				{#if allConfigured}
 					<RepoSelector />
 				{/if}
-				{#if tokenConfigured && taskStore.totalCost > 0}
+				{#if allConfigured && taskStore.totalCost > 0}
 					<span
 						class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border"
 						title="Total cost for this repository"
@@ -80,7 +91,7 @@
 				<Button
 					variant="ghost"
 					size="icon"
-					onclick={() => (openTokenDialog = true)}
+					onclick={() => (openSettingsDialog = true)}
 					title="Settings"
 				>
 					<Settings class="w-5 h-5 text-muted-foreground" />
@@ -89,15 +100,15 @@
 		</div>
 	</header>
 	<div class="flex-1 min-h-0 flex">
-		{#if tokenConfigured}
+		{#if allConfigured}
 			<Sidebar />
 			<main class="flex-1 min-h-0 flex flex-col overflow-auto">
 				{@render children()}
 			</main>
-		{:else if tokenConfigured === false}
+		{:else if settingsRequired}
 			<main class="flex-1 min-h-0 flex flex-col">
 				<div class="flex items-center justify-center h-[60vh] text-muted-foreground text-sm">
-					Configure your GitHub token to get started.
+					Configure your settings to get started.
 				</div>
 			</main>
 		{/if}
@@ -105,7 +116,7 @@
 </div>
 
 <GitHubTokenDialog
-	bind:open={openTokenDialog}
-	required={!tokenConfigured}
-	onconfigured={handleTokenConfigured}
+	bind:open={openSettingsDialog}
+	required={settingsRequired}
+	onconfigured={handleConfigured}
 />

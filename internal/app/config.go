@@ -1,6 +1,10 @@
 package app
 
-import "time"
+import (
+	"time"
+
+	"verve/internal/setting"
+)
 
 // Config holds the API server configuration.
 type Config struct {
@@ -13,6 +17,7 @@ type Config struct {
 	CorsOrigins                []string
 	TaskTimeout                time.Duration // How long before a running task with no heartbeat is considered stale (default: 5m)
 	LogRetention               time.Duration // How long to keep task logs before deleting them (0 = keep forever)
+	Models                     []setting.ModelOption // Available Claude models; if empty, uses DefaultModels
 }
 
 // PostgresConfig holds PostgreSQL connection parameters.
@@ -26,4 +31,12 @@ type PostgresConfig struct {
 // IsSet returns true if Postgres connection parameters are configured.
 func (c PostgresConfig) IsSet() bool {
 	return c.HostPort != ""
+}
+
+// EffectiveModels returns the configured models or the default set.
+func (c Config) EffectiveModels() []setting.ModelOption {
+	if len(c.Models) > 0 {
+		return c.Models
+	}
+	return setting.DefaultModels
 }

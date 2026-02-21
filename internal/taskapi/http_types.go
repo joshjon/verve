@@ -47,7 +47,8 @@ type DefaultModelRequest struct {
 
 // DefaultModelResponse is the response for getting the default model.
 type DefaultModelResponse struct {
-	Model string `json:"model"`
+	Model      string `json:"model"`
+	Configured bool   `json:"configured"`
 }
 
 // LogsRequest is the request body for appending logs.

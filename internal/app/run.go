@@ -192,7 +192,7 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 
 	workerReg := workertracker.New()
 
-	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.epic, s.githubToken, s.setting, workerReg))
+	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.epic, s.githubToken, s.setting, workerReg, cfg.EffectiveModels()))
 	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo, s.task, s.setting))
 	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken, workerReg))
 

@@ -533,7 +533,7 @@ func setupHandler() (*HTTPHandler, *mockTaskRepo, *mockRepoRepo, *repo.Repo) {
 	settingRepo := newMockSettingRepo()
 	settingService := setting.NewService(settingRepo)
 
-	handler := NewHTTPHandler(taskStore, repoStore, nil, nil, settingService, nil)
+	handler := NewHTTPHandler(taskStore, repoStore, nil, nil, settingService, nil, nil)
 
 	// Pre-create a repo for use in tests
 	r, _ := repo.NewRepo("owner/test-repo")
@@ -980,7 +980,7 @@ func TestGetDefaultModel_Default(t *testing.T) {
 
 	var resp DefaultModelResponse
 	json.Unmarshal(rec.Body.Bytes(), &resp)
-	assert.Equal(t, "sonnet", resp.Model)
+	assert.Equal(t, "", resp.Model, "expected empty model when no default explicitly set")
 }
 
 func TestSaveDefaultModel(t *testing.T) {

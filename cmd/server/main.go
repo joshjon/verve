@@ -10,6 +10,7 @@ import (
 	"github.com/joshjon/kit/log"
 
 	"verve/internal/app"
+	"verve/internal/setting"
 )
 
 func main() {
@@ -49,6 +50,11 @@ func main() {
 			os.Exit(1)
 		}
 		cfg.LogRetention = d
+	}
+
+	if v := os.Getenv("CLAUDE_MODELS"); v != "" {
+		cfg.Models = setting.ParseModelsEnv(v)
+		logger.Info("custom Claude models configured", "count", len(cfg.Models))
 	}
 
 	if cfg.EncryptionKey == "" {
