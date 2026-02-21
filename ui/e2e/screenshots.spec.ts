@@ -909,17 +909,20 @@ test.describe('UI Screenshots', () => {
 		});
 	});
 
-	// --- Agents Screenshots ---
+	// --- Metrics Screenshots ---
 
-	test('agents dashboard', async ({ page }, testInfo) => {
+	test('metrics dashboard', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
 		await page.goto('/agents');
 
-		// Wait for metrics to load.
-		await page.waitForTimeout(2000);
+		// Wait for metrics to load - ensure we see actual data, not loading state.
+		await page.waitForSelector('text=Metrics', { timeout: 5000 });
+		await page.waitForSelector('text=Running', { timeout: 5000 });
+		// Additional wait to ensure all metrics are rendered
+		await page.waitForTimeout(1000);
 
 		await page.screenshot({
-			path: `screenshots/agents-dashboard-${testInfo.project.name}.png`,
+			path: `screenshots/metrics-dashboard-${testInfo.project.name}.png`,
 			fullPage: true
 		});
 	});
