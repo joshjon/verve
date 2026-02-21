@@ -8,6 +8,8 @@ export interface ActiveAgent {
 	cost_usd: number;
 	model?: string;
 	epic_id?: string;
+	is_planning?: boolean;
+	epic_title?: string;
 }
 
 export interface CompletedAgent {

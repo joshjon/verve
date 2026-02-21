@@ -120,6 +120,7 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
 	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
 	epicStore.SetTaskStatusReader(epic.NewTaskStatusReaderFunc(taskStore.ReadTaskStatus))
+	taskStore.SetPlanningEpicLister(planningEpicListerAdapter(epicStore))
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
@@ -161,6 +162,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte, ghInsecur
 	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
 	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
 	epicStore.SetTaskStatusReader(epic.NewTaskStatusReaderFunc(taskStore.ReadTaskStatus))
+	taskStore.SetPlanningEpicLister(planningEpicListerAdapter(epicStore))
 
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { _ = db.Close() }, nil
 }
@@ -446,6 +448,28 @@ func backgroundSync(ctx context.Context, logger log.Logger, s stores, interval t
 			}
 		}
 	}
+}
+
+// planningEpicListerAdapter creates a task.PlanningEpicLister that delegates
+// to the epic store, converting epic-package types to task-package types.
+func planningEpicListerAdapter(epicStore *epic.Store) *task.PlanningEpicListerFunc {
+	return task.NewPlanningEpicListerFunc(func(ctx context.Context) ([]task.PlanningEpic, error) {
+		epics, err := epicStore.ListPlanningEpicsForMetrics(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result := make([]task.PlanningEpic, len(epics))
+		for i, ep := range epics {
+			result[i] = task.PlanningEpic{
+				ID:        ep.ID,
+				Title:     ep.Title,
+				RepoID:    ep.RepoID,
+				Model:     ep.Model,
+				ClaimedAt: ep.ClaimedAt,
+			}
+		}
+		return result, nil
+	})
 }
 
 func backgroundLogRetention(ctx context.Context, logger log.Logger, s stores, interval, retention time.Duration) {

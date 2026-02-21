@@ -7,6 +7,36 @@ import (
 	"verve/internal/workertracker"
 )
 
+// PlanningEpic represents an epic that is actively being planned by an agent.
+// This is a minimal struct to avoid importing the epic package (which would
+// create a circular dependency).
+type PlanningEpic struct {
+	ID        string
+	Title     string
+	RepoID    string
+	Model     string
+	ClaimedAt *time.Time
+}
+
+// PlanningEpicLister lists epics that are actively being planned.
+type PlanningEpicLister interface {
+	ListPlanningEpicsForMetrics(ctx context.Context) ([]PlanningEpic, error)
+}
+
+// PlanningEpicListerFunc adapts a function to the PlanningEpicLister interface.
+type PlanningEpicListerFunc struct {
+	fn func(ctx context.Context) ([]PlanningEpic, error)
+}
+
+// NewPlanningEpicListerFunc creates a PlanningEpicLister from a function.
+func NewPlanningEpicListerFunc(fn func(ctx context.Context) ([]PlanningEpic, error)) *PlanningEpicListerFunc {
+	return &PlanningEpicListerFunc{fn: fn}
+}
+
+func (f *PlanningEpicListerFunc) ListPlanningEpicsForMetrics(ctx context.Context) ([]PlanningEpic, error) {
+	return f.fn(ctx)
+}
+
 // AgentMetrics provides a snapshot of agent activity and performance.
 type AgentMetrics struct {
 	// Currently running agents
@@ -47,6 +77,8 @@ type ActiveAgent struct {
 	CostUSD    float64 `json:"cost_usd"`
 	Model      string  `json:"model,omitempty"`
 	EpicID     string  `json:"epic_id,omitempty"`
+	IsPlanning bool    `json:"is_planning,omitempty"`
+	EpicTitle  string  `json:"epic_title,omitempty"`
 }
 
 // CompletedAgent describes a recently completed agent session.
@@ -104,6 +136,30 @@ func (s *Store) GetAgentMetrics(ctx context.Context) (*AgentMetrics, error) {
 		case StatusFailed:
 			m.FailedTasks++
 			recentTerminal = append(recentTerminal, t)
+		}
+	}
+
+	// Include epics that are actively being planned as active agents.
+	if s.epicLister != nil {
+		planningEpics, err := s.epicLister.ListPlanningEpicsForMetrics(ctx)
+		if err == nil {
+			for _, ep := range planningEpics {
+				m.RunningAgents++
+				agent := ActiveAgent{
+					TaskID:     ep.ID,
+					TaskTitle:  ep.Title,
+					RepoID:     ep.RepoID,
+					Model:      ep.Model,
+					EpicID:     ep.ID,
+					IsPlanning: true,
+					EpicTitle:  ep.Title,
+				}
+				if ep.ClaimedAt != nil {
+					agent.StartedAt = ep.ClaimedAt.Format(time.RFC3339)
+					agent.RunningFor = now.Sub(*ep.ClaimedAt).Milliseconds()
+				}
+				m.ActiveAgents = append(m.ActiveAgents, agent)
+			}
 		}
 	}
 
