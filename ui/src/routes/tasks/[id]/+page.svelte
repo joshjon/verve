@@ -47,11 +47,64 @@
 		Pencil,
 		Trash2,
 		StopCircle,
-		Square
+		Square,
+		Filter
 	} from 'lucide-svelte';
 	import type { ComponentType } from 'svelte';
 	import type { Icon } from 'lucide-svelte';
 	import { AnsiUp } from 'ansi_up';
+
+	// Initial log lines that should always be shown (before any bracket-prefixed log appears)
+	const INITIAL_LOG_MARKERS = [
+		'=== Verve Agent Starting ===',
+		'Task ID:',
+		'Repository:',
+		'Title:',
+		'Description:'
+	];
+
+	function isInitialLogLine(line: string): boolean {
+		return INITIAL_LOG_MARKERS.some((marker) => line.startsWith(marker));
+	}
+
+	function isClaudeLogLine(line: string): boolean {
+		return line.trimStart().startsWith('[claude]');
+	}
+
+	function filterClaudeLogs(lines: string[]): string[] {
+		const filtered: string[] = [];
+		let pastInitialBlock = false;
+		let inClaudeBlock = false;
+
+		for (const line of lines) {
+			if (!pastInitialBlock) {
+				// Keep all lines until we see the first bracket-prefixed line
+				if (/^\[[\w_-]+\]/.test(line.trimStart())) {
+					pastInitialBlock = true;
+				} else if (isInitialLogLine(line) || line.trim() === '') {
+					filtered.push(line);
+					continue;
+				} else {
+					// Non-marker, non-empty line before any bracket prefix — keep it as initial
+					filtered.push(line);
+					continue;
+				}
+			}
+
+			if (pastInitialBlock) {
+				if (isClaudeLogLine(line)) {
+					inClaudeBlock = true;
+					filtered.push(line);
+				} else if (inClaudeBlock && !/^\[[\w_-]+\]/.test(line.trimStart())) {
+					// Continuation of claude block (no bracket prefix)
+					filtered.push(line);
+				} else {
+					inClaudeBlock = false;
+				}
+			}
+		}
+		return filtered;
+	}
 
 	function colorizeLineHtml(html: string): string {
 		// Colorize a single line's HTML by only modifying text nodes, not tag attributes
@@ -73,7 +126,7 @@
 		});
 	}
 
-	function colorizeLogs(lines: string[]): string {
+	function colorizeLogs(lines: string[], highlightClaude: boolean): string {
 		// Process each log line individually through AnsiUp and colorization.
 		// This prevents ANSI span tags from crossing line boundaries, which
 		// would break the regex-based syntax highlighting for multiline output.
@@ -86,18 +139,22 @@
 		for (const line of lines) {
 			const lineHtml = colorizeLineHtml(ansi.ansi_to_html(line));
 
-			// Detect [claude] lines and continuation lines (lines without a bracket prefix)
-			const isClaudeLine = lineHtml.includes('<span class=log-bracket>[claude]</span>');
-			const hasBracketPrefix = lineHtml.includes('<span class=log-bracket>');
+			if (highlightClaude) {
+				// Detect [claude] lines and continuation lines (lines without a bracket prefix)
+				const isClaudeLine = lineHtml.includes('<span class=log-bracket>[claude]</span>');
+				const hasBracketPrefix = lineHtml.includes('<span class=log-bracket>');
 
-			if (isClaudeLine) {
-				inClaudeBlock = true;
-				colorizedLines.push('<span class=log-claude-line>' + lineHtml + '</span>');
-			} else if (inClaudeBlock && !hasBracketPrefix) {
-				// Continuation of a claude block (no new bracket prefix)
-				colorizedLines.push('<span class=log-claude-line>' + lineHtml + '</span>');
+				if (isClaudeLine) {
+					inClaudeBlock = true;
+					colorizedLines.push('<span class=log-claude-line>' + lineHtml + '</span>');
+				} else if (inClaudeBlock && !hasBracketPrefix) {
+					// Continuation of a claude block (no new bracket prefix)
+					colorizedLines.push('<span class=log-claude-line>' + lineHtml + '</span>');
+				} else {
+					inClaudeBlock = false;
+					colorizedLines.push(lineHtml);
+				}
 			} else {
-				inClaudeBlock = false;
 				colorizedLines.push(lineHtml);
 			}
 		}
@@ -140,6 +197,7 @@
 	let logsContainer: HTMLDivElement | null = $state(null);
 	let autoScroll = $state(true);
 	let lastLogCount = $state(0);
+	let claudeOnly = $state(true);
 	let showRetryContext = $state(false);
 	let checkStatus = $state<{
 		status: 'pending' | 'success' | 'failure' | 'error';
@@ -280,7 +338,10 @@
 
 	// Per-attempt log tracking
 	const logs = $derived(logsByAttempt[activeAttemptTab] ?? []);
-	const renderedLogs = $derived(logs.length > 0 ? colorizeLogs(logs) : '');
+	const displayLogs = $derived(claudeOnly ? filterClaudeLogs(logs) : logs);
+	// When claudeOnly filter is active, don't highlight claude lines (they're all claude).
+	// When filter is off, highlight claude lines to make them stand out.
+	const renderedLogs = $derived(displayLogs.length > 0 ? colorizeLogs(displayLogs, !claudeOnly) : '');
 	const attemptNumbers = $derived.by(() => {
 		const nums = new Set(Object.keys(logsByAttempt).map(Number));
 		if (task) {
@@ -1501,30 +1562,55 @@
 				<!-- Logs -->
 				<div class="p-4">
 					<div class="rounded-lg border border-zinc-800 overflow-hidden">
-						{#if showAttemptTabs}
-							<div class="flex items-center gap-1 px-3 py-2 bg-zinc-950 border-b border-zinc-800">
-								{#each attemptNumbers as num}
-									<button
-										type="button"
-										class="px-3 py-1 text-xs font-medium rounded-md transition-all {activeAttemptTab === num ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'}"
-										onclick={() => switchAttemptTab(num)}
-									>
-										Run {num}
-										{#if task.status === 'running' && num === task.attempt}
-											<span class="inline-flex ml-1 h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-										{/if}
-									</button>
-								{/each}
+						<div class="flex items-center px-3 py-2 bg-zinc-950 border-b border-zinc-800">
+							{#if showAttemptTabs}
+								<div class="flex items-center gap-1">
+									{#each attemptNumbers as num}
+										<button
+											type="button"
+											class="px-3 py-1 text-xs font-medium rounded-md transition-all {activeAttemptTab === num ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'}"
+											onclick={() => switchAttemptTab(num)}
+										>
+											Run {num}
+											{#if task.status === 'running' && num === task.attempt}
+												<span class="inline-flex ml-1 h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							{/if}
+							<div class="ml-auto">
+								<button
+									type="button"
+									class="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-all {claudeOnly ? 'bg-white/10 text-zinc-300' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}"
+									onclick={() => (claudeOnly = !claudeOnly)}
+									title={claudeOnly ? 'Showing Claude logs only — click to show all logs' : 'Showing all logs — click to filter to Claude only'}
+								>
+									<Filter class="w-3 h-3" />
+									{claudeOnly ? 'Claude Only' : 'All Logs'}
+								</button>
 							</div>
-						{/if}
+						</div>
 						<div
 							bind:this={logsContainer}
 							onscroll={handleLogsScroll}
 							onwheel={handleLogsWheel}
 							class="terminal-container h-[250px] sm:h-[400px] lg:h-[500px] w-full bg-zinc-950 p-3 sm:p-4 overflow-y-auto overscroll-contain"
 						>
-						{#if logs.length > 0}
+						{#if displayLogs.length > 0}
 							<pre class="log-output text-xs font-mono whitespace-pre-wrap leading-relaxed">{@html renderedLogs}</pre>
+						{:else if logs.length > 0}
+							<div class="flex flex-col items-center justify-center h-full text-muted-foreground">
+								<Filter class="w-8 h-8 opacity-20 mb-2" />
+								<p class="text-sm">No Claude logs yet</p>
+								<button
+									type="button"
+									class="text-xs text-zinc-400 hover:text-zinc-300 mt-1 underline underline-offset-2"
+									onclick={() => (claudeOnly = false)}
+								>
+									Show all logs
+								</button>
+							</div>
 						{:else}
 							<div class="flex flex-col items-center justify-center h-full text-muted-foreground">
 								<Terminal class="w-8 h-8 opacity-20 mb-2" />
