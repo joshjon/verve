@@ -555,7 +555,7 @@ const MOCK_EPIC_MAP: Record<string, typeof MOCK_EPIC_DRAFT> = {
 
 // Mock agent metrics data for the agents observability page.
 const MOCK_AGENT_METRICS = {
-	running_agents: 2,
+	running_agents: 3,
 	pending_tasks: 3,
 	review_tasks: 1,
 	total_tasks: 14,
@@ -582,6 +582,19 @@ const MOCK_AGENT_METRICS = {
 			attempt: 2,
 			cost_usd: 0.62,
 			model: 'claude-sonnet-4-20250514'
+		},
+		{
+			task_id: 'epc_planning01',
+			task_title: 'Implement user authentication system',
+			repo_id: 'repo_mock01',
+			started_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(), // 3 min ago
+			running_for_ms: 3 * 60 * 1000,
+			attempt: 0,
+			cost_usd: 0,
+			model: 'claude-sonnet-4-20250514',
+			is_planning: true,
+			epic_id: 'epc_planning01',
+			epic_title: 'Implement user authentication system'
 		}
 	],
 	recent_completions: [
