@@ -1582,7 +1582,7 @@
 							<div class="ml-auto">
 								<button
 									type="button"
-									class="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-all {claudeOnly ? 'bg-amber-500/20 text-amber-400' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}"
+									class="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-all {claudeOnly ? 'bg-white/10 text-zinc-300' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}"
 									onclick={() => (claudeOnly = !claudeOnly)}
 									title={claudeOnly ? 'Showing Claude logs only — click to show all logs' : 'Showing all logs — click to filter to Claude only'}
 								>
@@ -1605,7 +1605,7 @@
 								<p class="text-sm">No Claude logs yet</p>
 								<button
 									type="button"
-									class="text-xs text-amber-500 hover:text-amber-400 mt-1 underline underline-offset-2"
+									class="text-xs text-zinc-400 hover:text-zinc-300 mt-1 underline underline-offset-2"
 									onclick={() => (claudeOnly = false)}
 								>
 									Show all logs
