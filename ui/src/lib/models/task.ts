@@ -22,6 +22,7 @@ export interface Task {
 	max_cost_usd?: number;
 	skip_pr: boolean;
 	ready: boolean;
+	epic_id?: string;
 	model?: string;
 	branch_name?: string;
 	started_at?: string;
