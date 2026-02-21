@@ -28,11 +28,15 @@ type HTTPHandler struct {
 	githubTokenService *githubtoken.Service
 	settingService     *setting.Service
 	workerRegistry     *workertracker.Registry
+	models             []setting.ModelOption
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(store *task.Store, repoStore *repo.Store, epicStore *epic.Store, githubTokenService *githubtoken.Service, settingService *setting.Service, workerRegistry *workertracker.Registry) *HTTPHandler {
-	return &HTTPHandler{store: store, repoStore: repoStore, epicStore: epicStore, githubTokenService: githubTokenService, settingService: settingService, workerRegistry: workerRegistry}
+func NewHTTPHandler(store *task.Store, repoStore *repo.Store, epicStore *epic.Store, githubTokenService *githubtoken.Service, settingService *setting.Service, workerRegistry *workertracker.Registry, models []setting.ModelOption) *HTTPHandler {
+	if len(models) == 0 {
+		models = setting.DefaultModels
+	}
+	return &HTTPHandler{store: store, repoStore: repoStore, epicStore: epicStore, githubTokenService: githubTokenService, settingService: settingService, workerRegistry: workerRegistry, models: models}
 }
 
 // Register adds the endpoints to the provided Echo router group.
@@ -83,6 +87,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.PUT("/settings/default-model", h.SaveDefaultModel)
 	g.GET("/settings/default-model", h.GetDefaultModel)
 	g.DELETE("/settings/default-model", h.DeleteDefaultModel)
+	g.GET("/settings/models", h.ListModels)
 }
 
 // --- Agent Observability Handlers ---
@@ -167,7 +172,7 @@ func (h *HTTPHandler) SaveDefaultModel(c echo.Context) error {
 	if err := h.settingService.Set(c.Request().Context(), setting.KeyDefaultModel, req.Model); err != nil {
 		return c.JSON(http.StatusInternalServerError, errorResponse("failed to save default model: "+err.Error()))
 	}
-	return c.JSON(http.StatusOK, DefaultModelResponse(req))
+	return c.JSON(http.StatusOK, DefaultModelResponse{Model: req.Model, Configured: true})
 }
 
 // GetDefaultModel handles GET /settings/default-model
@@ -176,10 +181,12 @@ func (h *HTTPHandler) GetDefaultModel(c echo.Context) error {
 	if h.settingService != nil {
 		model = h.settingService.Get(setting.KeyDefaultModel)
 	}
-	if model == "" {
-		model = "sonnet"
-	}
-	return c.JSON(http.StatusOK, DefaultModelResponse{Model: model})
+	return c.JSON(http.StatusOK, DefaultModelResponse{Model: model, Configured: model != ""})
+}
+
+// ListModels handles GET /settings/models
+func (h *HTTPHandler) ListModels(c echo.Context) error {
+	return c.JSON(http.StatusOK, h.models)
 }
 
 // DeleteDefaultModel handles DELETE /settings/default-model

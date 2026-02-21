@@ -43,12 +43,21 @@
 		}
 	});
 
-	const modelOptions = [
+	let availableModels = $state<{ value: string; label: string }[]>([]);
+
+	// Fetch available models when dialog opens
+	$effect(() => {
+		if (open) {
+			client.listModels().then((models) => {
+				availableModels = models;
+			}).catch(() => {});
+		}
+	});
+
+	const modelOptions = $derived([
 		{ value: '', label: 'Default' },
-		{ value: 'haiku', label: 'Haiku' },
-		{ value: 'sonnet', label: 'Sonnet' },
-		{ value: 'opus', label: 'Opus' }
-	];
+		...availableModels
+	]);
 
 	// Filter available tasks (exclude current task, closed/failed, and already selected)
 	const editAvailableTasks = $derived(

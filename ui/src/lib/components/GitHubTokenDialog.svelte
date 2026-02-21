@@ -26,20 +26,23 @@
 	let success = $state<string | null>(null);
 
 	// Default model state
-	let defaultModel = $state('sonnet');
+	let defaultModel = $state('');
+	let modelConfigured = $state(false);
 	let modelLoading = $state(false);
 	let modelSaving = $state(false);
 
-	const modelOptions = [
-		{ value: 'haiku', label: 'Haiku' },
-		{ value: 'sonnet', label: 'Sonnet' },
-		{ value: 'opus', label: 'Opus' }
-	];
+	// Available model options (fetched from API)
+	let modelOptions = $state<{ value: string; label: string }[]>([]);
+	let modelsLoading = $state(false);
+
+	// Whether both required settings are satisfied
+	const allConfigured = $derived(configured && modelConfigured);
 
 	$effect(() => {
 		if (open) {
 			checkStatus();
 			loadDefaultModel();
+			loadModelOptions();
 		} else {
 			token = '';
 			showToken = false;
@@ -67,10 +70,27 @@
 		try {
 			const res = await client.getDefaultModel();
 			defaultModel = res.model;
+			modelConfigured = res.configured;
 		} catch {
-			// Ignore - default stays as 'sonnet'
+			// Ignore - defaults stay empty
 		} finally {
 			modelLoading = false;
+		}
+	}
+
+	async function loadModelOptions() {
+		modelsLoading = true;
+		try {
+			modelOptions = await client.listModels();
+		} catch {
+			// Fall back to built-in defaults if API fails
+			modelOptions = [
+				{ value: 'haiku', label: 'Haiku' },
+				{ value: 'sonnet', label: 'Sonnet' },
+				{ value: 'opus', label: 'Opus' }
+			];
+		} finally {
+			modelsLoading = false;
 		}
 	}
 
@@ -82,8 +102,14 @@
 		try {
 			await client.saveDefaultModel(value);
 			defaultModel = value;
-			success = `Default model set to ${modelOptions.find((m) => m.value === value)?.label}`;
+			modelConfigured = true;
+			const label = modelOptions.find((m) => m.value === value)?.label || value;
+			success = `Default model set to ${label}`;
 			setTimeout(() => { success = null; }, 3000);
+			// If we were in required mode and now everything is configured, notify parent
+			if (required && configured) {
+				onconfigured?.();
+			}
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -104,7 +130,12 @@
 			token = '';
 			showToken = false;
 			success = 'GitHub token saved successfully';
-			onconfigured?.();
+			// If we were in required mode and now everything is configured, notify parent
+			if (required && modelConfigured) {
+				onconfigured?.();
+			} else if (!required) {
+				onconfigured?.();
+			}
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -128,7 +159,7 @@
 	}
 
 	function handleOpenChange(isOpen: boolean) {
-		if (required && !isOpen && !configured) return;
+		if (required && !isOpen && !allConfigured) return;
 		open = isOpen;
 	}
 </script>
@@ -136,12 +167,12 @@
 <Dialog.Root open={open} onOpenChange={handleOpenChange}>
 	<Dialog.Content
 		class="sm:max-w-[520px]"
-		showCloseButton={!required || configured}
+		showCloseButton={!required || allConfigured}
 		onInteractOutside={(e: PointerEvent) => {
-			if (required && !configured) e.preventDefault();
+			if (required && !allConfigured) e.preventDefault();
 		}}
 		onEscapeKeydown={(e: KeyboardEvent) => {
-			if (required && !configured) e.preventDefault();
+			if (required && !allConfigured) e.preventDefault();
 		}}
 	>
 		<Dialog.Header>
@@ -152,8 +183,14 @@
 				Settings
 			</Dialog.Title>
 			<Dialog.Description>
-				{#if required && !configured}
-					A GitHub personal access token is required to get started.
+				{#if required && !allConfigured}
+					{#if !configured && !modelConfigured}
+						A GitHub token and default model are required to get started.
+					{:else if !configured}
+						A GitHub personal access token is required to get started.
+					{:else}
+						A default model must be selected to get started.
+					{/if}
 				{:else}
 					Configure Verve settings.
 				{/if}
@@ -162,40 +199,55 @@
 
 		<div class="py-4 space-y-6">
 			<!-- Default Model Section -->
-			{#if !required || configured}
-				<div class="space-y-3">
-					<div class="flex items-center gap-2">
-						<Cpu class="w-4 h-4 text-muted-foreground" />
-						<span class="text-sm font-medium">Default Model</span>
-					</div>
-					<p class="text-xs text-muted-foreground">
-						Set the default AI model for new tasks. Can be overridden per task.
-					</p>
-					<div class="flex items-center gap-2">
+			<div class="space-y-3">
+				<div class="flex items-center gap-2">
+					<Cpu class="w-4 h-4 text-muted-foreground" />
+					<span class="text-sm font-medium">Default Model</span>
+					{#if required && !modelConfigured}
+						<span class="text-xs text-destructive font-medium">Required</span>
+					{/if}
+				</div>
+				<p class="text-xs text-muted-foreground">
+					Set the default AI model for new tasks. Can be overridden per task.
+				</p>
+				<div class="flex items-center gap-2">
+					{#if modelsLoading || modelLoading}
+						<div class="flex-1 flex items-center gap-2 text-muted-foreground">
+							<Loader2 class="w-4 h-4 animate-spin" />
+							<span class="text-sm">Loading models...</span>
+						</div>
+					{:else}
 						<select
 							class="flex-1 border rounded-lg px-3 py-2 bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+							class:border-destructive={required && !modelConfigured}
 							value={defaultModel}
 							onchange={handleModelChange}
-							disabled={modelLoading || modelSaving}
+							disabled={modelSaving}
 						>
+							{#if !modelConfigured}
+								<option value="" disabled>Select a model...</option>
+							{/if}
 							{#each modelOptions as option}
 								<option value={option.value}>{option.label}</option>
 							{/each}
 						</select>
-						{#if modelSaving}
-							<Loader2 class="w-4 h-4 animate-spin text-muted-foreground" />
-						{/if}
-					</div>
+					{/if}
+					{#if modelSaving}
+						<Loader2 class="w-4 h-4 animate-spin text-muted-foreground" />
+					{/if}
 				</div>
+			</div>
 
-				<div class="border-t"></div>
-			{/if}
+			<div class="border-t"></div>
 
 			<!-- GitHub Token Section -->
 			<div class="space-y-3">
 				<div class="flex items-center gap-2">
 					<Key class="w-4 h-4 text-muted-foreground" />
 					<span class="text-sm font-medium">GitHub Token</span>
+					{#if required && !configured}
+						<span class="text-xs text-destructive font-medium">Required</span>
+					{/if}
 				</div>
 
 				{#if loading}
@@ -279,6 +331,7 @@
 									type={showToken ? 'text' : 'password'}
 									bind:value={token}
 									class="w-full border rounded-lg pl-3 pr-9 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+									class:border-destructive={required && !configured}
 									placeholder="ghp_..."
 									autocomplete="off"
 								/>
@@ -315,8 +368,17 @@
 						</div>
 						</div>
 
-						<Dialog.Footer class="gap-2 mt-4">
-							{#if !required}
+						{#if required && !configured}
+							<Dialog.Footer class="gap-2 mt-4">
+								<Button type="submit" disabled={saving || !token.trim()} class="gap-2">
+									{#if saving}
+										<Loader2 class="w-4 h-4 animate-spin" />
+									{/if}
+									Save Token
+								</Button>
+							</Dialog.Footer>
+						{:else}
+							<Dialog.Footer class="gap-2 mt-4">
 								<Button
 									type="button"
 									variant="outline"
@@ -325,14 +387,14 @@
 								>
 									Cancel
 								</Button>
-							{/if}
-							<Button type="submit" disabled={saving || !token.trim()} class="gap-2">
-								{#if saving}
-									<Loader2 class="w-4 h-4 animate-spin" />
-								{/if}
-								Save Token
-							</Button>
-						</Dialog.Footer>
+								<Button type="submit" disabled={saving || !token.trim()} class="gap-2">
+									{#if saving}
+										<Loader2 class="w-4 h-4 animate-spin" />
+									{/if}
+									Save Token
+								</Button>
+							</Dialog.Footer>
+						{/if}
 					</form>
 				{/if}
 
@@ -362,7 +424,7 @@
 
 		</div>
 
-		{#if !required || configured}
+		{#if !required || allConfigured}
 			<Dialog.Footer class="mt-4">
 				<Button onclick={() => (open = false)}>Done</Button>
 			</Dialog.Footer>

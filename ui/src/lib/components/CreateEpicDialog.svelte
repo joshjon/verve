@@ -18,26 +18,28 @@
 	let error = $state<string | null>(null);
 	let showAdvanced = $state(false);
 	let selectedModel = $state('');
-	let defaultModel = $state('sonnet');
+	let defaultModel = $state('');
+	let availableModels = $state<{ value: string; label: string }[]>([]);
 
-	// Fetch default model when dialog opens
+	// Fetch default model and available models when dialog opens
 	$effect(() => {
 		if (open) {
 			client.getDefaultModel().then((res) => {
 				defaultModel = res.model;
 			}).catch(() => {});
+			client.listModels().then((models) => {
+				availableModels = models;
+			}).catch(() => {});
 		}
 	});
 
-	const modelOptions = [
+	const modelOptions = $derived([
 		{ value: '', label: 'Default' },
-		{ value: 'haiku', label: 'Haiku' },
-		{ value: 'sonnet', label: 'Sonnet' },
-		{ value: 'opus', label: 'Opus' }
-	];
+		...availableModels
+	]);
 
 	const defaultModelLabel = $derived(
-		modelOptions.find((m) => m.value === defaultModel)?.label || defaultModel
+		availableModels.find((m) => m.value === defaultModel)?.label || defaultModel
 	);
 
 	async function handleSubmit(e: SubmitEvent) {
