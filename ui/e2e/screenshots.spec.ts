@@ -659,6 +659,100 @@ const MOCK_AGENT_METRICS = {
 	]
 };
 
+// A realistic unified diff for the "dark mode support" review task.
+// This gives the DiffViewer component something meaningful to render in screenshots.
+const MOCK_DIFF = `diff --git a/tailwind.config.js b/tailwind.config.js
+index 3b8a1c2..f7d9e4a 100644
+--- a/tailwind.config.js
++++ b/tailwind.config.js
+@@ -1,7 +1,7 @@
+ /** @type {import('tailwindcss').Config} */
+ export default {
+   content: ['./src/**/*.{html,js,svelte,ts}'],
+-  darkMode: 'media',
++  darkMode: 'class',
+   theme: {
+     extend: {
+       colors: {
+diff --git a/src/lib/stores/theme.ts b/src/lib/stores/theme.ts
+new file mode 100644
+index 0000000..a4c8f29
+--- /dev/null
++++ b/src/lib/stores/theme.ts
+@@ -0,0 +1,29 @@
++import { writable } from 'svelte/store';
++import { browser } from '$app/environment';
++
++export type ThemePreference = 'light' | 'dark' | 'system';
++
++function getInitialTheme(): ThemePreference {
++  if (browser) {
++    const stored = localStorage.getItem('theme-preference');
++    if (stored === 'light' || stored === 'dark' || stored === 'system') {
++      return stored;
++    }
++  }
++  return 'system';
++}
++
++export const themePreference = writable<ThemePreference>(getInitialTheme());
++
++export function applyTheme(pref: ThemePreference) {
++  if (!browser) return;
++  localStorage.setItem('theme-preference', pref);
++
++  const isDark =
++    pref === 'dark' ||
++    (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
++
++  document.documentElement.classList.toggle('dark', isDark);
++}
++
++// Re-apply when OS preference changes
++themePreference.subscribe(applyTheme);
+diff --git a/src/lib/components/Header.svelte b/src/lib/components/Header.svelte
+index 8e2f1a0..b3c4d72 100644
+--- a/src/lib/components/Header.svelte
++++ b/src/lib/components/Header.svelte
+@@ -1,8 +1,12 @@
+ <script lang="ts">
+   import { page } from '$app/stores';
++  import { themePreference, type ThemePreference } from '$lib/stores/theme';
++  import Sun from 'lucide-svelte/icons/sun';
++  import Moon from 'lucide-svelte/icons/moon';
++  import Monitor from 'lucide-svelte/icons/monitor';
+
+-  export let title = 'My App';
+-  let menuOpen = false;
++  let { title = 'My App' }: { title?: string } = $props();
++  let menuOpen = $state(false);
+ </script>
+
+ <header class="border-b bg-background">
+@@ -12,5 +16,22 @@
+       <a href="/settings" class="text-sm text-muted-foreground hover:text-foreground">
+         Settings
+       </a>
++      <div class="flex items-center gap-1 ml-2 rounded-lg border p-0.5">
++        <button
++          class="p-1.5 rounded {$themePreference === 'light' ? 'bg-muted' : ''}"
++          onclick={() => themePreference.set('light')}
++          aria-label="Light mode"
++        >
++          <Sun class="w-4 h-4" />
++        </button>
++        <button
++          class="p-1.5 rounded {$themePreference === 'dark' ? 'bg-muted' : ''}"
++          onclick={() => themePreference.set('dark')}
++          aria-label="Dark mode"
++        >
++          <Moon class="w-4 h-4" />
++        </button>
++      </div>
+     </nav>
+   </div>
+`;
+
 // Intercept all API calls so the UI renders with mock data instead of hitting a real server.
 // Routes are registered most-specific first because Playwright matches in FIFO order.
 async function setupMockAPI(page: import('@playwright/test').Page) {
@@ -698,6 +792,11 @@ async function setupMockAPI(page: import('@playwright/test').Page) {
 			body
 		});
 	});
+
+	// Task diff (must be before generic /tasks/* route).
+	await page.route('**/api/v1/tasks/*/diff', (route) =>
+		route.fulfill({ json: { diff: MOCK_DIFF } })
+	);
 
 	// Task checks (must be before generic /tasks/* route).
 	await page.route('**/api/v1/tasks/*/checks', (route) =>
@@ -836,6 +935,14 @@ test.describe('UI Screenshots', () => {
 		await page.goto(`/tasks/tsk_review01`);
 
 		await page.waitForTimeout(2000);
+
+		// Expand the "View Changes" diff viewer so the screenshot shows the diff.
+		const viewChangesBtn = page.getByRole('button', { name: /View Changes/ });
+		await viewChangesBtn.click();
+
+		// Wait for the diff content to render (file headers appear once loaded).
+		await page.waitForSelector('table', { timeout: 5000 });
+		await page.waitForTimeout(500);
 
 		await page.screenshot({
 			path: `screenshots/task-detail-${testInfo.project.name}.png`,
