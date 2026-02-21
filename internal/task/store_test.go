@@ -627,6 +627,26 @@ func TestStore_RetryTask_CircuitBreaker(t *testing.T) {
 
 	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
 	tsk.Status = StatusReview
+	tsk.ConsecutiveFailures = 2
+	tsk.RetryReason = "ci_failure:tests: CI tests failed"
+	repo.tasks[tsk.ID.String()] = tsk
+	repo.taskStatuses[tsk.ID.String()] = StatusReview
+
+	err := store.RetryTask(context.Background(), tsk.ID, "ci_failure:tests", "CI tests failed again")
+	require.NoError(t, err)
+
+	// Circuit breaker should trigger: same category three times
+	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to circuit breaker")
+}
+
+func TestStore_RetryTask_CircuitBreakerAllowsSecondRetry(t *testing.T) {
+	repo := newMockRepo()
+	repo.retryTaskResult = true
+	broker := NewBroker(nil)
+	store := NewStore(repo, broker)
+
+	tsk := NewTask("repo_123", "title", "desc", nil, nil, 0, false, "", true)
+	tsk.Status = StatusReview
 	tsk.ConsecutiveFailures = 1
 	tsk.RetryReason = "ci_failure:tests: CI tests failed"
 	repo.tasks[tsk.ID.String()] = tsk
@@ -635,8 +655,10 @@ func TestStore_RetryTask_CircuitBreaker(t *testing.T) {
 	err := store.RetryTask(context.Background(), tsk.ID, "ci_failure:tests", "CI tests failed again")
 	require.NoError(t, err)
 
-	// Circuit breaker should trigger: same category twice
-	assert.Equal(t, StatusFailed, tsk.Status, "expected status failed due to circuit breaker")
+	// Circuit breaker should NOT trigger: same category only twice (threshold is 3)
+	assert.NotEqual(t, StatusFailed, tsk.Status, "second consecutive failure should still allow retry")
+	require.Len(t, repo.setConsFails, 1)
+	assert.Equal(t, 2, repo.setConsFails[0])
 }
 
 func TestStore_RetryTask_DifferentCategory(t *testing.T) {
