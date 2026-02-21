@@ -12,6 +12,7 @@
 	import { taskStore } from '$lib/stores/tasks.svelte';
 	import { marked } from 'marked';
 	import EditTaskDialog from '$lib/components/EditTaskDialog.svelte';
+	import DiffViewer from '$lib/components/DiffViewer.svelte';
 	import {
 		ArrowLeft,
 		Clock,
@@ -1202,6 +1203,11 @@
 							{/if}
 						{/if}
 					</div>
+				{/if}
+
+				<!-- Diff Viewer -->
+				{#if task.pull_request_url && (task.status === 'review' || task.status === 'merged' || task.status === 'closed' || task.status === 'failed')}
+					<DiffViewer taskId={task.id} hasPR={true} prUrl={task.pull_request_url} />
 				{/if}
 
 				<!-- Branch (skip-PR mode) -->
