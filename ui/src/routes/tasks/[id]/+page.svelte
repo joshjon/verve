@@ -999,7 +999,7 @@
 									({task.acceptance_criteria.length})
 								</span>
 							</div>
-							<ol class="space-y-2">
+							<ol class="space-y-2 max-h-48 overflow-y-auto overscroll-contain">
 								{#each task.acceptance_criteria as criterion, i}
 									<li class="flex items-start gap-2.5 text-sm">
 										<span class="text-xs text-muted-foreground font-mono mt-0.5 w-5 shrink-0 text-right">{i + 1}.</span>
