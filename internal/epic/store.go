@@ -407,7 +407,7 @@ func (s *Store) ListPlanningEpicsForMetrics(ctx context.Context) ([]PlanningEpic
 		return nil, err
 	}
 
-	var result []PlanningEpicForMetrics
+	result := make([]PlanningEpicForMetrics, 0, len(epics))
 	for _, e := range epics {
 		// Only include epics that are actively claimed by a worker
 		if e.ClaimedAt == nil {
