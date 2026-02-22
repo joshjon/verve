@@ -78,8 +78,9 @@
 			const event = JSON.parse(e.data);
 			if (event.task?.id === taskId && task) {
 				const prev = task.status;
-				task = { ...event.task, logs: task.logs };
-				if (task.status === 'review' && task.pr_number && prev !== 'review') {
+				const updated: Task = { ...event.task, logs: task.logs };
+				task = updated;
+				if (updated.status === 'review' && updated.pr_number && prev !== 'review') {
 					checkStatus = null;
 					stopCheckPolling();
 					forceCheckPolls = 3;

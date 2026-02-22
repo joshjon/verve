@@ -47,7 +47,9 @@
 >
 	<div class="flex items-start justify-between gap-2">
 		{#if selectionMode}
-			<label class="flex items-center pt-0.5 cursor-pointer" onclick={(e) => e.stopPropagation()}>
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<label class="flex items-center pt-0.5 cursor-pointer" onclick={(e: MouseEvent) => e.stopPropagation()}>
 				<input
 					type="checkbox"
 					checked={selected}
