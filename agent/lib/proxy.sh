@@ -44,5 +44,6 @@ start_beta_proxy() {
     fi
 
     export ANTHROPIC_BASE_URL="http://127.0.0.1:${port}"
+    export ANTHROPIC_BETA=""
     log_agent "Beta header proxy running on port ${port}"
 }
