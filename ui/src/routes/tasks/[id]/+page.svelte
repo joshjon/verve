@@ -1229,6 +1229,18 @@
 					</div>
 				{/if}
 
+				<!-- View Full PR -->
+				{#if task.pull_request_url && (task.status === 'review' || task.status === 'merged' || task.status === 'closed' || task.status === 'failed')}
+					<Button
+						variant="outline"
+						onclick={() => goto(`/tasks/${task!.id}/pr`)}
+						class="w-full gap-2 py-5 border-dashed"
+					>
+						<Eye class="w-4 h-4" />
+						View Pull Request &amp; Changes
+					</Button>
+				{/if}
+
 				<!-- Branch (skip-PR mode) -->
 				{#if task.branch_name && !task.pull_request_url}
 					<Card.Root class="border-cyan-500/30 bg-cyan-500/5">
