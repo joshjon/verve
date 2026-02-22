@@ -936,16 +936,24 @@ test.describe('UI Screenshots', () => {
 
 		await page.waitForTimeout(2000);
 
-		// Expand the "View Changes" diff viewer so the screenshot shows the diff.
-		const viewChangesBtn = page.getByRole('button', { name: /View Changes/ });
-		await viewChangesBtn.click();
+		await page.screenshot({
+			path: `screenshots/task-detail-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
 
-		// Wait for the diff content to render (file headers appear once loaded).
+	test('task detail - pr view', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto(`/tasks/tsk_review01/pr`);
+
+		await page.waitForTimeout(2000);
+
+		// Wait for the diff to auto-expand and render (file headers appear once loaded).
 		await page.waitForSelector('table', { timeout: 5000 });
 		await page.waitForTimeout(500);
 
 		await page.screenshot({
-			path: `screenshots/task-detail-${testInfo.project.name}.png`,
+			path: `screenshots/task-pr-view-${testInfo.project.name}.png`,
 			fullPage: true
 		});
 	});

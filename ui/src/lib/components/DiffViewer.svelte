@@ -33,7 +33,7 @@
 		totalLines: number;
 	}
 
-	let { taskId, hasPR, prUrl = '' }: { taskId: string; hasPR: boolean; prUrl?: string } = $props();
+	let { taskId, hasPR, prUrl = '', autoExpand = false }: { taskId: string; hasPR: boolean; prUrl?: string; autoExpand?: boolean } = $props();
 
 	let expanded = $state(false);
 	let loading = $state(false);
@@ -188,6 +188,14 @@
 	);
 
 	const fileCount = $derived(parsedDiff?.files.length ?? 0);
+
+	// Auto-expand and fetch when autoExpand is true (used on the PR page)
+	$effect(() => {
+		if (autoExpand && hasPR && !expanded && !fetched && !loading) {
+			expanded = true;
+			fetchDiff();
+		}
+	});
 </script>
 
 {#if hasPR}

@@ -12,7 +12,6 @@
 	import { taskStore } from '$lib/stores/tasks.svelte';
 	import { marked } from 'marked';
 	import EditTaskDialog from '$lib/components/EditTaskDialog.svelte';
-	import DiffViewer from '$lib/components/DiffViewer.svelte';
 	import {
 		ArrowLeft,
 		Clock,
@@ -1205,9 +1204,16 @@
 					</div>
 				{/if}
 
-				<!-- Diff Viewer -->
+				<!-- View Full PR -->
 				{#if task.pull_request_url && (task.status === 'review' || task.status === 'merged' || task.status === 'closed' || task.status === 'failed')}
-					<DiffViewer taskId={task.id} hasPR={true} prUrl={task.pull_request_url} />
+					<Button
+						variant="outline"
+						onclick={() => goto(`/tasks/${task!.id}/pr`)}
+						class="w-full gap-2 py-5 border-dashed"
+					>
+						<Eye class="w-4 h-4" />
+						View Pull Request &amp; Changes
+					</Button>
 				{/if}
 
 				<!-- Branch (skip-PR mode) -->
