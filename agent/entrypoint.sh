@@ -73,6 +73,8 @@ if [ "$SKIP_PR" = "true" ]; then
     log_agent "Skip PR mode: branch pushed, skipping PR creation"
     echo "VERVE_BRANCH_PUSHED:{\"branch\":\"${BRANCH}\"}"
 elif [ "${ATTEMPT:-1}" -le 1 ] || [ "${BRANCH_EXISTS_ON_REMOTE}" != "true" ]; then
+    # For empty repos, ensure the default branch exists so PRs have a base
+    ensure_base_branch
     generate_and_create_pr "${BRANCH}" "${DEFAULT_BRANCH}"
 elif pr_exists_for_branch "${BRANCH}"; then
     log_agent "Retry: pushed fixes to existing PR (${PR_URL})"

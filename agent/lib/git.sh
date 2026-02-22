@@ -76,6 +76,31 @@ push_wip() {
     fi
 }
 
+# For empty repos, ensure the default branch exists on the remote so that
+# a PR can be created against it. Creates an empty initial commit on the
+# default branch and pushes it.
+# Returns 0 if the base branch was created or already existed, 1 on failure.
+ensure_base_branch() {
+    if git rev-parse "origin/${DEFAULT_BRANCH}" >/dev/null 2>&1; then
+        return 0  # Already exists
+    fi
+
+    log_agent "Empty repository detected — initializing ${DEFAULT_BRANCH} branch for PR base"
+
+    # Create an orphan branch with an empty commit, push it, then switch back
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    git checkout --orphan "${DEFAULT_BRANCH}"
+    git rm -rf . >/dev/null 2>&1 || true
+    git commit --allow-empty -m "Initial commit"
+    git push -u origin "${DEFAULT_BRANCH}" 2>&1
+    git checkout "${current_branch}"
+
+    # Fetch so origin/DEFAULT_BRANCH is available locally
+    git fetch origin "${DEFAULT_BRANCH}" 2>/dev/null || true
+}
+
 commit_and_push() {
     log_agent "Checking for changes..."
     git add -A
@@ -92,9 +117,17 @@ commit_and_push() {
     # only the task branch may have been fetched, leaving origin/DEFAULT_BRANCH stale).
     git fetch origin "${DEFAULT_BRANCH}" 2>/dev/null || true
 
-    # Check for any commits ahead of the default branch
+    # Check for any commits ahead of the default branch.
+    # For empty repos, origin/DEFAULT_BRANCH won't exist — in that case any
+    # commits on HEAD count as new changes.
     local changes
-    changes=$(git log "origin/${DEFAULT_BRANCH}..HEAD" --oneline 2>/dev/null)
+    if git rev-parse "origin/${DEFAULT_BRANCH}" >/dev/null 2>&1; then
+        changes=$(git log "origin/${DEFAULT_BRANCH}..HEAD" --oneline 2>/dev/null || true)
+    else
+        # Empty repo: no remote default branch exists yet. All local commits
+        # are new changes.
+        changes=$(git log HEAD --oneline 2>/dev/null || true)
+    fi
     if [ -z "$changes" ]; then
         log_agent "No changes were made — task appears to already meet the required criteria"
         echo 'VERVE_NO_CHANGES:true'

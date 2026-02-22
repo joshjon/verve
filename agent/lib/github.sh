@@ -147,7 +147,11 @@ generate_and_update_pr() {
     fi
 
     local diff_summary
-    diff_summary=$(git diff "origin/${default_branch}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+    if git rev-parse "origin/${default_branch}" >/dev/null 2>&1; then
+        diff_summary=$(git diff "origin/${default_branch}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+    else
+        diff_summary=$(git log --oneline --stat HEAD 2>/dev/null | tail -30 || echo "Changes made by Verve Agent (new repository)")
+    fi
 
     local update_prompt="You are reviewing a pull request that was updated after a retry attempt. The agent made additional changes based on feedback or failure fixes.
 
@@ -237,7 +241,12 @@ generate_and_create_pr() {
     log_agent "Creating pull request..."
 
     local diff_summary
-    diff_summary=$(git diff "origin/${default_branch}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+    if git rev-parse "origin/${default_branch}" >/dev/null 2>&1; then
+        diff_summary=$(git diff "origin/${default_branch}...HEAD" --stat 2>/dev/null | tail -20 || echo "Changes made by Verve Agent")
+    else
+        # Empty repo: no base branch exists yet — list all files as the diff summary
+        diff_summary=$(git log --oneline --stat HEAD 2>/dev/null | tail -30 || echo "Changes made by Verve Agent (new repository)")
+    fi
 
     local pr_prompt="Generate a pull request title and description for the following task and changes.
 
