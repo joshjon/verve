@@ -160,12 +160,15 @@
 	}
 </script>
 
-<div class="p-4 sm:p-6 max-w-full mx-auto">
-	<!-- Back Navigation -->
-	<Button variant="ghost" onclick={() => goto(`/tasks/${taskId}`)} class="mb-4 sm:mb-6 gap-2 -ml-2">
-		<ArrowLeft class="w-4 h-4" />
-		Back to Task
-	</Button>
+<div class="flex flex-col min-h-0">
+	<!-- Header section with padding -->
+	<div class="p-4 sm:p-6 pb-0 sm:pb-0">
+		<!-- Back Navigation -->
+		<Button variant="ghost" onclick={() => goto(`/tasks/${taskId}`)} class="mb-4 sm:mb-6 gap-2 -ml-2">
+			<ArrowLeft class="w-4 h-4" />
+			Back to Task
+		</Button>
+	</div>
 
 	{#if loading}
 		<div class="flex flex-col items-center justify-center py-16">
@@ -173,19 +176,23 @@
 			<p class="text-muted-foreground">Loading pull request...</p>
 		</div>
 	{:else if error && !task}
-		<div class="bg-destructive/10 text-destructive p-4 rounded-lg flex items-center gap-3 border border-destructive/20">
-			<XCircle class="w-5 h-5 flex-shrink-0" />
-			<span>{error}</span>
+		<div class="px-4 sm:px-6">
+			<div class="bg-destructive/10 text-destructive p-4 rounded-lg flex items-center gap-3 border border-destructive/20">
+				<XCircle class="w-5 h-5 flex-shrink-0" />
+				<span>{error}</span>
+			</div>
 		</div>
 	{:else if task && !task.pull_request_url}
-		<div class="bg-muted/50 text-muted-foreground p-6 rounded-lg flex flex-col items-center gap-3">
-			<GitPullRequest class="w-8 h-8 opacity-40" />
-			<p>No pull request associated with this task.</p>
-			<Button variant="outline" onclick={() => goto(`/tasks/${taskId}`)}>Back to Task</Button>
+		<div class="px-4 sm:px-6">
+			<div class="bg-muted/50 text-muted-foreground p-6 rounded-lg flex flex-col items-center gap-3">
+				<GitPullRequest class="w-8 h-8 opacity-40" />
+				<p>No pull request associated with this task.</p>
+				<Button variant="outline" onclick={() => goto(`/tasks/${taskId}`)}>Back to Task</Button>
+			</div>
 		</div>
 	{:else if task && task.pull_request_url}
-		<!-- PR Header -->
-		<div class="space-y-6">
+		<!-- PR Header with padding -->
+		<div class="px-4 sm:px-6 space-y-4 pb-4">
 			<div class="flex items-start gap-4 flex-wrap">
 				<div class="flex items-center gap-3">
 					{#if task.status === 'merged'}
@@ -367,9 +374,9 @@
 					{/if}
 				</div>
 			{/if}
-
-			<!-- Full-width Diff Viewer (auto-expanded) -->
-			<DiffViewer taskId={task.id} hasPR={true} prUrl={task.pull_request_url} autoExpand={true} />
 		</div>
+
+		<!-- Full-width Diff Viewer — no horizontal padding so it stretches edge to edge -->
+		<DiffViewer taskId={task.id} hasPR={true} prUrl={task.pull_request_url} autoExpand={true} />
 	{/if}
 </div>
