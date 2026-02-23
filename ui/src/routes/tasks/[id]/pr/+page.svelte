@@ -160,7 +160,7 @@
 	}
 </script>
 
-<div class="p-4 sm:p-6 max-w-[1400px] mx-auto">
+<div class="p-4 sm:p-6 max-w-full mx-auto">
 	<!-- Back Navigation -->
 	<Button variant="ghost" onclick={() => goto(`/tasks/${taskId}`)} class="mb-4 sm:mb-6 gap-2 -ml-2">
 		<ArrowLeft class="w-4 h-4" />
