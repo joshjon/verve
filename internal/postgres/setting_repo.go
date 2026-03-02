@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"verve/internal/postgres/sqlc"
-	"verve/internal/setting"
+	"github.com/joshjon/verve/internal/postgres/sqlc"
+	"github.com/joshjon/verve/internal/setting"
 )
 
 var _ setting.Repository = (*SettingRepository)(nil)

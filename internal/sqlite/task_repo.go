@@ -12,8 +12,8 @@ import (
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"verve/internal/sqlite/sqlc"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/sqlite/sqlc"
+	"github.com/joshjon/verve/internal/task"
 )
 
 var _ task.Repository = (*TaskRepository)(nil)

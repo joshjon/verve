@@ -3,8 +3,8 @@ package sqlite
 import (
 	"encoding/json"
 
-	"verve/internal/sqlite/sqlc"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/sqlite/sqlc"
+	"github.com/joshjon/verve/internal/task"
 )
 
 func unmarshalTask(in *sqlc.Task) *task.Task {

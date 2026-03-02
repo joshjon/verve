@@ -9,8 +9,8 @@ import (
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"verve/internal/repo"
-	"verve/internal/sqlite/sqlc"
+	"github.com/joshjon/verve/internal/repo"
+	"github.com/joshjon/verve/internal/sqlite/sqlc"
 )
 
 var _ repo.Repository = (*RepoRepository)(nil)

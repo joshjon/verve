@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"verve/internal/githubtoken"
-	"verve/internal/sqlite/sqlc"
+	"github.com/joshjon/verve/internal/githubtoken"
+	"github.com/joshjon/verve/internal/sqlite/sqlc"
 )
 
 var _ githubtoken.Repository = (*GitHubTokenRepository)(nil)

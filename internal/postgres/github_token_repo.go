@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"verve/internal/githubtoken"
-	"verve/internal/postgres/sqlc"
+	"github.com/joshjon/verve/internal/githubtoken"
+	"github.com/joshjon/verve/internal/postgres/sqlc"
 )
 
 var _ githubtoken.Repository = (*GitHubTokenRepository)(nil)

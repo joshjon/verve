@@ -15,10 +15,10 @@ import (
 	"github.com/joshjon/kit/log"
 	"github.com/urfave/cli/v2"
 
-	"verve/internal/app"
-	"verve/internal/keymanager"
-	"verve/internal/setting"
-	"verve/internal/worker"
+	"github.com/joshjon/verve/internal/app"
+	"github.com/joshjon/verve/internal/keymanager"
+	"github.com/joshjon/verve/internal/setting"
+	"github.com/joshjon/verve/internal/worker"
 )
 
 // Version information (injected by goreleaser)

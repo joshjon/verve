@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joshjon/kit/errtag"
 
-	"verve/internal/epic"
-	"verve/internal/postgres/sqlc"
+	"github.com/joshjon/verve/internal/epic"
+	"github.com/joshjon/verve/internal/postgres/sqlc"
 )
 
 var _ epic.Repository = (*EpicRepository)(nil)

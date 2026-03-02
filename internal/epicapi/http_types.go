@@ -1,6 +1,6 @@
 package epicapi
 
-import "verve/internal/epic"
+import "github.com/joshjon/verve/internal/epic"
 
 // CreateEpicRequest is the request body for creating an epic.
 type CreateEpicRequest struct {

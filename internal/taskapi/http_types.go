@@ -1,8 +1,8 @@
 package taskapi
 
 import (
-	"verve/internal/github"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/github"
+	"github.com/joshjon/verve/internal/task"
 )
 
 // AddRepoRequest is the request body for adding a repo.

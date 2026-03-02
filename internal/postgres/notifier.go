@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joshjon/kit/log"
 
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/task"
 )
 
 const pgChannel = "task_events"

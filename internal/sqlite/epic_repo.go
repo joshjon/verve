@@ -10,8 +10,8 @@ import (
 	"github.com/joshjon/kit/errtag"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"verve/internal/epic"
-	"verve/internal/sqlite/sqlc"
+	"github.com/joshjon/verve/internal/epic"
+	"github.com/joshjon/verve/internal/sqlite/sqlc"
 )
 
 var _ epic.Repository = (*EpicRepository)(nil)

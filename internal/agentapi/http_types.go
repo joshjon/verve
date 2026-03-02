@@ -1,8 +1,8 @@
 package agentapi
 
 import (
-	"verve/internal/epic"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/epic"
+	"github.com/joshjon/verve/internal/task"
 )
 
 // PollResponse is the discriminated union returned by the unified poll endpoint.

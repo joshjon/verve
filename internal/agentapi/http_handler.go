@@ -7,11 +7,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"verve/internal/epic"
-	"verve/internal/githubtoken"
-	"verve/internal/repo"
-	"verve/internal/task"
-	"verve/internal/workertracker"
+	"github.com/joshjon/verve/internal/epic"
+	"github.com/joshjon/verve/internal/githubtoken"
+	"github.com/joshjon/verve/internal/repo"
+	"github.com/joshjon/verve/internal/task"
+	"github.com/joshjon/verve/internal/workertracker"
 )
 
 // HTTPHandler handles agent-facing API requests.

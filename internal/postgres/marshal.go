@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"verve/internal/postgres/sqlc"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/postgres/sqlc"
+	"github.com/joshjon/verve/internal/task"
 )
 
 func unmarshalTask(in *sqlc.Task) *task.Task {

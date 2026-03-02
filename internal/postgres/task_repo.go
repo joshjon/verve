@@ -14,8 +14,8 @@ import (
 	"github.com/joshjon/kit/errtag"
 	"github.com/joshjon/kit/tx"
 
-	"verve/internal/postgres/sqlc"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/postgres/sqlc"
+	"github.com/joshjon/verve/internal/task"
 )
 
 func safeInt32(v int) int32 {

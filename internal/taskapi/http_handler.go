@@ -11,13 +11,13 @@ import (
 	"github.com/joshjon/kit/errtag"
 	"github.com/labstack/echo/v4"
 
-	"verve/internal/epic"
-	"verve/internal/github"
-	"verve/internal/githubtoken"
-	"verve/internal/repo"
-	"verve/internal/setting"
-	"verve/internal/task"
-	"verve/internal/workertracker"
+	"github.com/joshjon/verve/internal/epic"
+	"github.com/joshjon/verve/internal/github"
+	"github.com/joshjon/verve/internal/githubtoken"
+	"github.com/joshjon/verve/internal/repo"
+	"github.com/joshjon/verve/internal/setting"
+	"github.com/joshjon/verve/internal/task"
+	"github.com/joshjon/verve/internal/workertracker"
 )
 
 // HTTPHandler handles task and repo HTTP requests.

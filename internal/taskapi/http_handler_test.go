@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"verve/internal/repo"
-	"verve/internal/setting"
-	"verve/internal/task"
+	"github.com/joshjon/verve/internal/repo"
+	"github.com/joshjon/verve/internal/setting"
+	"github.com/joshjon/verve/internal/task"
 )
 
 // --- Mock task repository ---

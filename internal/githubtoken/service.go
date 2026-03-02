@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"verve/internal/crypto"
-	"verve/internal/github"
+	"github.com/joshjon/verve/internal/crypto"
+	"github.com/joshjon/verve/internal/github"
 )
 
 const (

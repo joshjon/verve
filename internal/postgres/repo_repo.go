@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joshjon/kit/errtag"
 
-	"verve/internal/postgres/sqlc"
-	"verve/internal/repo"
+	"github.com/joshjon/verve/internal/postgres/sqlc"
+	"github.com/joshjon/verve/internal/repo"
 )
 
 var _ repo.Repository = (*RepoRepository)(nil)

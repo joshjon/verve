@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"verve/internal/workertracker"
+	"github.com/joshjon/verve/internal/workertracker"
 )
 
 // PlanningEpic represents an epic that is actively being planned by an agent.
