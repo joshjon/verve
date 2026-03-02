@@ -137,8 +137,9 @@ func main() {
 	}
 
 	cliApp := &cli.App{
-		Name:  "verve",
-		Usage: "AI agent orchestrator — runs API server and worker",
+		Name:    "verve",
+		Usage:   "AI agent orchestrator — runs API server and worker",
+		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 		Flags: concat(sharedFlags, apiFlags, workerFlags),
 		Action: func(c *cli.Context) error {
 			return runCombined(ctx, c, logger)
