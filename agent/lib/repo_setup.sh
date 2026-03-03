@@ -1,7 +1,9 @@
 #!/bin/bash
 # repo_setup.sh — Repository setup scanning agent.
-# Clones the repo, analyzes its structure and configuration,
-# invokes Claude for a summary, and reports results back to the API.
+# Clones the repo and runs Claude Code as a full agent to analyze
+# the repository structure, tech stack, and configuration.
+# All detection and analysis is performed by Claude — no programmatic
+# file checking or tech-stack detection is done in this script.
 
 # Depends on: log.sh, validate.sh, git.sh, claude.sh (sourced by entrypoint.sh)
 
@@ -33,201 +35,212 @@ run_repo_setup() {
     log_agent "Repository cloned for analysis"
     log_blank
 
-    # Analyze repository
-    local has_code=false
-    local has_claudemd=false
-    local has_readme=false
-    local needs_setup=true
-    local tech_stack="[]"
-    local summary=""
-    local claudemd_contents=""
-    local readme_contents=""
-
-    # Check if repo is empty (no files besides .git)
+    # Check if repo is empty (no files besides .git) — this is the one
+    # check we do before invoking Claude because there is nothing for the
+    # agent to analyse in an empty repo.
     local file_count
     file_count=$(find . -not -path './.git/*' -not -path './.git' -not -path '.' -type f | head -5 | wc -l)
 
     if [ "$file_count" -eq 0 ]; then
         log_agent "Repository is empty (no source files found)"
-        has_code=false
-        needs_setup=true
-        summary="Empty repository with no source files."
-        _setup_complete "$summary" "$tech_stack" "$has_code" "$has_claudemd" "$has_readme" "$needs_setup"
+        _setup_complete_empty
         return 0
     fi
 
-    has_code=true
-    log_agent "Repository has source files"
+    # Run Claude Code as a full agent to analyze the repository.
+    # Claude will explore the codebase using its tools (Read, Glob, Grep, Bash)
+    # and return structured JSON with the analysis results.
+    log_agent "Running Claude Code agent to analyze repository..."
 
-    # Check for CLAUDE.md
-    if [ -f "CLAUDE.md" ]; then
-        has_claudemd=true
-        claudemd_contents=$(head -500 CLAUDE.md)
-        log_agent "Found CLAUDE.md ($(wc -l < CLAUDE.md) lines)"
+    _run_setup_analysis
+
+    local analysis_result=$?
+
+    if [ "$analysis_result" -eq 0 ]; then
+        log_agent "Repository analysis completed successfully"
     else
-        log_agent "No CLAUDE.md found"
+        log_agent "Repository analysis failed"
+        _setup_complete_fail
     fi
 
-    # Check for README
-    if [ -f "README.md" ]; then
-        has_readme=true
-        readme_contents=$(head -500 README.md)
-        log_agent "Found README.md ($(wc -l < README.md) lines)"
-    elif [ -f "README" ]; then
-        has_readme=true
-        readme_contents=$(head -500 README)
-        log_agent "Found README ($(wc -l < README) lines)"
-    elif [ -f "readme.md" ]; then
-        has_readme=true
-        readme_contents=$(head -500 readme.md)
-        log_agent "Found readme.md ($(wc -l < readme.md) lines)"
-    else
-        log_agent "No README found"
+    log_blank
+    log_header "Repo Setup Scan Completed"
+}
+
+_run_setup_analysis() {
+    local prompt
+    prompt=$(_build_setup_prompt)
+
+    # Write raw stream-json output to a temp file so we can extract the
+    # result afterwards. Use tee to also pipe through _parse_stream (from
+    # claude.sh) which prints human-readable log lines to stdout in
+    # real-time — these are captured by the Docker log streamer.
+    local raw_output_file
+    raw_output_file=$(mktemp /tmp/setup_claude_raw.XXXXXX)
+
+    local model="${CLAUDE_MODEL:-sonnet}"
+
+    local claude_exit=0
+    set -o pipefail
+    set +e
+    claude --output-format stream-json --verbose --dangerously-skip-permissions \
+        --model "$model" "$prompt" 2>&1 \
+        | tee "$raw_output_file" \
+        | _parse_stream
+    claude_exit=$?
+    set -e
+    set +o pipefail
+
+    # Extract the result text from the saved raw output
+    local output=""
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        local event_type
+        event_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null)
+        if [ "$event_type" = "result" ]; then
+            output=$(echo "$line" | jq -r '.result // empty' 2>/dev/null)
+        fi
+    done < "$raw_output_file"
+    rm -f "$raw_output_file"
+
+    log_blank
+    log_agent "Claude Code session completed"
+
+    if [ "$claude_exit" -ne 0 ]; then
+        log_error "Claude Code session failed with exit code ${claude_exit}"
+        return 1
     fi
 
-    # Detect tech stack
-    local detected_stack=()
-    _detect_tech_stack detected_stack
-    tech_stack=$(_array_to_json "${detected_stack[@]}")
-    log_agent "Detected tech stack: ${detected_stack[*]:-none}"
+    if [ -z "$output" ]; then
+        log_error "Claude produced no output"
+        return 1
+    fi
 
-    # Generate file tree for context
-    local tree_output
-    tree_output=$(find . -not -path './.git/*' -not -path './.git' -not -path './node_modules/*' -not -path './vendor/*' -not -path './.venv/*' -not -path './dist/*' -not -path './build/*' -type f | sort | head -200)
+    # Parse the structured analysis from Claude's output
+    local analysis_json
+    analysis_json=$(_extract_setup_analysis "$output")
 
-    # Build Claude prompt and get summary
-    log_agent "Running Claude to generate repository summary..."
-    summary=$(_generate_repo_summary "$tree_output" "$claudemd_contents" "$readme_contents")
+    if [ -z "$analysis_json" ] || [ "$analysis_json" = "null" ] || [ "$analysis_json" = "{}" ]; then
+        log_error "Could not extract analysis from Claude output"
+        return 1
+    fi
 
-    if [ -z "$summary" ]; then
-        log_agent "Claude produced no summary, using fallback"
-        summary="Repository contains source code."
-        if [ ${#detected_stack[@]} -gt 0 ]; then
-            summary="Repository using ${detected_stack[*]}."
+    # Extract fields from the analysis JSON and submit results
+    local summary tech_stack has_code has_claude_md has_readme needs_setup
+    summary=$(printf '%s\n' "$analysis_json" | jq -r '.summary // ""')
+    tech_stack=$(printf '%s\n' "$analysis_json" | jq -c '.tech_stack // []')
+    has_code=$(printf '%s\n' "$analysis_json" | jq -r '.has_code // true')
+    has_claude_md=$(printf '%s\n' "$analysis_json" | jq -r '.has_claude_md // false')
+    has_readme=$(printf '%s\n' "$analysis_json" | jq -r '.has_readme // false')
+    needs_setup=$(printf '%s\n' "$analysis_json" | jq -r '.needs_setup // true')
+
+    log_agent "Summary: ${summary}"
+    log_agent "Tech stack: $(printf '%s\n' "$tech_stack" | jq -r 'join(", ")')"
+    log_agent "Has code: ${has_code}, Has CLAUDE.md: ${has_claude_md}, Has README: ${has_readme}"
+    log_agent "Needs setup: ${needs_setup}"
+
+    _setup_complete "$summary" "$tech_stack" "$has_code" "$has_claude_md" "$has_readme" "$needs_setup"
+}
+
+_build_setup_prompt() {
+    cat <<'PROMPT'
+You are a repository analysis agent. Your job is to thoroughly analyze this repository and produce a structured assessment.
+
+You have access to the full repository at the current working directory. Use your tools (Read, Glob, Grep, Bash) to explore the codebase. Do NOT guess — actually look at the files.
+
+## What to Analyze
+
+1. **Repository overview**: What does this project do? Summarize in 2-3 sentences.
+
+2. **Tech stack detection**: Identify ALL technologies, languages, frameworks, and tools used. Look at:
+   - Build files (go.mod, package.json, Cargo.toml, pyproject.toml, requirements.txt, Gemfile, pom.xml, build.gradle, composer.json, *.csproj, Package.swift, etc.)
+   - Config files (tsconfig.json, .eslintrc, .prettierrc, Makefile, Dockerfile, docker-compose.yml, terraform files, CI configs, etc.)
+   - Framework indicators (next.config.*, nuxt.config.*, svelte.config.*, angular.json, vite.config.*, rails config, django manage.py, etc.)
+   - Source file extensions to identify languages used
+   - Any other technology indicators
+
+3. **Documentation check**:
+   - Does a CLAUDE.md file exist? (Check root and common locations)
+   - Does a README file exist? (README.md, README, readme.md, README.rst, etc.)
+
+4. **Coding standards assessment**: Are coding standards and patterns well-established? Look for:
+   - Linter/formatter configs (.eslintrc, .prettierrc, .golangci.yml, rustfmt.toml, etc.)
+   - CI/CD configs (.github/workflows, .gitlab-ci.yml, Jenkinsfile, etc.)
+   - CLAUDE.md with project conventions
+   - Consistent code structure and patterns
+   - Test files and testing conventions
+
+5. **Needs setup determination**: Does the repository need additional setup? A repo needs setup if:
+   - It has no CLAUDE.md file (AI coding agents won't have project context)
+   - It has no README (developers won't have documentation)
+   - It has code but no clear coding standards or conventions documented
+   - A repo does NOT need setup if it has a CLAUDE.md + README + well-established patterns
+
+## Output Format
+
+After your analysis, output your findings as a JSON object wrapped in a markdown code block with the language tag `verve-setup`. The JSON must have exactly these fields:
+
+```verve-setup
+{
+  "summary": "A 2-3 sentence summary of what this project does and its purpose.",
+  "tech_stack": ["Go", "PostgreSQL", "Docker", "React", "TypeScript"],
+  "has_code": true,
+  "has_claude_md": false,
+  "has_readme": true,
+  "needs_setup": true
+}
+```
+
+Field descriptions:
+- `summary` (string): Concise 2-3 sentence description of the project
+- `tech_stack` (string array): All detected technologies, languages, frameworks, and tools
+- `has_code` (boolean): Whether the repository contains source code
+- `has_claude_md` (boolean): Whether a CLAUDE.md file exists
+- `has_readme` (boolean): Whether a README file exists (any format)
+- `needs_setup` (boolean): Whether the repo needs additional setup/configuration for AI coding agents
+
+Be thorough in your analysis but concise in your output. Actually explore the codebase — don't guess from file names alone.
+PROMPT
+}
+
+_extract_setup_analysis() {
+    local output="$1"
+
+    # Extract content from the ```verve-setup code block.
+    local analysis
+    analysis=$(printf '%s\n' "$output" | awk '
+        /^```verve-setup/ { if (!found) { capturing=1; found=1 }; next }
+        capturing && /^```[[:space:]]*$/ { capturing=0; next }
+        capturing { print }
+    ')
+
+    if [ -n "$analysis" ]; then
+        # Validate that extracted content is a JSON object
+        local validated
+        validated=$(printf '%s\n' "$analysis" | jq -e 'if type == "object" then . else error("not an object") end' 2>/dev/null)
+        if [ -n "$validated" ]; then
+            printf '%s\n' "$validated"
+            return
         fi
     fi
 
-    log_agent "Summary: ${summary}"
-
-    # Determine if setup is needed
-    if $has_claudemd && $has_readme && $has_code; then
-        needs_setup=false
-        log_agent "Repository appears well-configured (has CLAUDE.md, README, and code)"
-    else
-        needs_setup=true
-        local missing=""
-        if ! $has_claudemd; then missing="${missing} CLAUDE.md"; fi
-        if ! $has_readme; then missing="${missing} README"; fi
-        log_agent "Repository may need setup (missing:${missing})"
-    fi
-
-    _setup_complete "$summary" "$tech_stack" "$has_code" "$has_claudemd" "$has_readme" "$needs_setup"
+    echo "{}"
 }
 
-_detect_tech_stack() {
-    local -n _result=$1
+_setup_complete_empty() {
+    local body
+    body=$(jq -n '{
+        "success": true,
+        "summary": "Empty repository with no source files.",
+        "tech_stack": [],
+        "has_code": false,
+        "has_claude_md": false,
+        "has_readme": false,
+        "needs_setup": true
+    }')
 
-    # Go
-    [ -f "go.mod" ] && _result+=("Go")
-
-    # Node.js / JavaScript / TypeScript
-    if [ -f "package.json" ]; then
-        _result+=("Node.js")
-        [ -f "tsconfig.json" ] && _result+=("TypeScript")
-        [ -f "next.config.js" ] || [ -f "next.config.mjs" ] || [ -f "next.config.ts" ] && _result+=("Next.js")
-        [ -f "nuxt.config.js" ] || [ -f "nuxt.config.ts" ] && _result+=("Nuxt")
-        [ -f "svelte.config.js" ] && _result+=("Svelte")
-        [ -f "angular.json" ] && _result+=("Angular")
-        [ -f "vite.config.js" ] || [ -f "vite.config.ts" ] && _result+=("Vite")
-    fi
-
-    # Python
-    if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || [ -f "setup.py" ] || [ -f "Pipfile" ]; then
-        _result+=("Python")
-        [ -f "manage.py" ] && _result+=("Django")
-    fi
-
-    # Rust
-    [ -f "Cargo.toml" ] && _result+=("Rust")
-
-    # Java / Kotlin
-    [ -f "pom.xml" ] && _result+=("Java" "Maven")
-    [ -f "build.gradle" ] || [ -f "build.gradle.kts" ] && _result+=("Gradle")
-
-    # Ruby
-    [ -f "Gemfile" ] && _result+=("Ruby")
-    [ -f "Gemfile" ] && [ -f "config/routes.rb" ] && _result+=("Rails")
-
-    # PHP
-    [ -f "composer.json" ] && _result+=("PHP")
-
-    # .NET
-    compgen -G "*.csproj" >/dev/null 2>&1 && _result+=(".NET")
-    compgen -G "*.sln" >/dev/null 2>&1 && _result+=(".NET")
-
-    # Swift
-    [ -f "Package.swift" ] && _result+=("Swift")
-
-    # Docker
-    [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ] && _result+=("Docker")
-
-    # Makefile
-    [ -f "Makefile" ] && _result+=("Make")
-
-    # Terraform
-    compgen -G "*.tf" >/dev/null 2>&1 && _result+=("Terraform")
-}
-
-_array_to_json() {
-    local arr=("$@")
-    if [ ${#arr[@]} -eq 0 ]; then
-        echo "[]"
-        return
-    fi
-
-    local json="["
-    local first=true
-    for item in "${arr[@]}"; do
-        if [ "$first" = true ]; then first=false; else json+=","; fi
-        json+="\"${item}\""
-    done
-    json+="]"
-    echo "$json"
-}
-
-_generate_repo_summary() {
-    local tree_output="$1"
-    local claudemd_contents="$2"
-    local readme_contents="$3"
-
-    local prompt="Analyze this repository and provide a concise 2-3 sentence summary of what this project does, the key technologies used, and whether coding standards/patterns are well-established.
-
-Repository structure:
-${tree_output}"
-
-    if [ -n "$claudemd_contents" ]; then
-        prompt="${prompt}
-
-CLAUDE.md contents:
-${claudemd_contents}"
-    fi
-
-    if [ -n "$readme_contents" ]; then
-        prompt="${prompt}
-
-README contents:
-${readme_contents}"
-    fi
-
-    prompt="${prompt}
-
-Respond with ONLY the summary text. No markdown formatting, no bullet points, no headers. Just 2-3 plain sentences."
-
-    local model="${CLAUDE_MODEL:-sonnet}"
-    local result
-    result=$(claude --print --model "${model}" "${prompt}" 2>/dev/null || echo "")
-
-    echo "$result"
+    log_agent "Reporting setup scan results (empty repo)..."
+    _post_setup_complete "$body"
 }
 
 _setup_complete() {
@@ -257,6 +270,11 @@ _setup_complete() {
         }')
 
     log_agent "Reporting setup scan results..."
+    _post_setup_complete "$body"
+}
+
+_post_setup_complete() {
+    local body="$1"
 
     local response
     response=$(curl -s -w "\n%{http_code}" -X POST \
@@ -272,9 +290,6 @@ _setup_complete() {
     else
         log_agent "Setup scan results submitted successfully"
     fi
-
-    log_blank
-    log_header "Repo Setup Scan Completed"
 }
 
 _setup_complete_fail() {
