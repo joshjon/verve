@@ -128,13 +128,14 @@ func (q *Queries) CloseTask(ctx context.Context, arg CloseTaskParams) error {
 }
 
 const createTask = `-- name: CreateTask :exec
-INSERT INTO task (id, repo_id, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, draft_pr, model, ready, epic_id, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+INSERT INTO task (id, repo_id, type, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, draft_pr, model, ready, epic_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 `
 
 type CreateTaskParams struct {
 	ID                     string     `json:"id"`
 	RepoID                 string     `json:"repo_id"`
+	Type                   string     `json:"type"`
 	Title                  string     `json:"title"`
 	Description            string     `json:"description"`
 	Status                 TaskStatus `json:"status"`
@@ -156,6 +157,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 	_, err := q.db.Exec(ctx, createTask,
 		arg.ID,
 		arg.RepoID,
+		arg.Type,
 		arg.Title,
 		arg.Description,
 		arg.Status,
@@ -251,7 +253,7 @@ func (q *Queries) Heartbeat(ctx context.Context, id string) (int64, error) {
 }
 
 const listPendingTasks = `-- name: ListPendingTasks :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE status = 'pending' AND ready = true ORDER BY created_at ASC
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE status = 'pending' AND ready = true ORDER BY created_at ASC
 `
 
 func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
@@ -292,6 +294,7 @@ func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -304,7 +307,7 @@ func (q *Queries) ListPendingTasks(ctx context.Context) ([]*Task, error) {
 }
 
 const listPendingTasksByRepos = `-- name: ListPendingTasksByRepos :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE status = 'pending' AND ready = true AND repo_id = ANY($1::text[]) ORDER BY created_at ASC
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE status = 'pending' AND ready = true AND repo_id = ANY($1::text[]) ORDER BY created_at ASC
 `
 
 func (q *Queries) ListPendingTasksByRepos(ctx context.Context, dollar_1 []string) ([]*Task, error) {
@@ -345,6 +348,7 @@ func (q *Queries) ListPendingTasksByRepos(ctx context.Context, dollar_1 []string
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -357,7 +361,7 @@ func (q *Queries) ListPendingTasksByRepos(ctx context.Context, dollar_1 []string
 }
 
 const listStaleTasks = `-- name: ListStaleTasks :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE status = 'running' AND last_heartbeat_at IS NOT NULL AND last_heartbeat_at < $1 ORDER BY started_at
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE status = 'running' AND last_heartbeat_at IS NOT NULL AND last_heartbeat_at < $1 ORDER BY started_at
 `
 
 func (q *Queries) ListStaleTasks(ctx context.Context, lastHeartbeatAt *int64) ([]*Task, error) {
@@ -398,6 +402,7 @@ func (q *Queries) ListStaleTasks(ctx context.Context, lastHeartbeatAt *int64) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -410,7 +415,7 @@ func (q *Queries) ListStaleTasks(ctx context.Context, lastHeartbeatAt *int64) ([
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task ORDER BY created_at DESC
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE type = 'task' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
@@ -451,6 +456,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -463,7 +469,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*Task, error) {
 }
 
 const listTasksByEpic = `-- name: ListTasksByEpic :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE epic_id = $1 ORDER BY created_at ASC
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE epic_id = $1 ORDER BY created_at ASC
 `
 
 func (q *Queries) ListTasksByEpic(ctx context.Context, epicID *string) ([]*Task, error) {
@@ -504,6 +510,7 @@ func (q *Queries) ListTasksByEpic(ctx context.Context, epicID *string) ([]*Task,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -516,7 +523,7 @@ func (q *Queries) ListTasksByEpic(ctx context.Context, epicID *string) ([]*Task,
 }
 
 const listTasksByRepo = `-- name: ListTasksByRepo :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE repo_id = $1 ORDER BY created_at DESC
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE repo_id = $1 AND type = 'task' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, error) {
@@ -557,6 +564,7 @@ func (q *Queries) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -569,7 +577,7 @@ func (q *Queries) ListTasksByRepo(ctx context.Context, repoID string) ([]*Task, 
 }
 
 const listTasksInReview = `-- name: ListTasksInReview :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE status = 'review'
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE status = 'review'
 `
 
 func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
@@ -610,6 +618,7 @@ func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -622,7 +631,7 @@ func (q *Queries) ListTasksInReview(ctx context.Context) ([]*Task, error) {
 }
 
 const listTasksInReviewByRepo = `-- name: ListTasksInReviewByRepo :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE repo_id = $1 AND status = 'review'
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE repo_id = $1 AND status = 'review'
 `
 
 func (q *Queries) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([]*Task, error) {
@@ -663,6 +672,7 @@ func (q *Queries) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -675,7 +685,7 @@ func (q *Queries) ListTasksInReviewByRepo(ctx context.Context, repoID string) ([
 }
 
 const listTasksInReviewNoPR = `-- name: ListTasksInReviewNoPR :many
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_number IS NULL
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE status = 'review' AND branch_name IS NOT NULL AND pr_number IS NULL
 `
 
 func (q *Queries) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
@@ -716,6 +726,7 @@ func (q *Queries) ListTasksInReviewNoPR(ctx context.Context) ([]*Task, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DraftPr,
+			&i.Type,
 		); err != nil {
 			return nil, err
 		}
@@ -749,7 +760,7 @@ func (q *Queries) ManualRetryTask(ctx context.Context, arg ManualRetryTaskParams
 }
 
 const readTask = `-- name: ReadTask :one
-SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr FROM task WHERE id = $1
+SELECT id, repo_id, title, description, status, pull_request_url, pr_number, depends_on, close_reason, attempt, max_attempts, retry_reason, acceptance_criteria_list, agent_status, retry_context, consecutive_failures, cost_usd, max_cost_usd, skip_pr, branch_name, model, started_at, ready, last_heartbeat_at, epic_id, created_at, updated_at, draft_pr, type FROM task WHERE id = $1
 `
 
 func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
@@ -784,6 +795,7 @@ func (q *Queries) ReadTask(ctx context.Context, id string) (*Task, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DraftPr,
+		&i.Type,
 	)
 	return &i, err
 }

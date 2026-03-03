@@ -9,9 +9,14 @@ import (
 )
 
 func unmarshalTask(in *sqlc.Task) *task.Task {
+	taskType := in.Type
+	if taskType == "" {
+		taskType = task.TaskTypeTask
+	}
 	t := &task.Task{
 		ID:                 task.MustParseTaskID(in.ID),
 		RepoID:             in.RepoID,
+		Type:               taskType,
 		Title:              in.Title,
 		Description:        in.Description,
 		Status:             task.Status(in.Status),
