@@ -113,6 +113,7 @@
 		taskStore.tasks.filter((t) => ['pending', 'running', 'review'].includes(t.status)).length
 	);
 	const hasRepo = $derived(!!repoStore.selectedRepoId);
+	const repoReady = $derived(repoStore.selectedRepo?.setup_status === 'ready');
 
 	const doneTasks = $derived([
 		...taskStore.tasksByStatus.merged,
@@ -212,7 +213,7 @@
 					<List class="w-4 h-4" />
 					<span class="hidden sm:inline">{selectionMode ? 'Cancel' : 'Bulk Delete'}</span>
 				</Button>
-				<Button onclick={() => (openCreate = true)} class="gap-2">
+				<Button onclick={() => (openCreate = true)} disabled={!repoReady} title={repoReady ? '' : 'Complete repository setup first'} class="gap-2">
 					<Plus class="w-4 h-4" />
 					New Task
 				</Button>
@@ -246,13 +247,15 @@
 		{/if}
 
 		{#snippet pendingAction()}
-			<button
-				onclick={() => (openCreate = true)}
-				class="h-6 px-2 gap-1 text-xs inline-flex items-center rounded-md font-medium bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors"
-			>
-				<Plus class="w-3 h-3" />
-				New
-			</button>
+			{#if repoReady}
+				<button
+					onclick={() => (openCreate = true)}
+					class="h-6 px-2 gap-1 text-xs inline-flex items-center rounded-md font-medium bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition-colors"
+				>
+					<Plus class="w-3 h-3" />
+					New
+				</button>
+			{/if}
 		{/snippet}
 
 		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 flex-1 min-h-0 sm:auto-rows-[1fr] max-h-96 sm:max-h-none">

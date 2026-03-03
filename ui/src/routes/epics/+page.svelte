@@ -38,6 +38,7 @@
 	}
 
 	const hasRepo = $derived(!!repoStore.selectedRepoId);
+	const repoReady = $derived(repoStore.selectedRepo?.setup_status === 'ready');
 	const totalEpics = $derived(epicStore.epics.length);
 
 	const activeEpics = $derived(
@@ -67,7 +68,7 @@
 				</p>
 			</div>
 			<div class="flex items-center gap-2 sm:gap-3">
-				<Button onclick={() => (openCreateEpic = true)} class="gap-2 bg-violet-600 hover:bg-violet-700 text-white">
+				<Button onclick={() => (openCreateEpic = true)} disabled={!repoReady} title={repoReady ? '' : 'Complete repository setup first'} class="gap-2 bg-violet-600 hover:bg-violet-700 text-white">
 					<Plus class="w-4 h-4" />
 					New Epic
 				</Button>
@@ -92,7 +93,7 @@
 				<p class="text-muted-foreground text-sm max-w-md mb-4">
 					Create an epic to break down large features into AI-planned tasks.
 				</p>
-				<Button onclick={() => (openCreateEpic = true)} class="gap-2 bg-violet-600 hover:bg-violet-700 text-white">
+				<Button onclick={() => (openCreateEpic = true)} disabled={!repoReady} title={repoReady ? '' : 'Complete repository setup first'} class="gap-2 bg-violet-600 hover:bg-violet-700 text-white">
 					<Plus class="w-4 h-4" />
 					Create Your First Epic
 				</Button>
