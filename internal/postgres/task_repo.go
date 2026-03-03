@@ -67,9 +67,14 @@ func (r *TaskRepository) CreateTask(ctx context.Context, t *task.Task) error {
 	if t.EpicID != "" {
 		epicID = &t.EpicID
 	}
+	taskType := t.Type
+	if taskType == "" {
+		taskType = task.TaskTypeTask
+	}
 	err := r.db.CreateTask(ctx, sqlc.CreateTaskParams{
 		ID:                    t.ID.String(),
 		RepoID:                t.RepoID,
+		Type:                  taskType,
 		Title:                 t.Title,
 		Description:           t.Description,
 		Status:                sqlc.TaskStatus(t.Status),

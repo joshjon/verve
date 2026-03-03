@@ -14,10 +14,17 @@ const (
 	StatusFailed  Status = "failed"
 )
 
+// TaskType distinguishes regular coding tasks from internal system tasks.
+const (
+	TaskTypeTask  = "task"  // Regular coding task
+	TaskTypeSetup = "setup" // Internal repo setup scan
+)
+
 // Task represents a unit of work dispatched to an AI coding agent.
 type Task struct {
 	ID                  TaskID    `json:"id"`
 	RepoID              string    `json:"repo_id"`
+	Type                string    `json:"type"`
 	Title               string    `json:"title"`
 	Description         string    `json:"description"`
 	Status              Status    `json:"status"`
@@ -88,6 +95,28 @@ type StartOverTaskParams struct {
 	AcceptanceCriteria []string
 }
 
+// NewSetupTask creates a new internal setup scan task for a repo.
+func NewSetupTask(repoID string) *Task {
+	now := time.Now()
+	return &Task{
+		ID:                 NewTaskID(),
+		RepoID:             repoID,
+		Type:               TaskTypeSetup,
+		Title:              "Repository setup scan",
+		Description:        "Scan the repository to detect tech stack, configuration files, and setup requirements.",
+		Status:             StatusPending,
+		DependsOn:          []string{},
+		Attempt:            1,
+		MaxAttempts:        3,
+		AcceptanceCriteria: []string{},
+		SkipPR:             true,
+		Ready:              true,
+		Model:              "sonnet",
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+}
+
 // NewTask creates a new Task with a generated TaskID and pending status.
 func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []string, maxCostUSD float64, skipPR, draftPR bool, model string, ready bool) *Task {
 	now := time.Now()
@@ -100,6 +129,7 @@ func NewTask(repoID, title, description string, dependsOn, acceptanceCriteria []
 	return &Task{
 		ID:                 NewTaskID(),
 		RepoID:             repoID,
+		Type:               TaskTypeTask,
 		Title:              title,
 		Description:        description,
 		Status:             StatusPending,

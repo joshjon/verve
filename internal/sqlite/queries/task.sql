@@ -1,15 +1,15 @@
 -- name: CreateTask :exec
-INSERT INTO task (id, repo_id, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, draft_pr, model, ready, epic_id, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO task (id, repo_id, type, title, description, status, depends_on, attempt, max_attempts, acceptance_criteria_list, max_cost_usd, skip_pr, draft_pr, model, ready, epic_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ReadTask :one
 SELECT * FROM task WHERE id = ?;
 
 -- name: ListTasks :many
-SELECT * FROM task ORDER BY created_at DESC;
+SELECT * FROM task WHERE type = 'task' ORDER BY created_at DESC;
 
 -- name: ListTasksByRepo :many
-SELECT * FROM task WHERE repo_id = ? ORDER BY created_at DESC;
+SELECT * FROM task WHERE repo_id = ? AND type = 'task' ORDER BY created_at DESC;
 
 -- name: ListPendingTasks :many
 SELECT * FROM task WHERE status = 'pending' AND ready = 1 ORDER BY created_at ASC;
