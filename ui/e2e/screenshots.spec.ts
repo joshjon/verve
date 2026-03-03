@@ -1014,11 +1014,8 @@ test.describe('UI Screenshots', () => {
 		await setupMockAPI(page, MOCK_REPO_SCANNING);
 		await page.goto('/');
 
-		// Wait for tasks to render.
-		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
-			timeout: 5000
-		}).catch(() => {});
-
+		// Wait for the scanning banner to render (no kanban columns visible).
+		await page.waitForSelector('text=Scanning repository', { timeout: 5000 });
 		await page.waitForTimeout(1500);
 
 		await page.screenshot({
@@ -1031,11 +1028,8 @@ test.describe('UI Screenshots', () => {
 		await setupMockAPI(page, MOCK_REPO_NEEDS_SETUP);
 		await page.goto('/');
 
-		// Wait for tasks to render.
-		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
-			timeout: 5000
-		}).catch(() => {});
-
+		// Wait for the needs-setup banner to render (no kanban columns visible).
+		await page.waitForSelector('text=Repository needs configuration', { timeout: 5000 });
 		await page.waitForTimeout(1500);
 
 		// Expand the "Scan Results" section to show the RepoSummary
@@ -1056,10 +1050,8 @@ test.describe('UI Screenshots', () => {
 		await setupMockAPI(page, MOCK_REPO_NEEDS_SETUP);
 		await page.goto('/');
 
-		// Wait for tasks to render.
-		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
-			timeout: 5000
-		}).catch(() => {});
+		// Wait for the needs-setup banner to render.
+		await page.waitForSelector('text=Repository needs configuration', { timeout: 5000 });
 		await page.waitForTimeout(1500);
 
 		// Click the "Configure" button in the needs_setup banner to open the wizard
@@ -1080,11 +1072,8 @@ test.describe('UI Screenshots', () => {
 		await setupMockAPI(page, MOCK_REPO_PENDING);
 		await page.goto('/');
 
-		// Wait for content to load.
-		await page.waitForSelector('[data-testid="task-card"], .task-card, [class*="Card"]', {
-			timeout: 5000
-		}).catch(() => {});
-
+		// Wait for the pending setup banner to render (no kanban columns visible).
+		await page.waitForSelector('text=Repository setup required', { timeout: 5000 });
 		await page.waitForTimeout(1500);
 
 		await page.screenshot({
