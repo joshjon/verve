@@ -120,7 +120,7 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	taskStore := task.NewStore(taskRepo, broker)
 
 	repoRepo := postgres.NewRepoRepository(pool)
-	repoStore := repo.NewStore(repoRepo, taskStore)
+	repoStore := repo.NewStore(repoRepo)
 
 	var ghTokenService *githubtoken.Service
 	if encryptionKey != nil {
@@ -155,7 +155,7 @@ func initSQLite(ctx context.Context, encryptionKey []byte, ghInsecureSkipVerify 
 	taskStore := task.NewStore(taskRepo, broker)
 
 	repoRepo := sqlite.NewRepoRepository(db)
-	repoStore := repo.NewStore(repoRepo, taskStore)
+	repoStore := repo.NewStore(repoRepo)
 
 	var ghTokenService *githubtoken.Service
 	if encryptionKey != nil {

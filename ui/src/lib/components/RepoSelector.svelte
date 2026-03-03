@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { repoStore } from '$lib/stores/repos.svelte';
-	import { ChevronDown, GitBranch, Plus, Trash2 } from 'lucide-svelte';
+	import { ChevronDown, GitBranch, Plus, Trash2, AlertTriangle } from 'lucide-svelte';
 	import * as Popover from '$lib/components/ui/popover';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import AddRepoDialog from './AddRepoDialog.svelte';
 	import { client } from '$lib/api-client';
@@ -9,6 +10,7 @@
 	let open = $state(false);
 	let openAddRepo = $state(false);
 	let removing = $state<string | null>(null);
+	let confirmRemoveRepo = $state<{ id: string; fullName: string } | null>(null);
 	let dialogWasOpen = false;
 
 	// When the add repo dialog closes, prevent focus returning to the popover trigger
@@ -22,8 +24,15 @@
 		}
 	});
 
-	async function handleRemove(e: MouseEvent, repoId: string) {
+	function promptRemove(e: MouseEvent, repoId: string, fullName: string) {
 		e.stopPropagation();
+		open = false;
+		confirmRemoveRepo = { id: repoId, fullName };
+	}
+
+	async function handleConfirmRemove() {
+		if (!confirmRemoveRepo) return;
+		const repoId = confirmRemoveRepo.id;
 		removing = repoId;
 		try {
 			await client.removeRepo(repoId);
@@ -32,6 +41,7 @@
 			// Ignore errors for now
 		} finally {
 			removing = null;
+			confirmRemoveRepo = null;
 		}
 	}
 
@@ -69,7 +79,7 @@
 						</div>
 						<button
 							class="p-1 hover:bg-destructive/20 hover:text-destructive rounded transition-colors flex-shrink-0"
-							onclick={(e) => handleRemove(e, repo.id)}
+							onclick={(e) => promptRemove(e, repo.id, repo.full_name)}
 							disabled={removing === repo.id}
 							title="Remove repo"
 						>
@@ -100,3 +110,29 @@
 {/if}
 
 <AddRepoDialog bind:open={openAddRepo} />
+
+<Dialog.Root open={confirmRemoveRepo !== null} onOpenChange={(v) => { if (!v) confirmRemoveRepo = null; }}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title class="flex items-center gap-2">
+				<div class="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+					<AlertTriangle class="w-4 h-4 text-destructive" />
+				</div>
+				Delete Repository
+			</Dialog.Title>
+			<Dialog.Description>
+				Are you sure you want to delete <strong>{confirmRemoveRepo?.fullName}</strong>? This will permanently delete all tasks, epics, and logs associated with this repository. This action cannot be undone.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (confirmRemoveRepo = null)}>Cancel</Button>
+			<Button variant="destructive" onclick={handleConfirmRemove} disabled={removing !== null}>
+				{#if removing}
+					Deleting...
+				{:else}
+					Delete Repository
+				{/if}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
