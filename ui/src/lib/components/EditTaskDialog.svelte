@@ -220,7 +220,7 @@
 						<textarea
 							id="edit-description"
 							bind:value={editDescription}
-							class="w-full border rounded-lg p-3 min-h-[120px] bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
+							class="w-full border rounded-lg p-3 min-h-[240px] bg-background text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-ring transition-shadow"
 							placeholder="Describe what the agent should do..."
 							disabled={loading}
 						></textarea>
