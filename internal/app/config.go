@@ -12,6 +12,7 @@ type Config struct {
 	UI                         bool
 	Postgres                   PostgresConfig // If empty, uses SQLite
 	SQLiteDir                  string         // Directory for SQLite DB file; if empty, uses in-memory
+	TursoDSN                   string         // Turso/libSQL DSN (e.g. "libsql://db-name.turso.io?authToken=...")
 	EncryptionKey              string         // Hex-encoded 32-byte key for encrypting secrets at rest
 	GitHubInsecureSkipVerify   bool           // Disable TLS certificate verification for GitHub API calls
 	CorsOrigins                []string

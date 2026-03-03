@@ -6,8 +6,6 @@ import (
 	"errors"
 
 	"github.com/joshjon/kit/errtag"
-	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/joshjon/verve/internal/repo"
 	"github.com/joshjon/verve/internal/sqlite/sqlc"
@@ -84,12 +82,8 @@ func tagRepoErr(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errtag.Tag[repo.ErrTagRepoNotFound](err)
 	}
-	var sqliteErr *sqlite.Error
-	if errors.As(err, &sqliteErr) {
-		code := sqliteErr.Code()
-		if code == sqlite3.SQLITE_CONSTRAINT || code == sqlite3.SQLITE_CONSTRAINT_UNIQUE || code == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
-			return errtag.Tag[repo.ErrTagRepoConflict](err)
-		}
+	if isSQLiteErrCode(err, sqliteConstraint, sqliteConstraintUnique, sqliteConstraintPrimaryKey) {
+		return errtag.Tag[repo.ErrTagRepoConflict](err)
 	}
 	return err
 }

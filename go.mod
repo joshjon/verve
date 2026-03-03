@@ -3,16 +3,17 @@ module github.com/joshjon/verve
 go 1.25
 
 require (
+	github.com/cohesivestack/valgo v0.7.1
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/joshjon/kit v0.0.0-20260213112627-d0db03dbebf8
+	github.com/joshjon/kit v0.0.0-20260303040727-7ddf6903b49b
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/stretchr/testify v1.11.1
+	github.com/tursodatabase/libsql-client-go v0.0.0-20251219100830-236aa1ff8acc
 	github.com/urfave/cli/v2 v2.27.7
 	go.jetify.com/typeid v1.3.0
-	modernc.org/sqlite v1.45.0
 )
 
 require (
@@ -21,7 +22,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/cohesivestack/valgo v0.7.1 // indirect
+	github.com/coder/websocket v1.8.14 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -102,6 +103,7 @@ require (
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.45.0 // indirect
 )
 
 tool github.com/sqlc-dev/sqlc/cmd/sqlc

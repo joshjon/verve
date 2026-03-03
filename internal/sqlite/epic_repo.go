@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/joshjon/kit/errtag"
-	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/joshjon/verve/internal/epic"
 	"github.com/joshjon/verve/internal/sqlite/sqlc"
@@ -281,7 +280,7 @@ func tagEpicErr(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errtag.Tag[epic.ErrTagEpicNotFound](err)
 	}
-	if isSQLiteErrCode(err, sqlite3.SQLITE_CONSTRAINT, sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
+	if isSQLiteErrCode(err, sqliteConstraint, sqliteConstraintUnique, sqliteConstraintPrimaryKey) {
 		return errtag.Tag[epic.ErrTagEpicConflict](err)
 	}
 	return err

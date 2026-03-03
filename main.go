@@ -63,6 +63,11 @@ func main() {
 			EnvVars: []string{"SQLITE_DIR"},
 		},
 		&cli.StringFlag{
+			Name:    "turso-dsn",
+			EnvVars: []string{"TURSO_DSN"},
+			Usage:   "Turso/libSQL database URL (e.g. libsql://db-name.turso.io?authToken=...)",
+		},
+		&cli.StringFlag{
 			Name:    "postgres-user",
 			EnvVars: []string{"POSTGRES_USER"},
 		},
@@ -308,6 +313,7 @@ func buildAPIConfig(c *cli.Context, encryptionKey string, combined bool) app.Con
 		EncryptionKey:            encryptionKey,
 		GitHubInsecureSkipVerify: c.Bool("github-insecure-skip-verify"),
 		SQLiteDir:                sqliteDir,
+		TursoDSN:                 c.String("turso-dsn"),
 		Postgres: app.PostgresConfig{
 			User:     c.String("postgres-user"),
 			Password: c.String("postgres-password"),

@@ -13,6 +13,7 @@ import (
 	"github.com/joshjon/kit/server"
 	"github.com/joshjon/kit/sqlitedb"
 	"github.com/labstack/echo/v4"
+	_ "github.com/tursodatabase/libsql-client-go/libsql" // registers "libsql" database/sql driver
 
 	"github.com/joshjon/verve/internal/agentapi"
 	"github.com/joshjon/verve/internal/epic"
@@ -81,15 +82,23 @@ func Run(ctx context.Context, logger log.Logger, cfg Config) error {
 }
 
 func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKey []byte) (stores, func(), error) {
-	if !cfg.Postgres.IsSet() {
-		if cfg.SQLiteDir != "" {
-			logger.Info("postgres not configured, using file-backed sqlite", "sqlite.dir", cfg.SQLiteDir)
-		} else {
-			logger.Warn("postgres not configured, using in-memory sqlite (data will not persist)")
-		}
-		return initSQLite(ctx, cfg.SQLiteDir, encryptionKey, cfg.GitHubInsecureSkipVerify, logger)
+	if cfg.Postgres.IsSet() {
+		return initPostgres(ctx, logger, cfg.Postgres, encryptionKey, cfg.GitHubInsecureSkipVerify)
 	}
-	return initPostgres(ctx, logger, cfg.Postgres, encryptionKey, cfg.GitHubInsecureSkipVerify)
+	if cfg.TursoDSN != "" {
+		logger.Info("using turso/libsql")
+		return initSQLite(ctx, encryptionKey, cfg.GitHubInsecureSkipVerify, logger,
+			[]sqlitedb.OpenOption{sqlitedb.WithDSN("libsql", cfg.TursoDSN)},
+			sqlite.WithNoPragma())
+	}
+	if cfg.SQLiteDir != "" {
+		logger.Info("postgres not configured, using file-backed sqlite", "sqlite.dir", cfg.SQLiteDir)
+		return initSQLite(ctx, encryptionKey, cfg.GitHubInsecureSkipVerify, logger,
+			[]sqlitedb.OpenOption{sqlitedb.WithDir(cfg.SQLiteDir), sqlitedb.WithDBName("verve")})
+	}
+	logger.Warn("postgres not configured, using in-memory sqlite (data will not persist)")
+	return initSQLite(ctx, encryptionKey, cfg.GitHubInsecureSkipVerify, logger,
+		[]sqlitedb.OpenOption{sqlitedb.WithInMemory()})
 }
 
 func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte, ghInsecureSkipVerify bool) (stores, func(), error) {
@@ -130,14 +139,8 @@ func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, en
 	return stores{task: taskStore, repo: repoStore, epic: epicStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
-func initSQLite(ctx context.Context, dir string, encryptionKey []byte, ghInsecureSkipVerify bool, logger log.Logger) (stores, func(), error) {
-	var opts []sqlitedb.OpenOption
-	if dir != "" {
-		opts = append(opts, sqlitedb.WithDir(dir), sqlitedb.WithDBName("verve"))
-	} else {
-		opts = append(opts, sqlitedb.WithInMemory())
-	}
-	db, err := sqlitedb.Open(ctx, opts...)
+func initSQLite(ctx context.Context, encryptionKey []byte, ghInsecureSkipVerify bool, logger log.Logger, dbOpts []sqlitedb.OpenOption, taskRepoOpts ...sqlite.TaskRepoOption) (stores, func(), error) {
+	db, err := sqlitedb.Open(ctx, dbOpts...)
 	if err != nil {
 		return stores{}, nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -148,7 +151,7 @@ func initSQLite(ctx context.Context, dir string, encryptionKey []byte, ghInsecur
 	}
 
 	broker := task.NewBroker(nil)
-	taskRepo := sqlite.NewTaskRepository(db)
+	taskRepo := sqlite.NewTaskRepository(db, taskRepoOpts...)
 	taskStore := task.NewStore(taskRepo, broker)
 
 	repoRepo := sqlite.NewRepoRepository(db)

@@ -9,8 +9,6 @@ import (
 
 	"github.com/joshjon/kit/errtag"
 	"github.com/joshjon/kit/tx"
-	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/joshjon/verve/internal/sqlite/sqlc"
 	"github.com/joshjon/verve/internal/task"
@@ -25,21 +23,36 @@ type TaskRepository struct {
 	txer *tx.SQLiteRepositoryTxer[task.Repository]
 }
 
+// TaskRepoOption configures a TaskRepository.
+type TaskRepoOption func(*tx.SQLiteRepositoryTxerConfig[task.Repository])
+
+// WithNoPragma disables PRAGMA statements inside transactions. Use this for
+// SQLite drivers or backends that do not support PRAGMAs (e.g. Turso/libSQL).
+func WithNoPragma() TaskRepoOption {
+	return func(cfg *tx.SQLiteRepositoryTxerConfig[task.Repository]) {
+		cfg.NoPragma = true
+	}
+}
+
 // NewTaskRepository creates a new TaskRepository backed by the given SQLite DB.
-func NewTaskRepository(db DB) *TaskRepository {
+func NewTaskRepository(db DB, opts ...TaskRepoOption) *TaskRepository {
+	cfg := tx.SQLiteRepositoryTxerConfig[task.Repository]{
+		Timeout: tx.DefaultTimeout,
+		WithTxFunc: func(repo task.Repository, txer *tx.SQLiteRepositoryTxer[task.Repository], sqlTx *sql.Tx) task.Repository {
+			cpy := *repo.(*TaskRepository)
+			cpy.dbtx = sqlTx
+			cpy.db = cpy.db.WithTx(sqlTx)
+			cpy.txer = txer
+			return task.Repository(&cpy)
+		},
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return &TaskRepository{
 		dbtx: db,
 		db:   sqlc.New(db),
-		txer: tx.NewSQLiteRepositoryTxer(db, tx.SQLiteRepositoryTxerConfig[task.Repository]{
-			Timeout: tx.DefaultTimeout,
-			WithTxFunc: func(repo task.Repository, txer *tx.SQLiteRepositoryTxer[task.Repository], sqlTx *sql.Tx) task.Repository {
-				cpy := *repo.(*TaskRepository)
-				cpy.dbtx = sqlTx
-				cpy.db = cpy.db.WithTx(sqlTx)
-				cpy.txer = txer
-				return task.Repository(&cpy)
-			},
-		}),
+		txer: tx.NewSQLiteRepositoryTxer(db, cfg),
 	}
 }
 
@@ -509,20 +522,8 @@ func tagTaskErr(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errtag.Tag[task.ErrTagTaskNotFound](err)
 	}
-	if isSQLiteErrCode(err, sqlite3.SQLITE_CONSTRAINT, sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
+	if isSQLiteErrCode(err, sqliteConstraint, sqliteConstraintUnique, sqliteConstraintPrimaryKey) {
 		return errtag.Tag[task.ErrTagTaskConflict](err)
 	}
 	return tx.TagSQLiteTimeoutErr(err)
-}
-
-func isSQLiteErrCode(err error, codes ...int) bool {
-	var sqliteErr *sqlite.Error
-	if errors.As(err, &sqliteErr) {
-		for _, code := range codes {
-			if sqliteErr.Code() == code {
-				return true
-			}
-		}
-	}
-	return false
 }
