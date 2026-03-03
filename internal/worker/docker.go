@@ -163,7 +163,8 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		env = append(env, "REPO_TECH_STACK="+cfg.RepoTechStack)
 	}
 
-	if workType == workTypeSetup {
+	switch workType {
+	case workTypeSetup:
 		// Setup-specific env vars
 		env = append(env,
 			"REPO_ID="+cfg.SetupRepoID,
@@ -171,7 +172,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 			"API_URL="+cfg.APIURL,
 			"CLAUDE_MODEL="+cfg.ClaudeModel,
 		)
-	} else if workType == workTypeEpic {
+	case workTypeEpic:
 		// Epic-specific env vars
 		env = append(env,
 			"EPIC_ID="+cfg.EpicID,
@@ -187,7 +188,7 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		if cfg.EpicPreviousPlan != "" {
 			env = append(env, "EPIC_PREVIOUS_PLAN="+cfg.EpicPreviousPlan)
 		}
-	} else {
+	default:
 		// Task-specific env vars
 		env = append(env,
 			"TASK_ID="+cfg.TaskID,
