@@ -7,6 +7,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import type { Epic, ProposedTask } from '$lib/models/epic';
+	import ProposedTaskPreviewDialog from '$lib/components/ProposedTaskPreviewDialog.svelte';
+	import EditProposedTaskDialog from '$lib/components/EditProposedTaskDialog.svelte';
 	import {
 		ArrowLeft,
 		Layers,
@@ -62,11 +64,15 @@
 	let changeMessage = $state('');
 	let sendingChange = $state(false);
 
-	// Task editing state
-	let editingTaskIdx = $state<number | null>(null);
-	let editTitle = $state('');
-	let editDescription = $state('');
-	let editCriteria = $state<string[]>([]);
+	// Task preview/edit dialog state
+	let previewDialogOpen = $state(false);
+	let editDialogOpen = $state(false);
+	let selectedTaskIdx = $state<number>(0);
+	let selectedTask = $derived<ProposedTask | null>(
+		epic && selectedTaskIdx >= 0 && selectedTaskIdx < (epic?.proposed_tasks?.length ?? 0)
+			? epic.proposed_tasks[selectedTaskIdx]
+			: null
+	);
 
 	// Log auto-scroll
 	let logContainer: HTMLDivElement | null = $state(null);
@@ -188,34 +194,26 @@
 		}
 	}
 
-	function startEditTask(idx: number) {
+	function openPreviewTask(idx: number) {
+		if (!epic) return;
+		selectedTaskIdx = idx;
+		previewDialogOpen = true;
+	}
+
+	function openEditTask(idx: number) {
 		if (!epic || isPlanning) return;
-		const task = epic.proposed_tasks[idx];
-		editingTaskIdx = idx;
-		editTitle = task.title;
-		editDescription = task.description;
-		editCriteria = [...(task.acceptance_criteria ?? [])];
+		selectedTaskIdx = idx;
+		editDialogOpen = true;
 	}
 
-	function cancelEditTask() {
-		editingTaskIdx = null;
-		editTitle = '';
-		editDescription = '';
-		editCriteria = [];
-	}
-
-	async function saveEditTask() {
-		if (!epic || editingTaskIdx === null) return;
+	async function handleSaveProposedTask(updated: ProposedTask) {
+		if (!epic) return;
 		const tasks = [...epic.proposed_tasks];
-		tasks[editingTaskIdx] = {
-			...tasks[editingTaskIdx],
-			title: editTitle,
-			description: editDescription,
-			acceptance_criteria: editCriteria.filter((c) => c.trim() !== '')
-		};
+		const idx = tasks.findIndex((t) => t.temp_id === updated.temp_id);
+		if (idx === -1) return;
+		tasks[idx] = updated;
 		try {
 			epic = await client.updateProposedTasks(epic.id, tasks);
-			cancelEditTask();
 		} catch (err) {
 			error = (err as Error).message;
 		}
@@ -233,7 +231,7 @@
 		const tasks = [...epic.proposed_tasks, newTask];
 		try {
 			epic = await client.updateProposedTasks(epic.id, tasks);
-			startEditTask(tasks.length - 1);
+			openEditTask(tasks.length - 1);
 		} catch (err) {
 			error = (err as Error).message;
 		}
@@ -250,7 +248,6 @@
 			}));
 		try {
 			epic = await client.updateProposedTasks(epic.id, tasks);
-			if (editingTaskIdx === idx) cancelEditTask();
 		} catch (err) {
 			error = (err as Error).message;
 		}
@@ -698,89 +695,18 @@
 					{:else}
 						<div class="space-y-2 overflow-y-auto overscroll-contain flex-1 min-h-0 max-h-[60vh]">
 							{#each epic.proposed_tasks as task, idx (task.temp_id)}
-								<Card.Root class="bg-[oklch(0.18_0.005_285.823)] {isPlanning ? 'opacity-60' : ''}">
+								<Card.Root class="bg-[oklch(0.18_0.005_285.823)] {isPlanning ? 'opacity-60' : ''} hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md cursor-pointer">
 									<Card.Content class="p-3">
-										{#if editingTaskIdx === idx}
-											<!-- Edit mode -->
-											<div class="space-y-3">
-												<input
-													type="text"
-													bind:value={editTitle}
-													class="w-full border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-													placeholder="Task title"
-												/>
-												<textarea
-													bind:value={editDescription}
-													class="w-full border rounded-lg px-3 py-2 bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[80px]"
-													placeholder="Task description"
-												></textarea>
-												<div>
-													<span class="text-xs font-medium text-muted-foreground mb-1 block">Acceptance Criteria</span>
-													{#each editCriteria as criterion, ci}
-														<div class="flex items-center gap-2 mb-1">
-															<input
-																type="text"
-																value={criterion}
-																oninput={(e) => {
-																	editCriteria = editCriteria.map((c, i) => (i === ci ? (e.target as HTMLInputElement).value : c));
-																}}
-																class="flex-1 border rounded-lg px-2 py-1 bg-background text-foreground text-xs"
-																placeholder="Criterion"
-															/>
-															<button
-																type="button"
-																class="p-1 hover:bg-destructive/10 hover:text-destructive rounded"
-																onclick={() => {
-																	editCriteria = editCriteria.filter((_, i) => i !== ci);
-																}}
-															>
-																<X class="w-3 h-3" />
-															</button>
-														</div>
-													{/each}
-													<button
-														type="button"
-														class="text-xs text-primary hover:underline mt-1"
-														onclick={() => {
-															editCriteria = [...editCriteria, ''];
-														}}
-													>
-														+ Add criterion
-													</button>
-												</div>
-												<div class="flex items-center gap-2 justify-end">
-													<Button variant="ghost" size="sm" onclick={cancelEditTask}>Cancel</Button>
-													<Button size="sm" onclick={saveEditTask} class="gap-1">
-														<Check class="w-3.5 h-3.5" />
-														Save
-													</Button>
-												</div>
-											</div>
-										{:else}
-											<!-- Display mode -->
+										<button
+											type="button"
+											class="w-full text-left"
+											onclick={() => openPreviewTask(idx)}
+										>
 											<div class="flex items-start gap-2">
 												<span class="text-xs text-muted-foreground font-mono mt-0.5 shrink-0">{idx + 1}.</span>
 												<div class="flex-1 min-w-0">
 													<div class="flex items-start justify-between gap-2">
 														<p class="text-sm font-medium">{task.title}</p>
-														{#if isEditable && !isPlanning}
-															<div class="flex items-center gap-1 shrink-0">
-																<button
-																	class="p-1 hover:bg-accent rounded transition-colors"
-																	onclick={() => startEditTask(idx)}
-																	title="Edit task"
-																>
-																	<Edit3 class="w-3.5 h-3.5 text-muted-foreground" />
-																</button>
-																<button
-																	class="p-1 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
-																	onclick={() => removeTask(idx)}
-																	title="Remove task"
-																>
-																	<Trash2 class="w-3.5 h-3.5 text-muted-foreground" />
-																</button>
-															</div>
-														{/if}
 													</div>
 													{#if task.description}
 														<p class="text-xs text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
@@ -800,6 +726,26 @@
 														{/if}
 													</div>
 												</div>
+											</div>
+										</button>
+										{#if isEditable && !isPlanning}
+											<div class="flex items-center gap-1 justify-end mt-2 pt-2 border-t border-border/30">
+												<button
+													class="p-1.5 hover:bg-accent rounded transition-colors flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+													onclick={(e) => { e.stopPropagation(); openEditTask(idx); }}
+													title="Edit task"
+												>
+													<Edit3 class="w-3.5 h-3.5" />
+													Edit
+												</button>
+												<button
+													class="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded transition-colors flex items-center gap-1 text-xs text-muted-foreground"
+													onclick={(e) => { e.stopPropagation(); removeTask(idx); }}
+													title="Remove task"
+												>
+													<Trash2 class="w-3.5 h-3.5" />
+													Remove
+												</button>
 											</div>
 										{/if}
 									</Card.Content>
@@ -940,6 +886,26 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Task preview dialog -->
+{#if epic}
+	<ProposedTaskPreviewDialog
+		bind:open={previewDialogOpen}
+		task={selectedTask}
+		taskIndex={selectedTaskIdx}
+		allTasks={epic.proposed_tasks}
+		onEdit={isEditable && !isPlanning ? () => openEditTask(selectedTaskIdx) : undefined}
+	/>
+
+	<!-- Task edit dialog -->
+	<EditProposedTaskDialog
+		bind:open={editDialogOpen}
+		task={selectedTask}
+		taskIndex={selectedTaskIdx}
+		allTasks={epic.proposed_tasks}
+		onSave={handleSaveProposedTask}
+	/>
+{/if}
 
 <!-- Delete confirmation dialog -->
 {#if showDeleteConfirm}
