@@ -29,8 +29,7 @@ func newFixture(t *testing.T) *fixture {
 
 	db := sqlite.NewTestDB(t)
 	repoRepo := sqlite.NewRepoRepository(db)
-	taskRepo := sqlite.NewTaskRepository(db)
-	repoStore := repo.NewStore(repoRepo, taskRepo)
+	repoStore := repo.NewStore(repoRepo)
 
 	handler := repoapi.NewHTTPHandler(repoStore, nil)
 

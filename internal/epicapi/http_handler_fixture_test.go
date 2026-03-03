@@ -58,7 +58,7 @@ func newFixture(t *testing.T) *fixture {
 	taskStore := task.NewStore(taskRepo, broker)
 
 	repoRepo := sqlite.NewRepoRepository(db)
-	repoStore := repo.NewStore(repoRepo, taskRepo)
+	repoStore := repo.NewStore(repoRepo)
 
 	epicRepo := sqlite.NewEpicRepository(db)
 	logger := log.NewLogger(log.WithNop())

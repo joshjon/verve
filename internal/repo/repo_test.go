@@ -142,19 +142,9 @@ func (m *mockRepoRepository) DeleteRepo(_ context.Context, id RepoID) error {
 	return nil
 }
 
-type mockTaskChecker struct {
-	hasTasks bool
-	err      error
-}
-
-func (m *mockTaskChecker) HasTasksForRepo(_ context.Context, _ string) (bool, error) {
-	return m.hasTasks, m.err
-}
-
-func TestStore_DeleteRepo_NoTasks(t *testing.T) {
+func TestStore_DeleteRepo(t *testing.T) {
 	repoRepo := newMockRepoRepository()
-	checker := &mockTaskChecker{hasTasks: false}
-	store := NewStore(repoRepo, checker)
+	store := NewStore(repoRepo)
 
 	r, _ := NewRepo("owner/name")
 	_ = store.CreateRepo(context.Background(), r)
@@ -163,23 +153,9 @@ func TestStore_DeleteRepo_NoTasks(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestStore_DeleteRepo_WithTasks(t *testing.T) {
-	repoRepo := newMockRepoRepository()
-	checker := &mockTaskChecker{hasTasks: true}
-	store := NewStore(repoRepo, checker)
-
-	r, _ := NewRepo("owner/name")
-	_ = store.CreateRepo(context.Background(), r)
-
-	err := store.DeleteRepo(context.Background(), r.ID)
-	assert.Error(t, err, "expected error when tasks exist")
-	assert.Contains(t, err.Error(), "tasks still exist")
-}
-
 func TestStore_CreateAndReadRepo(t *testing.T) {
 	repoRepo := newMockRepoRepository()
-	checker := &mockTaskChecker{}
-	store := NewStore(repoRepo, checker)
+	store := NewStore(repoRepo)
 
 	r, _ := NewRepo("owner/name")
 	err := store.CreateRepo(context.Background(), r)
@@ -192,8 +168,7 @@ func TestStore_CreateAndReadRepo(t *testing.T) {
 
 func TestStore_ListRepos(t *testing.T) {
 	repoRepo := newMockRepoRepository()
-	checker := &mockTaskChecker{}
-	store := NewStore(repoRepo, checker)
+	store := NewStore(repoRepo)
 
 	r1, _ := NewRepo("owner/repo1")
 	r2, _ := NewRepo("owner/repo2")
@@ -207,8 +182,7 @@ func TestStore_ListRepos(t *testing.T) {
 
 func TestStore_ReadRepoByFullName(t *testing.T) {
 	repoRepo := newMockRepoRepository()
-	checker := &mockTaskChecker{}
-	store := NewStore(repoRepo, checker)
+	store := NewStore(repoRepo)
 
 	r, _ := NewRepo("owner/name")
 	_ = store.CreateRepo(context.Background(), r)

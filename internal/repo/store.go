@@ -1,24 +1,15 @@
 package repo
 
-import (
-	"context"
-	"fmt"
-)
-
-// TaskChecker checks whether tasks exist for a given repo.
-type TaskChecker interface {
-	HasTasksForRepo(ctx context.Context, repoID string) (bool, error)
-}
+import "context"
 
 // Store wraps a Repository and adds application-level concerns.
 type Store struct {
-	repo         Repository
-	taskChecker  TaskChecker
+	repo Repository
 }
 
 // NewStore creates a new Store backed by the given Repository.
-func NewStore(repo Repository, taskChecker TaskChecker) *Store {
-	return &Store{repo: repo, taskChecker: taskChecker}
+func NewStore(repo Repository) *Store {
+	return &Store{repo: repo}
 }
 
 // CreateRepo creates a new repo.
@@ -41,14 +32,8 @@ func (s *Store) ListRepos(ctx context.Context) ([]*Repo, error) {
 	return s.repo.ListRepos(ctx)
 }
 
-// DeleteRepo deletes a repo if it has no tasks.
+// DeleteRepo deletes a repo and cascade-deletes all associated epics, tasks,
+// and task logs via ON DELETE CASCADE constraints in the database.
 func (s *Store) DeleteRepo(ctx context.Context, id RepoID) error {
-	has, err := s.taskChecker.HasTasksForRepo(ctx, id.String())
-	if err != nil {
-		return err
-	}
-	if has {
-		return fmt.Errorf("cannot delete repo: tasks still exist")
-	}
 	return s.repo.DeleteRepo(ctx, id)
 }
