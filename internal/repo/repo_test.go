@@ -142,6 +142,49 @@ func (m *mockRepoRepository) DeleteRepo(_ context.Context, id RepoID) error {
 	return nil
 }
 
+func (m *mockRepoRepository) UpdateRepoSetupScan(_ context.Context, id RepoID, result SetupScanResult) error {
+	r, ok := m.repos[id.String()]
+	if !ok {
+		return errors.New("not found")
+	}
+	r.Summary = result.Summary
+	r.TechStack = result.TechStack
+	r.HasCode = result.HasCode
+	r.HasCLAUDEMD = result.HasCLAUDEMD
+	r.HasREADME = result.HasREADME
+	r.SetupStatus = result.SetupStatus
+	return nil
+}
+
+func (m *mockRepoRepository) UpdateRepoSetupStatus(_ context.Context, id RepoID, status string) error {
+	r, ok := m.repos[id.String()]
+	if !ok {
+		return errors.New("not found")
+	}
+	r.SetupStatus = status
+	return nil
+}
+
+func (m *mockRepoRepository) UpdateRepoExpectations(_ context.Context, id RepoID, update ExpectationsUpdate) error {
+	r, ok := m.repos[id.String()]
+	if !ok {
+		return errors.New("not found")
+	}
+	r.Expectations = update.Expectations
+	r.SetupCompletedAt = update.SetupCompletedAt
+	return nil
+}
+
+func (m *mockRepoRepository) ListReposBySetupStatus(_ context.Context, status string) ([]*Repo, error) {
+	var result []*Repo
+	for _, r := range m.repos {
+		if r.SetupStatus == status {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}
+
 func TestStore_DeleteRepo(t *testing.T) {
 	repoRepo := newMockRepoRepository()
 	store := NewStore(repoRepo)
