@@ -712,7 +712,7 @@ func (w *Worker) sendEpicLogs(ctx context.Context, epicID string, logs []string)
 }
 
 func (w *Worker) taskHeartbeatLoop(ctx context.Context, taskID string, cancelExecution context.CancelFunc) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	// Send initial heartbeat immediately
