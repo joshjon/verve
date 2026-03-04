@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { repoStore } from '$lib/stores/repos.svelte';
-	import { ListTodo, Layers, Activity, BookOpen } from 'lucide-svelte';
+	import { ListTodo, Layers, Activity, BookOpen, MessageSquare } from 'lucide-svelte';
 	import RepoSettingsDialog from './RepoSettingsDialog.svelte';
 
 	const currentPath = $derived($page.url.pathname);
 	const isTasksActive = $derived(currentPath === '/' || currentPath.startsWith('/tasks'));
 	const isEpicsActive = $derived(currentPath.startsWith('/epics'));
+	const isConversationsActive = $derived(currentPath.startsWith('/conversations'));
 	const isMetricsActive = $derived(currentPath.startsWith('/agents'));
 
 	let repoSettingsOpen = $state(false);
@@ -34,6 +35,16 @@
 		>
 			<Layers class="w-4 h-4 shrink-0" />
 			<span class="hidden sm:inline">Epics</span>
+		</a>
+		<a
+			href="/conversations"
+			class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors
+				{isConversationsActive
+				? 'bg-primary/10 text-primary'
+				: 'text-muted-foreground hover:text-foreground hover:bg-accent'}"
+		>
+			<MessageSquare class="w-4 h-4 shrink-0" />
+			<span class="hidden sm:inline">Conversations</span>
 		</a>
 		<a
 			href="/agents"

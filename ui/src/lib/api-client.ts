@@ -2,6 +2,7 @@ import { API_BASE_URL } from './config/api';
 import type { Task } from './models/task';
 import type { Repo, GitHubRepo } from './models/repo';
 import type { Epic, ProposedTask } from './models/epic';
+import type { Conversation } from './models/conversation';
 import type { Metrics } from './models/metrics';
 
 export class VerveClient {
@@ -438,6 +439,74 @@ export class VerveClient {
 			method: 'POST'
 		});
 		return this.request<Epic>(res, 'Failed to close epic');
+	}
+
+	// --- Conversation APIs ---
+
+	async listConversationsByRepo(repoId: string, status?: string): Promise<Conversation[]> {
+		const params = status ? `?status=${encodeURIComponent(status)}` : '';
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/conversations${params}`);
+		return this.request<Conversation[]>(res, 'Failed to fetch conversations');
+	}
+
+	async createConversation(
+		repoId: string,
+		title: string,
+		initialMessage?: string,
+		model?: string
+	): Promise<Conversation> {
+		const body: Record<string, unknown> = { title };
+		if (initialMessage) body.initial_message = initialMessage;
+		if (model) body.model = model;
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/conversations`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		return this.request<Conversation>(res, 'Failed to create conversation');
+	}
+
+	async getConversation(id: string): Promise<Conversation> {
+		const res = await fetch(`${this.baseUrl}/conversations/${id}`);
+		return this.request<Conversation>(res, 'Conversation not found');
+	}
+
+	async deleteConversation(id: string): Promise<void> {
+		const res = await fetch(`${this.baseUrl}/conversations/${id}`, {
+			method: 'DELETE'
+		});
+		return this.requestVoid(res, 'Failed to delete conversation');
+	}
+
+	async sendConversationMessage(id: string, message: string): Promise<Conversation> {
+		const res = await fetch(`${this.baseUrl}/conversations/${id}/messages`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ message })
+		});
+		return this.request<Conversation>(res, 'Failed to send message');
+	}
+
+	async archiveConversation(id: string): Promise<Conversation> {
+		const res = await fetch(`${this.baseUrl}/conversations/${id}/archive`, {
+			method: 'POST'
+		});
+		return this.request<Conversation>(res, 'Failed to archive conversation');
+	}
+
+	async generateTasksFromConversation(
+		id: string,
+		title: string,
+		planningPrompt?: string
+	): Promise<{ epic_id: string }> {
+		const body: Record<string, unknown> = { title };
+		if (planningPrompt) body.planning_prompt = planningPrompt;
+		const res = await fetch(`${this.baseUrl}/conversations/${id}/generate-tasks`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		return this.request<{ epic_id: string }>(res, 'Failed to generate tasks');
 	}
 
 	// --- SSE URLs ---
