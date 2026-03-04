@@ -120,7 +120,7 @@ func TestUpdateSetup_Expectations(t *testing.T) {
 	req := repoapi.UpdateSetupRequest{
 		Expectations: &expectations,
 	}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 	assert.Equal(t, "## Code Quality\n- Use conventional commits", res.Data.Expectations)
 	assert.Equal(t, repo.SetupStatusNeedsSetup, res.Data.SetupStatus, "should stay needs_setup when mark_ready is false")
 }
@@ -139,7 +139,7 @@ func TestUpdateSetup_MarkReady(t *testing.T) {
 		Expectations: &expectations,
 		MarkReady:    true,
 	}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 	assert.Equal(t, "## Expectations", res.Data.Expectations)
 	assert.Equal(t, repo.SetupStatusReady, res.Data.SetupStatus, "should be ready when mark_ready is true")
 	assert.NotNil(t, res.Data.SetupCompletedAt, "setup_completed_at should be set")
@@ -163,7 +163,7 @@ func TestUpdateSetup_Combined(t *testing.T) {
 		TechStack:    &techStack,
 		MarkReady:    true,
 	}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 	assert.Equal(t, "## Testing\n- Use jest", res.Data.Expectations)
 	assert.Equal(t, []string{"TypeScript", "React", "Jest"}, res.Data.TechStack)
 	assert.Equal(t, "A React frontend app", res.Data.Summary)
@@ -179,7 +179,7 @@ func TestUpdateSetup_TechStackOnly(t *testing.T) {
 	req := repoapi.UpdateSetupRequest{
 		TechStack: &techStack,
 	}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 	assert.Equal(t, []string{"Go", "PostgreSQL", "Docker"}, res.Data.TechStack)
 }
 
@@ -190,11 +190,11 @@ func TestUpdateSetup_TechStackEmpty(t *testing.T) {
 	// Set tech stack, then clear it
 	techStack := []string{"Go", "Docker"}
 	req := repoapi.UpdateSetupRequest{TechStack: &techStack}
-	doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 
 	emptyStack := []string{}
 	req2 := repoapi.UpdateSetupRequest{TechStack: &emptyStack}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req2)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req2)
 	assert.Equal(t, []string{}, res.Data.TechStack)
 }
 
@@ -206,7 +206,7 @@ func TestUpdateSetup_SummaryOnly(t *testing.T) {
 	req := repoapi.UpdateSetupRequest{
 		Summary: &summary,
 	}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 	assert.Equal(t, "A Go microservice for payment processing.", res.Data.Summary)
 }
 
@@ -217,11 +217,11 @@ func TestUpdateSetup_SummaryEmpty(t *testing.T) {
 	// First set a summary, then clear it
 	summary := "Initial summary"
 	req := repoapi.UpdateSetupRequest{Summary: &summary}
-	doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
+	doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req)
 
 	empty := ""
 	req2 := repoapi.UpdateSetupRequest{Summary: &empty}
-	res := doPut[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req2)
+	res := doPatch[server.Response[repo.Repo]](t, f.repoSetupURL(r.ID), req2)
 	assert.Equal(t, "", res.Data.Summary)
 }
 
@@ -261,10 +261,10 @@ func TestSkipSetup_NotAllowedFromScanning(t *testing.T) {
 	assert.Equal(t, repo.SetupStatusReady, res.Data.SetupStatus, "should be ready after skip from scanning")
 }
 
-// doPut sends a PUT request with JSON body and decodes the typed response.
-func doPut[T any](t *testing.T, url string, body any) T {
+// doPatch sends a PATCH request with JSON body and decodes the typed response.
+func doPatch[T any](t *testing.T, url string, body any) T {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPut, url, mustJSONReader(body))
+	req, err := http.NewRequest(http.MethodPatch, url, mustJSONReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	httpRes, err := testutil.DefaultClient.Do(req)

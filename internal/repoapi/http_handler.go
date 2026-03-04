@@ -35,7 +35,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 
 	// Setup endpoints
 	g.GET("/repos/:repo_id/setup", h.GetSetup)
-	g.PUT("/repos/:repo_id/setup", h.UpdateSetup)
+	g.PATCH("/repos/:repo_id/setup", h.UpdateSetup)
 	g.POST("/repos/:repo_id/setup/rescan", h.Rescan)
 	g.POST("/repos/:repo_id/setup/skip", h.SkipSetup)
 }

@@ -856,7 +856,7 @@ async function setupMockAPI(
 		route.fulfill({ json: { data: { ...activeRepo, setup_status: 'ready', setup_completed_at: new Date().toISOString() } } })
 	);
 	await page.route('**/api/v1/repos/*/setup', (route) => {
-		if (route.request().method() === 'PUT') {
+		if (route.request().method() === 'PATCH') {
 			return route.fulfill({ json: { data: { ...activeRepo, setup_status: 'ready', setup_completed_at: new Date().toISOString() } } });
 		}
 		return route.fulfill({ json: { data: activeRepo } });

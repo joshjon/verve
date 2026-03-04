@@ -72,7 +72,7 @@ export class VerveClient {
 		}
 	): Promise<Repo> {
 		const res = await fetch(`${this.baseUrl}/repos/${repoId}/setup`, {
-			method: 'PUT',
+			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(updates)
 		});
