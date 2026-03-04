@@ -180,6 +180,46 @@ func TestSkipSetup_NotAllowedFromScanning(t *testing.T) {
 	assert.Equal(t, repo.SetupStatusReady, res.Data.SetupStatus, "should be ready after skip from scanning")
 }
 
+func TestUpdateTechStack_Success(t *testing.T) {
+	f := newFixture(t)
+	r := f.addRepo("owner/test-repo")
+
+	req := repoapi.UpdateTechStackRequest{
+		TechStack: []string{"Go", "PostgreSQL", "Docker"},
+	}
+	res := doPut[server.Response[repo.Repo]](t, f.repoTechStackURL(r.ID), req)
+	assert.Equal(t, []string{"Go", "PostgreSQL", "Docker"}, res.Data.TechStack)
+}
+
+func TestUpdateTechStack_Empty(t *testing.T) {
+	f := newFixture(t)
+	r := f.addRepo("owner/test-repo")
+
+	// Set tech stack, then clear it
+	req := repoapi.UpdateTechStackRequest{
+		TechStack: []string{"Go", "Docker"},
+	}
+	doPut[server.Response[repo.Repo]](t, f.repoTechStackURL(r.ID), req)
+
+	req2 := repoapi.UpdateTechStackRequest{
+		TechStack: []string{},
+	}
+	res := doPut[server.Response[repo.Repo]](t, f.repoTechStackURL(r.ID), req2)
+	assert.Equal(t, []string{}, res.Data.TechStack)
+}
+
+func TestUpdateTechStack_Nil(t *testing.T) {
+	f := newFixture(t)
+	r := f.addRepo("owner/test-repo")
+
+	// Sending nil tech_stack should result in empty array (not null)
+	req := repoapi.UpdateTechStackRequest{
+		TechStack: nil,
+	}
+	res := doPut[server.Response[repo.Repo]](t, f.repoTechStackURL(r.ID), req)
+	assert.Equal(t, []string{}, res.Data.TechStack)
+}
+
 func TestUpdateSummary_Success(t *testing.T) {
 	f := newFixture(t)
 	r := f.addRepo("owner/test-repo")

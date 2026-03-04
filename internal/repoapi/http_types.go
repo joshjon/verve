@@ -60,3 +60,13 @@ type UpdateSummaryRequest struct {
 func (r UpdateSummaryRequest) Validate() error {
 	return valgo.In("params", valgo.Is(repo.RepoIDValidator(r.RepoID, "repo_id"))).ToError()
 }
+
+// UpdateTechStackRequest is the request body for updating repo tech stack.
+type UpdateTechStackRequest struct {
+	RepoID    string   `param:"repo_id" json:"-"`
+	TechStack []string `json:"tech_stack"`
+}
+
+func (r UpdateTechStackRequest) Validate() error {
+	return valgo.In("params", valgo.Is(repo.RepoIDValidator(r.RepoID, "repo_id"))).ToError()
+}

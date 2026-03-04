@@ -91,6 +91,15 @@ export class VerveClient {
 		return this.request<Repo>(res, 'Failed to update summary');
 	}
 
+	async updateRepoTechStack(repoId: string, techStack: string[]): Promise<Repo> {
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/setup/tech-stack`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ tech_stack: techStack })
+		});
+		return this.request<Repo>(res, 'Failed to update tech stack');
+	}
+
 	async skipRepoSetup(repoId: string): Promise<Repo> {
 		const res = await fetch(`${this.baseUrl}/repos/${repoId}/setup/skip`, {
 			method: 'POST'

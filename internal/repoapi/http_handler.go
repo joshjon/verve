@@ -37,6 +37,7 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.GET("/repos/:repo_id/setup", h.GetSetup)
 	g.PUT("/repos/:repo_id/setup/expectations", h.UpdateExpectations)
 	g.PUT("/repos/:repo_id/setup/summary", h.UpdateSummary)
+	g.PUT("/repos/:repo_id/setup/tech-stack", h.UpdateTechStack)
 	g.POST("/repos/:repo_id/setup/rescan", h.Rescan)
 	g.POST("/repos/:repo_id/setup/skip", h.SkipSetup)
 }
@@ -217,6 +218,32 @@ func (h *HTTPHandler) UpdateSummary(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	if err := h.repoStore.UpdateRepoSummary(ctx, id, req.Summary); err != nil {
+		return err
+	}
+
+	r, err := h.repoStore.ReadRepo(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	h.taskStore.PublishRepoEvent(ctx, id.String(), r)
+
+	return server.SetResponse(c, http.StatusOK, r)
+}
+
+// UpdateTechStack handles PUT /repos/:repo_id/setup/tech-stack
+func (h *HTTPHandler) UpdateTechStack(c echo.Context) error {
+	req, err := server.BindRequest[UpdateTechStackRequest](c)
+	if err != nil {
+		return err
+	}
+
+	id := repo.MustParseRepoID(req.RepoID)
+	c.Set(logkey.RepoID, id.String())
+
+	ctx := c.Request().Context()
+
+	if err := h.repoStore.UpdateRepoTechStack(ctx, id, req.TechStack); err != nil {
 		return err
 	}
 
