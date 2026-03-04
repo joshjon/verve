@@ -9,6 +9,7 @@ import (
 	"github.com/joshjon/kit/server"
 	"github.com/labstack/echo/v4"
 
+	"github.com/joshjon/verve/internal/conversation"
 	"github.com/joshjon/verve/internal/epic"
 	"github.com/joshjon/verve/internal/githubtoken"
 	"github.com/joshjon/verve/internal/logkey"
@@ -19,21 +20,23 @@ import (
 
 // HTTPHandler handles agent-facing API requests.
 type HTTPHandler struct {
-	taskStore      *task.Store
-	epicStore      *epic.Store
-	repoStore      *repo.Store
-	githubToken    *githubtoken.Service
-	workerRegistry *workertracker.Registry
+	taskStore         *task.Store
+	epicStore         *epic.Store
+	repoStore         *repo.Store
+	conversationStore *conversation.Store
+	githubToken       *githubtoken.Service
+	workerRegistry    *workertracker.Registry
 }
 
 // NewHTTPHandler creates a new HTTPHandler.
-func NewHTTPHandler(taskStore *task.Store, epicStore *epic.Store, repoStore *repo.Store, githubToken *githubtoken.Service, workerRegistry *workertracker.Registry) *HTTPHandler {
+func NewHTTPHandler(taskStore *task.Store, epicStore *epic.Store, repoStore *repo.Store, conversationStore *conversation.Store, githubToken *githubtoken.Service, workerRegistry *workertracker.Registry) *HTTPHandler {
 	return &HTTPHandler{
-		taskStore:      taskStore,
-		epicStore:      epicStore,
-		repoStore:      repoStore,
-		githubToken:    githubToken,
-		workerRegistry: workerRegistry,
+		taskStore:         taskStore,
+		epicStore:         epicStore,
+		repoStore:         repoStore,
+		conversationStore: conversationStore,
+		githubToken:       githubToken,
+		workerRegistry:    workerRegistry,
 	}
 }
 
@@ -54,6 +57,11 @@ func (h *HTTPHandler) Register(g *echo.Group) {
 	g.POST("/epics/:id/complete", h.EpicComplete)
 	g.POST("/epics/:id/heartbeat", h.EpicHeartbeat)
 	g.POST("/epics/:id/logs", h.EpicAppendLogs)
+
+	// Conversation agent endpoints
+	g.POST("/conversations/:id/complete", h.ConversationComplete)
+	g.POST("/conversations/:id/heartbeat", h.ConversationHeartbeat)
+	g.POST("/conversations/:id/logs", h.ConversationAppendLogs)
 
 	// Repo setup agent endpoints
 	g.POST("/repos/:repo_id/setup-complete", h.RepoSetupComplete)
@@ -90,6 +98,20 @@ func (h *HTTPHandler) Poll(c echo.Context) error {
 			return server.SetResponse(c, http.StatusOK, resp)
 		}
 
+		if h.conversationStore != nil {
+			conv, err := h.conversationStore.ClaimPendingConversation(ctx)
+			if err != nil {
+				return err
+			}
+			if conv != nil {
+				resp, err := h.buildConversationPollResponse(c, conv)
+				if err != nil {
+					return err
+				}
+				return server.SetResponse(c, http.StatusOK, resp)
+			}
+		}
+
 		t, err := h.taskStore.ClaimPendingTask(ctx, nil)
 		if err != nil {
 			return err
@@ -114,8 +136,14 @@ func (h *HTTPHandler) Poll(c echo.Context) error {
 			return c.NoContent(http.StatusNoContent)
 		}
 
+		var convPending <-chan struct{}
+		if h.conversationStore != nil {
+			convPending = h.conversationStore.WaitForPending()
+		}
+
 		select {
 		case <-h.epicStore.WaitForPending():
+		case <-convPending:
 		case <-h.taskStore.WaitForPending():
 		case <-time.After(remaining):
 			return c.NoContent(http.StatusNoContent)
@@ -446,6 +474,84 @@ func (h *HTTPHandler) RepoSetupHeartbeat(c echo.Context) error {
 	_ = repo.MustParseRepoID(req.RepoID)
 	c.Set(logkey.RepoID, req.RepoID)
 	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Conversation Agent Endpoints ---
+
+// ConversationComplete handles POST /conversations/:id/complete
+func (h *HTTPHandler) ConversationComplete(c echo.Context) error {
+	req, err := server.BindRequest[ConversationCompleteRequest](c)
+	if err != nil {
+		return err
+	}
+	id := conversation.MustParseConversationID(req.ID)
+	c.Set(logkey.ConversationID, id.String())
+
+	ctx := c.Request().Context()
+	if req.Success {
+		if err := h.conversationStore.CompleteResponse(ctx, id, req.Response); err != nil {
+			return err
+		}
+	} else {
+		if err := h.conversationStore.FailResponse(ctx, id); err != nil {
+			return err
+		}
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ConversationHeartbeat handles POST /conversations/:id/heartbeat
+func (h *HTTPHandler) ConversationHeartbeat(c echo.Context) error {
+	req, err := server.BindRequest[ConversationIDRequest](c)
+	if err != nil {
+		return err
+	}
+	id := conversation.MustParseConversationID(req.ID)
+	c.Set(logkey.ConversationID, id.String())
+
+	if err := h.conversationStore.ConversationHeartbeat(c.Request().Context(), id); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ConversationAppendLogs handles POST /conversations/:id/logs
+func (h *HTTPHandler) ConversationAppendLogs(c echo.Context) error {
+	req, err := server.BindRequest[ConversationLogsRequest](c)
+	if err != nil {
+		return err
+	}
+	id := conversation.MustParseConversationID(req.ID)
+	c.Set(logkey.ConversationID, id.String())
+
+	// Conversation logs are acknowledged but not persisted separately.
+	// The primary conversation content flows through the complete endpoint.
+	_ = id
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) buildConversationPollResponse(c echo.Context, conv *conversation.Conversation) (*PollResponse, error) {
+	repoID, err := repo.ParseRepoID(conv.RepoID)
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.repoStore.ReadRepo(c.Request().Context(), repoID)
+	if err != nil {
+		return nil, err
+	}
+	var token string
+	if h.githubToken != nil {
+		token = h.githubToken.GetToken()
+	}
+	return &PollResponse{
+		Type:             "conversation",
+		Conversation:     conv,
+		GitHubToken:      token,
+		RepoFullName:     r.FullName,
+		RepoSummary:      r.Summary,
+		RepoExpectations: r.Expectations,
+		RepoTechStack:    strings.Join(r.TechStack, ", "),
+	}, nil
 }
 
 // --- Worker Observability ---

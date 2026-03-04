@@ -129,6 +129,11 @@ func (s *Store) ConversationHeartbeat(ctx context.Context, id ConversationID) er
 	return s.repo.ConversationHeartbeat(ctx, id)
 }
 
+// ArchiveConversation sets a conversation's status to archived.
+func (s *Store) ArchiveConversation(ctx context.Context, id ConversationID) error {
+	return s.repo.UpdateConversationStatus(ctx, id, StatusArchived)
+}
+
 // SetEpicID links a conversation to a generated epic.
 func (s *Store) SetEpicID(ctx context.Context, id ConversationID, epicID string) error {
 	return s.repo.SetEpicID(ctx, id, epicID)

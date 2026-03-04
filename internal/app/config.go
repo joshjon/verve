@@ -18,6 +18,7 @@ type Config struct {
 	CorsOrigins                []string
 	TaskTimeout                time.Duration // How long before a running task with no heartbeat is considered stale (default: 5m)
 	LogRetention               time.Duration // How long to keep task logs before deleting them (0 = keep forever)
+	ConversationRetention      time.Duration // How long before active conversations are auto-archived (default: 7 days, 0 = keep forever)
 	Models                     []setting.ModelOption // Available Claude models; if empty, uses DefaultModels
 }
 

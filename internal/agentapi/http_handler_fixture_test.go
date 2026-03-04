@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/joshjon/verve/internal/agentapi"
+	"github.com/joshjon/verve/internal/conversation"
 	"github.com/joshjon/verve/internal/epic"
 	"github.com/joshjon/verve/internal/repo"
 	"github.com/joshjon/verve/internal/sqlite"
@@ -53,7 +54,10 @@ func newFixture(t *testing.T) *fixture {
 
 	registry := workertracker.New()
 
-	handler := agentapi.NewHTTPHandler(taskStore, epicStore, repoStore, nil, registry)
+	convRepo := sqlite.NewConversationRepository(db)
+	convStore := conversation.NewStore(convRepo, logger)
+
+	handler := agentapi.NewHTTPHandler(taskStore, epicStore, repoStore, convStore, nil, registry)
 
 	srv, err := server.NewServer(testutil.GetFreePort(t))
 	require.NoError(t, err)

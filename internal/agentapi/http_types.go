@@ -3,6 +3,7 @@ package agentapi
 import (
 	"github.com/cohesivestack/valgo"
 
+	"github.com/joshjon/verve/internal/conversation"
 	"github.com/joshjon/verve/internal/epic"
 	"github.com/joshjon/verve/internal/repo"
 	"github.com/joshjon/verve/internal/task"
@@ -10,7 +11,7 @@ import (
 
 // PollResponse is the discriminated union returned by the unified poll endpoint.
 type PollResponse struct {
-	Type string `json:"type"` // "task", "epic", or "setup"
+	Type string `json:"type"` // "task", "epic", "setup", or "conversation"
 
 	// Task fields (present when Type == "task")
 	Task *task.Task `json:"task,omitempty"`
@@ -20,6 +21,9 @@ type PollResponse struct {
 
 	// Setup fields (present when Type == "setup")
 	Setup *Setup `json:"setup,omitempty"`
+
+	// Conversation fields (present when Type == "conversation")
+	Conversation *conversation.Conversation `json:"conversation,omitempty"`
 
 	// Common fields
 	GitHubToken  string `json:"github_token,omitempty"`
@@ -131,4 +135,35 @@ type RepoSetupCompleteRequest struct {
 
 func (r RepoSetupCompleteRequest) Validate() error {
 	return valgo.In("params", valgo.Is(repo.RepoIDValidator(r.RepoID, "repo_id"))).ToError()
+}
+
+// ConversationIDRequest captures the :id path parameter for conversation agent endpoints.
+type ConversationIDRequest struct {
+	ID string `param:"id" json:"-"`
+}
+
+func (r ConversationIDRequest) Validate() error {
+	return valgo.In("params", valgo.Is(conversation.ConversationIDValidator(r.ID, "id"))).ToError()
+}
+
+// ConversationCompleteRequest is the request for completing a conversation response.
+type ConversationCompleteRequest struct {
+	ID       string `param:"id" json:"-"`
+	Success  bool   `json:"success"`
+	Response string `json:"response"`
+	Error    string `json:"error"`
+}
+
+func (r ConversationCompleteRequest) Validate() error {
+	return valgo.In("params", valgo.Is(conversation.ConversationIDValidator(r.ID, "id"))).ToError()
+}
+
+// ConversationLogsRequest is the request for appending conversation logs.
+type ConversationLogsRequest struct {
+	ID    string   `param:"id" json:"-"`
+	Lines []string `json:"lines"`
+}
+
+func (r ConversationLogsRequest) Validate() error {
+	return valgo.In("params", valgo.Is(conversation.ConversationIDValidator(r.ID, "id"))).ToError()
 }

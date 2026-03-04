@@ -17,6 +17,7 @@ import (
 
 	"github.com/joshjon/verve/internal/agentapi"
 	"github.com/joshjon/verve/internal/conversation"
+	"github.com/joshjon/verve/internal/conversationapi"
 	"github.com/joshjon/verve/internal/epic"
 	"github.com/joshjon/verve/internal/epicapi"
 	"github.com/joshjon/verve/internal/logkey"
@@ -215,7 +216,8 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 	srv.Register("/api/v1", eventapi.NewHTTPHandler(s.task, s.repo))
 	srv.Register("/api/v1", taskapi.NewHTTPHandler(s.task, s.repo, s.epic, s.githubToken, s.setting))
 	srv.Register("/api/v1", epicapi.NewHTTPHandler(s.epic, s.repo, s.task, s.setting))
-	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.githubToken, workerReg))
+	srv.Register("/api/v1", conversationapi.NewHTTPHandler(s.conversation, s.repo, s.epic, s.setting))
+	srv.Register("/api/v1/agent", agentapi.NewHTTPHandler(s.task, s.epic, s.repo, s.conversation, s.githubToken, workerReg))
 
 	// Background PR sync.
 	go backgroundSync(ctx, logger, s, 30*time.Second)
@@ -232,6 +234,16 @@ func serve(ctx context.Context, logger log.Logger, cfg Config, s stores) error {
 
 	// Background epic completion checker.
 	go backgroundEpicCompletion(ctx, logger, s, 30*time.Second)
+
+	// Background stale conversation reaper.
+	go backgroundConversationReaper(ctx, logger, s, 1*time.Minute, 15*time.Minute)
+
+	// Background conversation retention archival.
+	convRetention := cfg.ConversationRetention
+	if convRetention == 0 {
+		convRetention = 7 * 24 * time.Hour // default: 7 days
+	}
+	go backgroundConversationArchival(ctx, logger, s, 1*time.Hour, convRetention)
 
 	// Background log retention cleanup.
 	if cfg.LogRetention > 0 {
@@ -491,6 +503,46 @@ func planningEpicListerAdapter(epicStore *epic.Store) *metric.PlanningEpicLister
 		}
 		return result, nil
 	})
+}
+
+func backgroundConversationReaper(ctx context.Context, logger log.Logger, s stores, interval, timeout time.Duration) {
+	logger = logger.With("component", "conversation_reaper")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			count, err := s.conversation.TimeoutStaleConversations(ctx, timeout)
+			if err != nil {
+				logger.Error("failed to timeout stale conversations", "error", err)
+			} else if count > 0 {
+				logger.Info("timed out stale conversations", "count", count)
+			}
+		}
+	}
+}
+
+func backgroundConversationArchival(ctx context.Context, logger log.Logger, s stores, interval, retention time.Duration) {
+	logger = logger.With("component", "conversation_archival")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			count, err := s.conversation.ArchiveOldConversations(ctx, retention)
+			if err != nil {
+				logger.Error("failed to archive old conversations", "error", err)
+			} else if count > 0 {
+				logger.Info("archived old conversations", "count", count)
+			}
+		}
+	}
 }
 
 func backgroundLogRetention(ctx context.Context, logger log.Logger, s stores, interval, retention time.Duration) {
