@@ -93,7 +93,7 @@
 	let taskPollTimer: ReturnType<typeof setInterval> | null = null;
 
 	const epicId = $derived($page.params.id);
-	const epicRepo = $derived(epic ? repoStore.repos.find((r) => r.id === epic.repo_id) ?? null : null);
+	const epicRepo = $derived(epic ? repoStore.repos.find((r) => r.id === epic!.repo_id) ?? null : null);
 
 	onMount(async () => {
 		await loadEpic();
