@@ -4,6 +4,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { client } from '$lib/api-client';
 	import { epicStore } from '$lib/stores/epics.svelte';
+	import { repoStore } from '$lib/stores/repos.svelte';
+	import { taskUrl } from '$lib/utils';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import type { Epic, ProposedTask } from '$lib/models/epic';
@@ -40,7 +42,7 @@
 	let error = $state<string | null>(null);
 
 	// Epic task statuses
-	type EpicTask = { id: string; title: string; status: string };
+	type EpicTask = { id: string; number: number; title: string; status: string };
 	let epicTasks = $state<EpicTask[]>([]);
 	let failedTasks = $derived(epicTasks.filter((t) => t.status === 'failed'));
 	let isActive = $derived(epic?.status === 'active');
@@ -91,6 +93,7 @@
 	let taskPollTimer: ReturnType<typeof setInterval> | null = null;
 
 	const epicId = $derived($page.params.id);
+	const epicRepo = $derived(epic ? repoStore.repos.find((r) => r.id === epic.repo_id) ?? null : null);
 
 	onMount(async () => {
 		await loadEpic();
@@ -494,7 +497,7 @@
 							<div class="mt-2 space-y-1">
 								{#each failedTasks as ft}
 									<a
-										href="/tasks/{ft.id}"
+										href={epicRepo ? taskUrl(epicRepo.owner, epicRepo.name, ft.number) : '#'}
 										class="flex items-center gap-1.5 text-xs text-red-400/80 hover:text-red-400 hover:underline"
 									>
 										<XCircle class="w-3 h-3" />
@@ -600,7 +603,7 @@
 					{#each epicTasks as epicTask (epicTask.id)}
 						{@const badge = getTaskStatusBadge(epicTask.status)}
 						<a
-							href="/tasks/{epicTask.id}"
+							href={epicRepo ? taskUrl(epicRepo.owner, epicRepo.name, epicTask.number) : '#'}
 							class="block"
 						>
 							<Card.Root class="bg-[oklch(0.18_0.005_285.823)] shadow-sm hover:bg-accent/50 hover:border-accent transition-all duration-200 hover:shadow-md cursor-pointer">
@@ -626,7 +629,7 @@
 											</div>
 											<div class="flex-1 min-w-0">
 												<p class="text-sm font-medium truncate">{epicTask.title}</p>
-												<span class="text-[10px] text-muted-foreground font-mono">{epicTask.id}</span>
+												<span class="text-[10px] text-muted-foreground font-mono">#{epicTask.number}</span>
 											</div>
 										</div>
 										<span class="inline-flex items-center gap-1 text-[11px] font-semibold {badge.text} {badge.bg} px-2 py-0.5 rounded-full border shrink-0">

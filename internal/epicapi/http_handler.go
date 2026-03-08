@@ -264,6 +264,7 @@ func (h *HTTPHandler) CloseEpic(c echo.Context) error {
 // EpicTaskSummary contains the status summary for a task in an epic.
 type EpicTaskSummary struct {
 	ID     string `json:"id"`
+	Number int    `json:"number"`
 	Title  string `json:"title"`
 	Status string `json:"status"`
 }
@@ -295,6 +296,7 @@ func (h *HTTPHandler) GetEpicTasks(c echo.Context) error {
 		}
 		summaries = append(summaries, EpicTaskSummary{
 			ID:     t.ID.String(),
+			Number: t.Number,
 			Title:  t.Title,
 			Status: string(t.Status),
 		})

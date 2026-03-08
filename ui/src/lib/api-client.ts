@@ -188,6 +188,11 @@ export class VerveClient {
 		return this.request<Task>(res, 'Task not found');
 	}
 
+	async getTaskByNumber(repoId: string, number: number): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/tasks/by-number/${number}`);
+		return this.request<Task>(res, 'Task not found');
+	}
+
 	async syncTask(id: string): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}/sync`, {
 			method: 'POST'
