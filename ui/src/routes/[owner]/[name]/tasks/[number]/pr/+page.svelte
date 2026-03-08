@@ -77,9 +77,18 @@
 		return 'border-purple-500/30';
 	});
 
-	onMount(() => {
-		loadTask();
+	let taskLoaded = $state(false);
 
+	// Use $effect to wait for repo store to be populated before loading.
+	// The layout loads repos asynchronously, so repo may be null on first render.
+	$effect(() => {
+		if (repo && !taskLoaded) {
+			taskLoaded = true;
+			loadTask();
+		}
+	});
+
+	onMount(() => {
 		return () => {
 			stopCheckPolling();
 		};
