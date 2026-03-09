@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { client } from '$lib/api-client';
 	import { epicStore } from '$lib/stores/epics.svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
@@ -40,6 +40,7 @@
 	let epic = $state<Epic | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let epicLoaded = $state(false);
 
 	// Epic task statuses
 	type EpicTask = { id: string; number: number; title: string; status: string };
@@ -99,8 +100,13 @@
 	// Resolve the repo from the store by owner/name
 	const repo = $derived(repoStore.repos.find((r) => r.owner === ownerParam && r.name === nameParam) ?? null);
 
-	onMount(async () => {
-		await loadEpic();
+	// Use $effect to wait for repo store to be populated before loading.
+	// The layout loads repos asynchronously, so repo may be null on first render.
+	$effect(() => {
+		if (repo && !epicLoaded) {
+			epicLoaded = true;
+			loadEpic();
+		}
 	});
 
 	onDestroy(() => {

@@ -4,12 +4,21 @@
 	import { client } from '$lib/api-client';
 	import { repoStore } from '$lib/stores/repos.svelte';
 	import { epicUrl } from '$lib/utils';
-	import { onMount } from 'svelte';
 	import { Loader2 } from 'lucide-svelte';
 
 	const epicId = $derived($page.params.id as string);
+	let redirected = $state(false);
 
-	onMount(async () => {
+	// Use $effect to wait for repo store to be populated before redirecting.
+	// The layout loads repos asynchronously, so repos may be empty on first render.
+	$effect(() => {
+		if (repoStore.repos.length > 0 && !redirected) {
+			redirected = true;
+			doRedirect();
+		}
+	});
+
+	async function doRedirect() {
 		try {
 			const epic = await client.getEpic(epicId);
 			const repo = repoStore.repos.find((r) => r.id === epic.repo_id);
@@ -21,7 +30,7 @@
 		} catch {
 			await goto('/', { replaceState: true });
 		}
-	});
+	}
 </script>
 
 <div class="flex flex-col items-center justify-center py-16">
