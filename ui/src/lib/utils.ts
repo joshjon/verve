@@ -12,3 +12,7 @@ export type WithElementRef<T, E extends Element = HTMLElement> = T & {
 export type WithoutChild<T> = Omit<T, 'child'>;
 
 export type WithoutChildrenOrChild<T> = Omit<T, 'children' | 'child'>;
+
+export function taskUrl(owner: string, name: string, number: number): string {
+	return `/${owner}/${name}/tasks/${number}`;
+}

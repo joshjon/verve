@@ -3,6 +3,7 @@ export type TaskType = 'task' | 'setup';
 
 export interface Task {
 	id: string;
+	number: number;
 	repo_id: string;
 	type: TaskType;
 	title: string;

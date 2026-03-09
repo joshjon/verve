@@ -1,5 +1,6 @@
 export interface ActiveAgent {
 	task_id: string;
+	task_number: number;
 	task_title: string;
 	repo_id: string;
 	started_at: string;
@@ -14,6 +15,7 @@ export interface ActiveAgent {
 
 export interface CompletedAgent {
 	task_id: string;
+	task_number: number;
 	task_title: string;
 	repo_id: string;
 	status: string;

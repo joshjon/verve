@@ -11,6 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { repoStore } from '$lib/stores/repos.svelte';
 	import { taskStore } from '$lib/stores/tasks.svelte';
+	import { taskUrl } from '$lib/utils';
 	import { marked } from 'marked';
 	import EditTaskDialog from '$lib/components/EditTaskDialog.svelte';
 	import {
@@ -200,6 +201,7 @@
 	let claudeOnly = $state(false);
 	let showRetryContext = $state(false);
 	let epic = $state<Epic | null>(null);
+	let depTaskNumbers = $state<Record<string, number>>({});
 	let checkStatus = $state<{
 		status: 'pending' | 'success' | 'failure' | 'error';
 		summary?: string;
@@ -247,7 +249,13 @@
 		return `$${cost.toFixed(2)}`;
 	}
 
-	const taskId = $derived($page.params.id as string);
+	const ownerParam = $derived($page.params.owner as string);
+	const nameParam = $derived($page.params.name as string);
+	const numberParam = $derived(Number($page.params.number));
+	const taskId = $derived(task?.id ?? '');
+
+	// Resolve the repo from the store by owner/name
+	const repo = $derived(repoStore.repos.find((r) => r.owner === ownerParam && r.name === nameParam) ?? null);
 
 	const statusConfig: Record<
 		TaskStatus,
@@ -369,15 +377,35 @@
 		}
 	}
 
-	onMount(() => {
-		loadTask();
+	let es: EventSource | null = null;
+	let logsES: EventSource | null = null;
 
+	let taskLoaded = $state(false);
+
+	// Use $effect to wait for repo store to be populated before loading.
+	// The layout loads repos asynchronously, so repo may be null on first render.
+	$effect(() => {
+		if (repo && !taskLoaded) {
+			taskLoaded = true;
+			loadTask();
+		}
+	});
+
+	onMount(() => {
+		return () => {
+			es?.close();
+			logsES?.close();
+			stopCheckPolling();
+		};
+	});
+
+	function connectSSE(resolvedTaskId: string) {
 		// Task metadata updates via global SSE.
-		const es = new EventSource(client.eventsURL());
+		es = new EventSource(client.eventsURL());
 
 		es.addEventListener('task_updated', (e) => {
 			const event = JSON.parse(e.data);
-			if (event.task?.id === taskId && task) {
+			if (event.task?.id === resolvedTaskId && task) {
 				const prev = task.status;
 				const updated = { ...event.task, logs: task.logs };
 				task = updated;
@@ -398,7 +426,7 @@
 		let logBufferMap: Record<number, string[]> = {};
 		let historicalDone = false;
 
-		const logsES = new EventSource(client.taskLogsURL(taskId));
+		logsES = new EventSource(client.taskLogsURL(resolvedTaskId));
 
 		logsES.addEventListener('open', () => {
 			logBufferMap = {};
@@ -432,23 +460,26 @@
 			lastLogCount = 0;
 			autoScroll = true;
 		});
-
-		return () => {
-			es.close();
-			logsES.close();
-			stopCheckPolling();
-		};
-	});
+	}
 
 	async function loadTask() {
 		try {
-			task = await client.getTask(taskId);
+			if (!repo) {
+				error = 'Repository not found';
+				loading = false;
+				return;
+			}
+			task = await client.getTaskByNumber(repo.id, numberParam);
 			error = null;
+			connectSSE(task.id);
 			if (task.status === 'review' && task.pr_number) {
 				loadCheckStatus();
 			}
 			if (task.epic_id) {
 				loadEpic(task.epic_id);
+			}
+			if (task.depends_on && task.depends_on.length > 0) {
+				loadDepNumbers(task.depends_on);
 			}
 		} catch (e) {
 			error = (e as Error).message;
@@ -466,6 +497,19 @@
 		}
 	}
 
+	async function loadDepNumbers(depIds: string[]) {
+		const numbers: Record<string, number> = {};
+		for (const depId of depIds) {
+			try {
+				const depTask = await client.getTask(depId);
+				numbers[depId] = depTask.number;
+			} catch {
+				// Dep may have been deleted; leave out
+			}
+		}
+		depTaskNumbers = numbers;
+	}
+
 	function stopCheckPolling() {
 		if (checkPollTimer) {
 			clearTimeout(checkPollTimer);
@@ -474,10 +518,11 @@
 	}
 
 	async function loadCheckStatus() {
+		if (!task) return;
 		checkStatusLoading = true;
 		stopCheckPolling();
 		try {
-			checkStatus = await client.getTaskChecks(taskId);
+			checkStatus = await client.getTaskChecks(task.id);
 			// Keep polling while checks are pending, or during forced
 			// polls after a status transition (handles stale GitHub data).
 			const shouldPoll =
@@ -712,8 +757,8 @@
 			{/if}
 
 			<div class="flex items-center gap-2 sm:gap-3 flex-wrap pb-4 sm:pb-5 border-b">
-				<span class="font-mono text-xs sm:text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded truncate max-w-[150px] sm:max-w-none">
-					{task.id}
+				<span class="font-mono text-xs sm:text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded">
+					#{task.number}
 				</span>
 				<Badge class="{currentStatusConfig?.bgClass} gap-1">
 					<StatusIcon class="w-3 h-3" />
@@ -1036,10 +1081,15 @@
 									<div class="inline-flex items-center rounded-md bg-muted text-sm font-mono transition-colors">
 										<button
 											class="inline-flex items-center gap-1 px-3 py-1.5 hover:bg-accent rounded-l-md transition-colors"
-											onclick={() => goto(`/tasks/${depId}`)}
+											onclick={() => {
+												const depNum = depTaskNumbers[depId];
+												if (depNum && repo) {
+													goto(taskUrl(ownerParam, nameParam, depNum));
+												}
+											}}
 										>
 											<Link2 class="w-3 h-3" />
-											{depId}
+											{depTaskNumbers[depId] ? `#${depTaskNumbers[depId]}` : depId.slice(0, 12) + '...'}
 										</button>
 										<button
 											class="inline-flex items-center px-1.5 py-1.5 hover:bg-destructive/20 hover:text-destructive rounded-r-md transition-colors border-l border-border"
@@ -1236,7 +1286,7 @@
 				{#if task.pull_request_url && (task.status === 'review' || task.status === 'merged' || task.status === 'closed' || task.status === 'failed')}
 					<Button
 						variant="outline"
-						onclick={() => goto(`/tasks/${task!.id}/pr`)}
+						onclick={() => goto(`/${ownerParam}/${nameParam}/tasks/${numberParam}/pr`)}
 						class="w-full gap-2 py-5 border-dashed"
 					>
 						<Eye class="w-4 h-4" />

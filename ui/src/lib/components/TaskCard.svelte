@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { GitPullRequest, GitMerge, GitBranch, Ban, Link2, ChevronRight, RefreshCw, DollarSign, AlertTriangle, Loader2, PauseCircle, StopCircle } from 'lucide-svelte';
 	import { repoStore } from '$lib/stores/repos.svelte';
+	import { taskUrl } from '$lib/utils';
 
 	let {
 		task,
@@ -17,11 +18,13 @@
 		onToggleSelection?: (taskId: string) => void;
 	} = $props();
 
+	const taskRepo = $derived(repoStore.repos.find((r) => r.id === task.repo_id) ?? null);
+
 	function handleClick() {
 		if (selectionMode && onToggleSelection) {
 			onToggleSelection(task.id);
-		} else {
-			goto(`/tasks/${task.id}`);
+		} else if (taskRepo) {
+			goto(taskUrl(taskRepo.owner, taskRepo.name, task.number));
 		}
 	}
 
@@ -78,7 +81,7 @@
 	</div>
 	<div class="flex items-center gap-2 mt-2 flex-wrap">
 		<span class="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
-			{task.id}
+			#{task.number}
 		</span>
 		{#if task.attempt > 1}
 			<span

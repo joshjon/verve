@@ -256,6 +256,7 @@ const SAMPLE_LOGS_FAILED: Record<number, string[]> = {
 const MOCK_TASKS = [
 	{
 		id: 'tsk_pending01',
+		number: 1,
 		repo_id: 'repo_mock01',
 		title: 'Add user authentication',
 		description: 'Implement JWT-based auth with login/signup pages',
@@ -273,6 +274,7 @@ const MOCK_TASKS = [
 	},
 	{
 		id: 'tsk_notready01',
+		number: 2,
 		repo_id: 'repo_mock01',
 		title: 'Refactor payment processing module',
 		description: 'Break up the monolithic payment handler into smaller services',
@@ -290,6 +292,7 @@ const MOCK_TASKS = [
 	},
 	{
 		id: 'tsk_running01',
+		number: 3,
 		repo_id: 'repo_mock01',
 		title: 'Fix database connection pooling',
 		description: 'Connection pool exhaustion under load',
@@ -307,6 +310,7 @@ const MOCK_TASKS = [
 	},
 	{
 		id: 'tsk_review01',
+		number: 4,
 		repo_id: 'repo_mock01',
 		title: 'Add dark mode support',
 		description: 'Implement theme toggle with system preference detection',
@@ -328,6 +332,7 @@ const MOCK_TASKS = [
 	},
 	{
 		id: 'tsk_merged01',
+		number: 5,
 		repo_id: 'repo_mock01',
 		title: 'Update API documentation',
 		description: 'Auto-generate OpenAPI spec from route handlers',
@@ -349,6 +354,7 @@ const MOCK_TASKS = [
 	},
 	{
 		id: 'tsk_failed01',
+		number: 6,
 		repo_id: 'repo_mock01',
 		title: 'Migrate to new ORM',
 		description: 'Replace raw SQL with Drizzle ORM',
@@ -368,6 +374,7 @@ const MOCK_TASKS = [
 	// Retry scenario: agent is actively running a retry on a task that already has a PR
 	{
 		id: 'tsk_retry_running01',
+		number: 7,
 		repo_id: 'repo_mock01',
 		title: 'Fix flaky integration tests',
 		description: 'Stabilize integration test suite that randomly fails in CI',
@@ -390,6 +397,7 @@ const MOCK_TASKS = [
 	// Retry scenario: task is pending (waiting for agent pickup) with existing PR
 	{
 		id: 'tsk_retry_pending01',
+		number: 8,
 		repo_id: 'repo_mock01',
 		title: 'Improve error handling in API',
 		description: 'Add proper error responses and validation to all API endpoints',
@@ -754,6 +762,7 @@ const MOCK_METRICS = {
 	active_agents: [
 		{
 			task_id: 'tsk_running01',
+			task_number: 3,
 			task_title: 'Fix database connection pooling',
 			repo_id: 'repo_mock01',
 			started_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(), // 12 min ago
@@ -764,6 +773,7 @@ const MOCK_METRICS = {
 		},
 		{
 			task_id: 'tsk_retry_running01',
+			task_number: 7,
 			task_title: 'Fix flaky integration tests',
 			repo_id: 'repo_mock01',
 			started_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago
@@ -774,6 +784,7 @@ const MOCK_METRICS = {
 		},
 		{
 			task_id: 'epc_planning01',
+			task_number: 0,
 			task_title: 'Implement user authentication system',
 			repo_id: 'repo_mock01',
 			started_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(), // 3 min ago
@@ -809,6 +820,7 @@ const MOCK_METRICS = {
 	recent_completions: [
 		{
 			task_id: 'tsk_review01',
+			task_number: 4,
 			task_title: 'Add dark mode support',
 			repo_id: 'repo_mock01',
 			status: 'merged',
@@ -819,6 +831,7 @@ const MOCK_METRICS = {
 		},
 		{
 			task_id: 'tsk_merged01',
+			task_number: 5,
 			task_title: 'Update API documentation',
 			repo_id: 'repo_mock01',
 			status: 'merged',
@@ -829,6 +842,7 @@ const MOCK_METRICS = {
 		},
 		{
 			task_id: 'tsk_failed01',
+			task_number: 6,
 			task_title: 'Migrate to new ORM',
 			repo_id: 'repo_mock01',
 			status: 'failed',
@@ -839,6 +853,7 @@ const MOCK_METRICS = {
 		},
 		{
 			task_id: 'tsk_closed01',
+			task_number: 9,
 			task_title: 'Refactor legacy auth module',
 			repo_id: 'repo_mock01',
 			status: 'closed',
@@ -1019,6 +1034,18 @@ async function setupMockAPI(
 		});
 	});
 
+	// Task by number lookup (must be before generic /repos/* catch-all).
+	await page.route('**/api/v1/repos/*/tasks/by-number/*', (route) => {
+		const url = route.request().url();
+		const numberStr = url.split('/by-number/')[1]?.split('?')[0];
+		const number = Number(numberStr);
+		const task = MOCK_TASKS.find((t) => t.number === number);
+		if (task) {
+			return route.fulfill({ json: { data: task } });
+		}
+		return route.fulfill({ status: 404, json: { error: { message: 'not found' } } });
+	});
+
 	// Task diff (must be before generic /tasks/* route).
 	await page.route('**/api/v1/tasks/*/diff', (route) =>
 		route.fulfill({ json: { data: { diff: MOCK_DIFF } } })
@@ -1133,6 +1160,21 @@ async function setupMockAPI(
 			return route.fulfill({ json: { data: MOCK_EPIC_DRAFT } });
 		}
 		return route.fulfill({ json: { data: MOCK_EPICS } });
+	});
+
+	// Epic tasks (must be before the generic /epics/* catch-all).
+	await page.route('**/api/v1/epics/*/tasks', (route) => {
+		const url = route.request().url();
+		const epicId = url.split('/epics/')[1]?.split('/')[0];
+		const epic = epicId ? MOCK_EPIC_MAP[epicId] : undefined;
+		if (epic && epic.task_ids.length > 0) {
+			const tasks = epic.task_ids.map((tid: string) => {
+				const t = MOCK_TASKS.find((mt) => mt.id === tid);
+				return t ? { id: t.id, number: t.number, title: t.title, status: t.status } : { id: tid, number: 0, title: tid, status: 'pending' };
+			});
+			return route.fulfill({ json: { data: tasks } });
+		}
+		return route.fulfill({ json: { data: [] } });
 	});
 
 	// Epic sub-resource routes (must be before the generic /epics/* catch-all).
@@ -1317,7 +1359,7 @@ test.describe('UI Screenshots', () => {
 
 	test('task detail - review', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto(`/tasks/tsk_review01`);
+		await page.goto(`/acme/webapp/tasks/4`);
 
 		await page.waitForTimeout(2000);
 
@@ -1329,7 +1371,7 @@ test.describe('UI Screenshots', () => {
 
 	test('task detail - pr view', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto(`/tasks/tsk_review01/pr`);
+		await page.goto(`/acme/webapp/tasks/4/pr`);
 
 		await page.waitForTimeout(2000);
 
@@ -1345,7 +1387,7 @@ test.describe('UI Screenshots', () => {
 
 	test('task detail - running', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto(`/tasks/tsk_running01`);
+		await page.goto(`/acme/webapp/tasks/3`);
 
 		await page.waitForTimeout(2000);
 
@@ -1357,7 +1399,7 @@ test.describe('UI Screenshots', () => {
 
 	test('task detail - retry running', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto(`/tasks/tsk_retry_running01`);
+		await page.goto(`/acme/webapp/tasks/7`);
 
 		await page.waitForTimeout(2000);
 
@@ -1369,7 +1411,7 @@ test.describe('UI Screenshots', () => {
 
 	test('task detail - retry pending', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto(`/tasks/tsk_retry_pending01`);
+		await page.goto(`/acme/webapp/tasks/8`);
 
 		await page.waitForTimeout(2000);
 
@@ -1381,7 +1423,7 @@ test.describe('UI Screenshots', () => {
 
 	test('task detail - not ready', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto(`/tasks/tsk_notready01`);
+		await page.goto(`/acme/webapp/tasks/2`);
 
 		await page.waitForTimeout(2000);
 
@@ -1395,7 +1437,7 @@ test.describe('UI Screenshots', () => {
 		// Use a tall viewport so the dialog's max-h-[90vh] doesn't clip content.
 		await page.setViewportSize({ width: 1280, height: 1600 });
 		await setupMockAPI(page);
-		await page.goto('/tasks/tsk_pending01');
+		await page.goto('/acme/webapp/tasks/1');
 
 		// Wait for task detail to load.
 		await page.waitForTimeout(2000);

@@ -188,6 +188,11 @@ export class VerveClient {
 		return this.request<Task>(res, 'Task not found');
 	}
 
+	async getTaskByNumber(repoId: string, number: number): Promise<Task> {
+		const res = await fetch(`${this.baseUrl}/repos/${repoId}/tasks/by-number/${number}`);
+		return this.request<Task>(res, 'Task not found');
+	}
+
 	async syncTask(id: string): Promise<Task> {
 		const res = await fetch(`${this.baseUrl}/tasks/${id}/sync`, {
 			method: 'POST'
@@ -386,7 +391,7 @@ export class VerveClient {
 		return this.request<Epic>(res, 'Epic not found');
 	}
 
-	async getEpicTasks(id: string): Promise<{ id: string; title: string; status: string }[]> {
+	async getEpicTasks(id: string): Promise<{ id: string; number: number; title: string; status: string }[]> {
 		const res = await fetch(`${this.baseUrl}/epics/${id}/tasks`);
 		return this.request(res, 'Failed to fetch epic tasks');
 	}

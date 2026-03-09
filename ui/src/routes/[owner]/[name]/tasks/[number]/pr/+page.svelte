@@ -5,6 +5,7 @@
 	import type { Task } from '$lib/models/task';
 	import { Button } from '$lib/components/ui/button';
 	import { goto } from '$app/navigation';
+	import { repoStore } from '$lib/stores/repos.svelte';
 	import DiffViewer from '$lib/components/DiffViewer.svelte';
 	import {
 		ArrowLeft,
@@ -41,7 +42,13 @@
 	let showFeedbackForm = $state(false);
 	let feedbackText = $state('');
 
-	const taskId = $derived($page.params.id as string);
+	const ownerParam = $derived($page.params.owner as string);
+	const nameParam = $derived($page.params.name as string);
+	const numberParam = $derived(Number($page.params.number));
+	const taskId = $derived(task?.id ?? '');
+
+	// Resolve the repo from the store by owner/name
+	const repo = $derived(repoStore.repos.find((r) => r.owner === ownerParam && r.name === nameParam) ?? null);
 
 	const isRetrying = $derived(task?.pull_request_url && (task?.status === 'running' || task?.status === 'pending'));
 	const canProvideFeedback = $derived(task?.status === 'review');
@@ -70,35 +77,50 @@
 		return 'border-purple-500/30';
 	});
 
+	let taskLoaded = $state(false);
+
+	// Use $effect to wait for repo store to be populated before loading.
+	// The layout loads repos asynchronously, so repo may be null on first render.
+	$effect(() => {
+		if (repo && !taskLoaded) {
+			taskLoaded = true;
+			loadTask();
+		}
+	});
+
 	onMount(() => {
-		loadTask();
-
-		const es = new EventSource(client.eventsURL());
-		es.addEventListener('task_updated', (e) => {
-			const event = JSON.parse(e.data);
-			if (event.task?.id === taskId && task) {
-				const prev = task.status;
-				const updated: Task = { ...event.task, logs: task.logs };
-				task = updated;
-				if (updated.status === 'review' && updated.pr_number && prev !== 'review') {
-					checkStatus = null;
-					stopCheckPolling();
-					forceCheckPolls = 3;
-					checkPollTimer = setTimeout(loadCheckStatus, 5000);
-				}
-			}
-		});
-
 		return () => {
-			es.close();
 			stopCheckPolling();
 		};
 	});
 
 	async function loadTask() {
 		try {
-			task = await client.getTask(taskId);
+			if (!repo) {
+				error = 'Repository not found';
+				loading = false;
+				return;
+			}
+			task = await client.getTaskByNumber(repo.id, numberParam);
 			error = null;
+
+			const resolvedId = task.id;
+			const es = new EventSource(client.eventsURL());
+			es.addEventListener('task_updated', (e) => {
+				const event = JSON.parse(e.data);
+				if (event.task?.id === resolvedId && task) {
+					const prev = task.status;
+					const updated: Task = { ...event.task, logs: task.logs };
+					task = updated;
+					if (updated.status === 'review' && updated.pr_number && prev !== 'review') {
+						checkStatus = null;
+						stopCheckPolling();
+						forceCheckPolls = 3;
+						checkPollTimer = setTimeout(loadCheckStatus, 5000);
+					}
+				}
+			});
+
 			if (task.status === 'review' && task.pr_number) {
 				loadCheckStatus();
 			}
@@ -117,10 +139,11 @@
 	}
 
 	async function loadCheckStatus() {
+		if (!task) return;
 		checkStatusLoading = true;
 		stopCheckPolling();
 		try {
-			checkStatus = await client.getTaskChecks(taskId);
+			checkStatus = await client.getTaskChecks(task.id);
 			const shouldPoll = checkStatus.status === 'pending' || forceCheckPolls > 0;
 			if (forceCheckPolls > 0) forceCheckPolls--;
 			if (shouldPoll && task?.status === 'review') {
@@ -164,7 +187,7 @@
 	<!-- Header section with padding -->
 	<div class="p-4 sm:p-6 pb-0 sm:pb-0">
 		<!-- Back Navigation -->
-		<Button variant="ghost" onclick={() => goto(`/tasks/${taskId}`)} class="mb-4 sm:mb-6 gap-2 -ml-2">
+		<Button variant="ghost" onclick={() => goto(`/${ownerParam}/${nameParam}/tasks/${numberParam}`)} class="mb-4 sm:mb-6 gap-2 -ml-2">
 			<ArrowLeft class="w-4 h-4" />
 			Back to Task
 		</Button>
@@ -187,7 +210,7 @@
 			<div class="bg-muted/50 text-muted-foreground p-6 rounded-lg flex flex-col items-center gap-3">
 				<GitPullRequest class="w-8 h-8 opacity-40" />
 				<p>No pull request associated with this task.</p>
-				<Button variant="outline" onclick={() => goto(`/tasks/${taskId}`)}>Back to Task</Button>
+				<Button variant="outline" onclick={() => goto(`/${ownerParam}/${nameParam}/tasks/${numberParam}`)}>Back to Task</Button>
 			</div>
 		</div>
 	{:else if task && task.pull_request_url}
