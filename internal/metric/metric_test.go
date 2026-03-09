@@ -44,25 +44,30 @@ func TestCompute_Counts(t *testing.T) {
 	pending.Status = task.StatusPending
 
 	running := task.NewTask("repo_1", "running task", "desc", nil, nil, 0, false, false, "opus", true)
+	running.Number = 2
 	running.Status = task.StatusRunning
 	running.StartedAt = &startedAt
 	running.CostUSD = 1.50
 	running.Model = "opus"
 
 	review := task.NewTask("repo_1", "review task", "desc", nil, nil, 0, false, false, "sonnet", true)
+	review.Number = 3
 	review.Status = task.StatusReview
 	review.CostUSD = 0.75
 
 	merged := task.NewTask("repo_1", "merged task", "desc", nil, nil, 0, false, false, "sonnet", true)
+	merged.Number = 4
 	merged.Status = task.StatusMerged
 	merged.CostUSD = 2.00
 	merged.UpdatedAt = now.Add(-5 * time.Minute)
 
 	closed := task.NewTask("repo_1", "closed task", "desc", nil, nil, 0, false, false, "sonnet", true)
+	closed.Number = 5
 	closed.Status = task.StatusClosed
 	closed.UpdatedAt = now.Add(-3 * time.Minute)
 
 	failed := task.NewTask("repo_1", "failed task", "desc", nil, nil, 0, false, false, "sonnet", true)
+	failed.Number = 6
 	failed.Status = task.StatusFailed
 	failed.CostUSD = 0.50
 	failed.UpdatedAt = now.Add(-1 * time.Minute)
@@ -85,6 +90,7 @@ func TestCompute_Counts(t *testing.T) {
 	// Check active agents
 	require.Len(t, metrics.ActiveAgents, 1)
 	assert.Equal(t, running.ID.String(), metrics.ActiveAgents[0].TaskID)
+	assert.Equal(t, 2, metrics.ActiveAgents[0].TaskNumber)
 	assert.Equal(t, "running task", metrics.ActiveAgents[0].TaskTitle)
 	assert.Equal(t, "opus", metrics.ActiveAgents[0].Model)
 	assert.True(t, metrics.ActiveAgents[0].RunningFor > 0)
@@ -93,6 +99,7 @@ func TestCompute_Counts(t *testing.T) {
 	assert.Len(t, metrics.RecentCompletions, 3)
 	// Should be sorted by UpdatedAt descending
 	assert.Equal(t, "failed", metrics.RecentCompletions[0].Status)
+	assert.Equal(t, 6, metrics.RecentCompletions[0].TaskNumber)
 }
 
 func TestCompute_IncludesPlanningEpics(t *testing.T) {
