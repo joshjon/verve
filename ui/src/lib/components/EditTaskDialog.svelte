@@ -69,10 +69,15 @@
 				!['closed', 'failed'].includes(t.status) &&
 				!editDeps.includes(t.id) &&
 				(editDepSearch === '' ||
-					t.id.toLowerCase().includes(editDepSearch.toLowerCase()) ||
+					`#${t.number}`.includes(editDepSearch) ||
 					t.title.toLowerCase().includes(editDepSearch.toLowerCase()) ||
 					t.description.toLowerCase().includes(editDepSearch.toLowerCase()))
 		)
+	);
+
+	// Lookup map from task ID to task number for dependency display
+	const taskNumberMap = $derived(
+		Object.fromEntries(taskStore.tasks.map((t) => [t.id, t.number]))
 	);
 
 	async function handleSubmit(e: SubmitEvent) {
@@ -285,7 +290,7 @@
 						<div class="flex flex-wrap gap-1.5 mb-3 max-h-20 overflow-y-auto">
 							{#each editDeps as depId}
 								<Badge variant="secondary" class="gap-1 pl-2 pr-1 py-1 max-w-48">
-									<span class="font-mono text-xs truncate">{depId}</span>
+									<span class="font-mono text-xs truncate">{taskNumberMap[depId] ? `#${taskNumberMap[depId]}` : depId.slice(0, 12) + '...'}</span>
 									<button
 										type="button"
 										class="ml-1 hover:bg-destructive/20 hover:text-destructive rounded p-0.5 transition-colors shrink-0"
@@ -321,10 +326,10 @@
 								>
 									<div class="flex items-center gap-2">
 										<span class="font-mono text-xs text-muted-foreground bg-background px-1.5 py-0.5 rounded shrink-0">
-											{t.id}
+											#{t.number}
 										</span>
+										<span class="text-sm truncate">{t.title || t.description}</span>
 									</div>
-									<div class="text-sm line-clamp-2 mt-1">{t.title || t.description}</div>
 								</button>
 							{/each}
 						{:else if editDepSearch}

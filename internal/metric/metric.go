@@ -73,6 +73,7 @@ type Metrics struct {
 // ActiveAgent describes a single running agent session.
 type ActiveAgent struct {
 	TaskID     string  `json:"task_id"`
+	TaskNumber int     `json:"task_number"`
 	TaskTitle  string  `json:"task_title"`
 	RepoID     string  `json:"repo_id"`
 	StartedAt  string  `json:"started_at"`
@@ -88,6 +89,7 @@ type ActiveAgent struct {
 // CompletedAgent describes a recently completed agent session.
 type CompletedAgent struct {
 	TaskID     string  `json:"task_id"`
+	TaskNumber int     `json:"task_number"`
 	TaskTitle  string  `json:"task_title"`
 	RepoID     string  `json:"repo_id"`
 	Status     string  `json:"status"`
@@ -120,13 +122,14 @@ func Compute(ctx context.Context, lister TaskLister, epicLister PlanningEpicList
 		case task.StatusRunning:
 			m.RunningAgents++
 			agent := ActiveAgent{
-				TaskID:    t.ID.String(),
-				TaskTitle: t.Title,
-				RepoID:    t.RepoID,
-				Attempt:   t.Attempt,
-				CostUSD:   t.CostUSD,
-				Model:     t.Model,
-				EpicID:    t.EpicID,
+				TaskID:     t.ID.String(),
+				TaskNumber: t.Number,
+				TaskTitle:  t.Title,
+				RepoID:     t.RepoID,
+				Attempt:    t.Attempt,
+				CostUSD:    t.CostUSD,
+				Model:      t.Model,
+				EpicID:     t.EpicID,
 			}
 			if t.StartedAt != nil {
 				agent.StartedAt = t.StartedAt.Format(time.RFC3339)
@@ -185,6 +188,7 @@ func Compute(ctx context.Context, lister TaskLister, epicLister PlanningEpicList
 			t.ComputeDuration()
 			c := CompletedAgent{
 				TaskID:     t.ID.String(),
+				TaskNumber: t.Number,
 				TaskTitle:  t.Title,
 				RepoID:     t.RepoID,
 				Status:     string(t.Status),
