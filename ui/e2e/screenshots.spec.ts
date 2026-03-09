@@ -433,6 +433,7 @@ const MOCK_TASK_LOGS: Record<string, Record<number, string[]>> = {
 const MOCK_EPIC_DRAFT = {
 	id: 'epc_draft01',
 	repo_id: 'repo_mock01',
+	number: 1,
 	title: 'Implement user authentication system',
 	description:
 		'Build a complete authentication system with JWT tokens, login/signup pages, password reset flow, and role-based access control. Should integrate with the existing Express API and use PostgreSQL for user storage.',
@@ -449,6 +450,7 @@ const MOCK_EPIC_DRAFT = {
 const MOCK_EPIC_PLANNING = {
 	id: 'epc_planning01',
 	repo_id: 'repo_mock01',
+	number: 2,
 	title: 'Add real-time notifications',
 	description:
 		'Implement a real-time notification system using WebSockets. Users should receive notifications for task completions, PR reviews, and system alerts. Include a notification bell in the header with an unread count badge.',
@@ -535,6 +537,7 @@ const MOCK_EPIC_PLANNING = {
 const MOCK_EPIC_READY = {
 	id: 'epc_ready01',
 	repo_id: 'repo_mock01',
+	number: 3,
 	title: 'Migrate database to PostgreSQL',
 	description:
 		'Migrate the application from SQLite to PostgreSQL for production readiness. Update all query files, connection handling, and deployment configuration.',
@@ -580,6 +583,7 @@ const MOCK_EPIC_READY = {
 const MOCK_EPIC_ACTIVE = {
 	id: 'epc_active01',
 	repo_id: 'repo_mock01',
+	number: 4,
 	title: 'Add CI/CD pipeline',
 	description:
 		'Set up continuous integration and deployment with GitHub Actions. Include linting, testing, building, and auto-deployment to staging.',
@@ -627,6 +631,14 @@ const MOCK_EPIC_MAP: Record<string, typeof MOCK_EPIC_DRAFT> = {
 	epc_planning01: MOCK_EPIC_PLANNING,
 	epc_ready01: MOCK_EPIC_READY,
 	epc_active01: MOCK_EPIC_ACTIVE
+};
+
+// Map of epic number to full epic object for by-number lookups.
+const MOCK_EPIC_BY_NUMBER: Record<number, typeof MOCK_EPIC_DRAFT> = {
+	1: MOCK_EPIC_DRAFT,
+	2: MOCK_EPIC_PLANNING,
+	3: MOCK_EPIC_READY,
+	4: MOCK_EPIC_ACTIVE
 };
 
 // --- Mock Conversation Data ---
@@ -1177,6 +1189,17 @@ async function setupMockAPI(
 
 	// --- Epic API mocks ---
 
+	// Epic by-number lookup (must be before generic /repos/*/epics catch-all).
+	await page.route('**/api/v1/repos/*/epics/by-number/*', (route) => {
+		const url = route.request().url();
+		const num = parseInt(url.split('/by-number/')[1]?.split('?')[0] ?? '0');
+		const epic = MOCK_EPIC_BY_NUMBER[num];
+		if (epic) {
+			return route.fulfill({ json: { data: epic } });
+		}
+		return route.fulfill({ status: 404, json: { error: { message: 'not found' } } });
+	});
+
 	// List epics for a repo (must be before generic /repos/* catch-all).
 	await page.route('**/api/v1/repos/*/epics', (route) => {
 		if (route.request().method() === 'POST') {
@@ -1554,7 +1577,7 @@ test.describe('UI Screenshots', () => {
 
 	test('epic detail - draft', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto('/epics/epc_draft01');
+		await page.goto('/acme/webapp/epics/1');
 
 		await page.waitForTimeout(2000);
 
@@ -1566,7 +1589,7 @@ test.describe('UI Screenshots', () => {
 
 	test('epic detail - planning with proposed tasks', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto('/epics/epc_planning01');
+		await page.goto('/acme/webapp/epics/2');
 
 		await page.waitForTimeout(2000);
 
@@ -1578,7 +1601,7 @@ test.describe('UI Screenshots', () => {
 
 	test('epic detail - ready with confirm section', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto('/epics/epc_ready01');
+		await page.goto('/acme/webapp/epics/3');
 
 		await page.waitForTimeout(2000);
 
@@ -1590,12 +1613,25 @@ test.describe('UI Screenshots', () => {
 
 	test('epic detail - active with created tasks', async ({ page }, testInfo) => {
 		await setupMockAPI(page);
-		await page.goto('/epics/epc_active01');
+		await page.goto('/acme/webapp/epics/4');
 
 		await page.waitForTimeout(2000);
 
 		await page.screenshot({
 			path: `screenshots/epic-active-${testInfo.project.name}.png`,
+			fullPage: true
+		});
+	});
+
+	test('epic detail - redirect from old ID route', async ({ page }, testInfo) => {
+		await setupMockAPI(page);
+		await page.goto('/epics/epc_draft01');
+
+		await page.waitForTimeout(2000);
+
+		// Should have redirected to the number-based URL.
+		await page.screenshot({
+			path: `screenshots/epic-redirect-${testInfo.project.name}.png`,
 			fullPage: true
 		});
 	});
