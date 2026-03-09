@@ -1072,7 +1072,7 @@ async function setupMockAPI(
 	});
 
 	// Task by number lookup (must be before generic /repos/* catch-all).
-	await page.route('**/api/v1/repos/*/tasks/[0-9]*', (route) => {
+	await page.route('**/api/v1/repos/*/tasks/*', (route) => {
 		const url = route.request().url();
 		const numberStr = url.split('/tasks/')[1]?.split('?')[0];
 		const number = Number(numberStr);
@@ -1191,7 +1191,7 @@ async function setupMockAPI(
 	// --- Epic API mocks ---
 
 	// Epic number lookup (must be before generic /repos/*/epics catch-all).
-	await page.route('**/api/v1/repos/*/epics/[0-9]*', (route) => {
+	await page.route('**/api/v1/repos/*/epics/*', (route) => {
 		const url = route.request().url();
 		const num = parseInt(url.split('/epics/')[1]?.split('?')[0] ?? '0');
 		const epic = MOCK_EPIC_BY_NUMBER[num];
