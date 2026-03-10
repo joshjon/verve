@@ -152,7 +152,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-[700px] max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+	<Dialog.Content class="sm:max-w-[700px] max-h-[85vh] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden">
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2">
 				<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
