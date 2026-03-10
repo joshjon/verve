@@ -121,6 +121,14 @@ func splitFirst(s, sep string) []string {
 	return []string{s}
 }
 
+func TestDefaultCacheDir(t *testing.T) {
+	assert.Equal(t, "/tmp/verve-cache", DefaultCacheDir)
+}
+
+func TestContainerCacheDir(t *testing.T) {
+	assert.Equal(t, "/cache", containerCacheDir)
+}
+
 func TestRewriteLocalhostURL(t *testing.T) {
 	tests := []struct {
 		name     string

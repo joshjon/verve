@@ -22,6 +22,9 @@ const (
 	workTypeConversation = "conversation"
 )
 
+// DefaultCacheDir is the default host directory for caching dependencies between agent runs.
+const DefaultCacheDir = "/tmp/verve-cache"
+
 // Config holds the worker configuration
 type Config struct {
 	APIURL                    string
@@ -33,6 +36,8 @@ type Config struct {
 	DryRun                    bool   // Skip Claude and make a dummy change instead
 	GitHubInsecureSkipVerify  bool   // Disable TLS certificate verification for GitHub operations in agent containers
 	StripAnthropicBetaHeaders bool   // Strip anthropic-beta headers via reverse proxy inside agent containers (for Bedrock proxy compatibility)
+	CacheEnabled              bool   // Mount a host volume for dependency caching between agent runs (default: true)
+	CacheDir                  string // Host directory for cache volume (default: /tmp/verve-cache)
 }
 
 type Task struct {
@@ -116,7 +121,7 @@ type Worker struct {
 }
 
 func New(cfg Config, logger log.Logger) (*Worker, error) {
-	docker, err := NewDockerRunner(cfg.AgentImage, logger)
+	docker, err := NewDockerRunner(cfg.AgentImage, cfg.CacheEnabled, cfg.CacheDir, logger)
 	if err != nil {
 		return nil, err
 	}

@@ -39,4 +39,30 @@ ENV GITHUB_TOKEN=""
 ENV GITHUB_REPO=""
 ENV ANTHROPIC_API_KEY=""
 
+# Dependency cache directory (mounted as a host volume by worker).
+# Language-specific cache paths point to subdirectories under /cache
+# so that a single volume mount caches all package managers.
+
+# Go
+ENV GOMODCACHE="/cache/go/mod"
+ENV GOPATH="/cache/go/path"
+
+# Node.js / npm / pnpm / yarn
+ENV NPM_CONFIG_CACHE="/cache/npm"
+ENV PNPM_HOME="/cache/pnpm"
+ENV YARN_CACHE_FOLDER="/cache/yarn"
+
+# Python / pip
+ENV PIP_CACHE_DIR="/cache/pip"
+
+# Rust / Cargo
+ENV CARGO_HOME="/cache/cargo"
+
+# Java / Maven / Gradle
+ENV MAVEN_OPTS="-Dmaven.repo.local=/cache/maven"
+ENV GRADLE_USER_HOME="/cache/gradle"
+
+# C# / NuGet
+ENV NUGET_PACKAGES="/cache/nuget"
+
 ENTRYPOINT ["/entrypoint.sh"]
