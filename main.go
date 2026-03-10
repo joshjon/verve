@@ -139,6 +139,18 @@ func main() {
 			Name:    "strip-anthropic-beta-headers",
 			EnvVars: []string{"STRIP_ANTHROPIC_BETA_HEADERS"},
 		},
+		&cli.BoolFlag{
+			Name:    "cache",
+			EnvVars: []string{"CACHE"},
+			Usage:   "Mount a host volume for dependency caching between agent runs",
+			Value:   true,
+		},
+		&cli.StringFlag{
+			Name:    "cache-dir",
+			EnvVars: []string{"CACHE_DIR"},
+			Usage:   "Host directory for dependency cache volume",
+			Value:   worker.DefaultCacheDir(),
+		},
 	}
 
 	cliApp := &cli.App{
@@ -343,6 +355,8 @@ func buildWorkerConfig(c *cli.Context) worker.Config {
 		DryRun:                    c.Bool("dry-run"),
 		GitHubInsecureSkipVerify:  c.Bool("github-insecure-skip-verify"),
 		StripAnthropicBetaHeaders: c.Bool("strip-anthropic-beta-headers"),
+		CacheEnabled:              c.Bool("cache"),
+		CacheDir:                  c.String("cache-dir"),
 	}
 }
 
@@ -357,6 +371,8 @@ func logWorkerConfig(logger log.Logger, cfg worker.Config) {
 		"worker.agent_image", cfg.AgentImage,
 		"worker.max_concurrent", cfg.MaxConcurrentTasks,
 		"worker.dry_run", cfg.DryRun,
+		"worker.cache_enabled", cfg.CacheEnabled,
+		"worker.cache_dir", cfg.CacheDir,
 	)
 }
 

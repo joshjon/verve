@@ -20,13 +20,18 @@ import (
 
 const DefaultAgentImage = "verve:base"
 
+// containerCacheDir is the path inside the agent container where the cache volume is mounted.
+const containerCacheDir = "/cache"
+
 type DockerRunner struct {
-	client     *client.Client
-	agentImage string
-	logger     log.Logger
+	client       *client.Client
+	agentImage   string
+	cacheEnabled bool
+	cacheDir     string
+	logger       log.Logger
 }
 
-func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error) {
+func NewDockerRunner(agentImage string, cacheEnabled bool, cacheDir string, logger log.Logger) (*DockerRunner, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
@@ -34,7 +39,10 @@ func NewDockerRunner(agentImage string, logger log.Logger) (*DockerRunner, error
 	if agentImage == "" {
 		agentImage = DefaultAgentImage
 	}
-	return &DockerRunner{client: cli, agentImage: agentImage, logger: logger}, nil
+	if cacheDir == "" {
+		cacheDir = DefaultCacheDir()
+	}
+	return &DockerRunner{client: cli, agentImage: agentImage, cacheEnabled: cacheEnabled, cacheDir: cacheDir, logger: logger}, nil
 }
 
 func (d *DockerRunner) Close() error {
@@ -264,6 +272,12 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	hostConfig := &container.HostConfig{
 		AutoRemove: false, // We'll remove it manually after getting logs
+	}
+
+	// Mount a host volume for dependency caching if enabled
+	if d.cacheEnabled {
+		hostConfig.Binds = append(hostConfig.Binds, d.cacheDir+":"+containerCacheDir)
+		d.logger.Debug("cache volume mounted", "cache.host_dir", d.cacheDir, "cache.container_dir", containerCacheDir)
 	}
 
 	// Epic planning and setup scan containers need to call back to the API server.

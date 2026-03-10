@@ -139,6 +139,26 @@ func TestConfig_Defaults(t *testing.T) {
 	}
 	assert.Equal(t, 0, cfg.MaxConcurrentTasks, "expected default max concurrent tasks to be 0 (unset)")
 	assert.False(t, cfg.DryRun, "expected DryRun default to be false")
+	assert.False(t, cfg.CacheEnabled, "expected CacheEnabled zero value to be false")
+	assert.Empty(t, cfg.CacheDir, "expected CacheDir zero value to be empty")
+}
+
+func TestConfig_CacheEnabled(t *testing.T) {
+	cfg := Config{
+		APIURL:          "http://localhost:7400",
+		AnthropicAPIKey: "sk-ant-test",
+		AgentImage:      "verve:base",
+		CacheEnabled:    true,
+		CacheDir:        "/custom/cache",
+	}
+	assert.True(t, cfg.CacheEnabled)
+	assert.Equal(t, "/custom/cache", cfg.CacheDir)
+}
+
+func TestConfig_CacheDefaultDir(t *testing.T) {
+	dir := DefaultCacheDir()
+	assert.Contains(t, dir, "verve")
+	assert.NotContains(t, dir, "/tmp")
 }
 
 func TestPollResponse(t *testing.T) {

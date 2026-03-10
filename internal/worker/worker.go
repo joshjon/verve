@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +24,15 @@ const (
 	workTypeConversation = "conversation"
 )
 
+// DefaultCacheDir returns the default host directory for caching dependencies between agent runs.
+// It uses the user's cache directory (~/.cache/verve on Linux) for idiomatic placement.
+func DefaultCacheDir() string {
+	if dir, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(dir, "verve")
+	}
+	return filepath.Join(os.TempDir(), "verve-cache")
+}
+
 // Config holds the worker configuration
 type Config struct {
 	APIURL                    string
@@ -33,6 +44,8 @@ type Config struct {
 	DryRun                    bool   // Skip Claude and make a dummy change instead
 	GitHubInsecureSkipVerify  bool   // Disable TLS certificate verification for GitHub operations in agent containers
 	StripAnthropicBetaHeaders bool   // Strip anthropic-beta headers via reverse proxy inside agent containers (for Bedrock proxy compatibility)
+	CacheEnabled              bool   // Mount a host volume for dependency caching between agent runs (default: true)
+	CacheDir                  string // Host directory for cache volume (default: ~/.cache/verve)
 }
 
 type Task struct {
@@ -116,7 +129,7 @@ type Worker struct {
 }
 
 func New(cfg Config, logger log.Logger) (*Worker, error) {
-	docker, err := NewDockerRunner(cfg.AgentImage, logger)
+	docker, err := NewDockerRunner(cfg.AgentImage, cfg.CacheEnabled, cfg.CacheDir, logger)
 	if err != nil {
 		return nil, err
 	}
