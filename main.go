@@ -149,7 +149,7 @@ func main() {
 			Name:    "cache-dir",
 			EnvVars: []string{"CACHE_DIR"},
 			Usage:   "Host directory for dependency cache volume",
-			Value:   worker.DefaultCacheDir,
+			Value:   worker.DefaultCacheDir(),
 		},
 	}
 

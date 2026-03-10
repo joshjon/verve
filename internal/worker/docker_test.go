@@ -122,7 +122,10 @@ func splitFirst(s, sep string) []string {
 }
 
 func TestDefaultCacheDir(t *testing.T) {
-	assert.Equal(t, "/tmp/verve-cache", DefaultCacheDir)
+	dir := DefaultCacheDir()
+	assert.Contains(t, dir, "verve")
+	// Should use the user cache dir (e.g. ~/.cache/verve) when available
+	assert.NotContains(t, dir, "/tmp")
 }
 
 func TestContainerCacheDir(t *testing.T) {

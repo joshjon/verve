@@ -156,7 +156,9 @@ func TestConfig_CacheEnabled(t *testing.T) {
 }
 
 func TestConfig_CacheDefaultDir(t *testing.T) {
-	assert.Equal(t, "/tmp/verve-cache", DefaultCacheDir)
+	dir := DefaultCacheDir()
+	assert.Contains(t, dir, "verve")
+	assert.NotContains(t, dir, "/tmp")
 }
 
 func TestPollResponse(t *testing.T) {

@@ -40,7 +40,7 @@ func NewDockerRunner(agentImage string, cacheEnabled bool, cacheDir string, logg
 		agentImage = DefaultAgentImage
 	}
 	if cacheDir == "" {
-		cacheDir = DefaultCacheDir
+		cacheDir = DefaultCacheDir()
 	}
 	return &DockerRunner{client: cli, agentImage: agentImage, cacheEnabled: cacheEnabled, cacheDir: cacheDir, logger: logger}, nil
 }
