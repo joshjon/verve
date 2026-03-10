@@ -194,12 +194,13 @@ jobs:
 
                 for (const item of items) {
                   const label = item.category.replace(/-/g, ' ');
+                  const displayLabel = item.device === 'mobile' ? `${label} (Mobile)` : label;
                   if (pushed) {
-                    body += `<details>\n<summary>${label}</summary>\n\n`;
-                    body += `![${label}](${rawBase}/${item.file})\n\n`;
+                    body += `<details>\n<summary>${displayLabel}</summary>\n\n`;
+                    body += `![${displayLabel}](${rawBase}/${item.file})\n\n`;
                     body += `</details>\n\n`;
                   } else {
-                    body += `- ${label}\n`;
+                    body += `- ${displayLabel}\n`;
                   }
                 }
               }
