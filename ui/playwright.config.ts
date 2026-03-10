@@ -16,6 +16,15 @@ export default defineConfig({
 		{
 			name: 'desktop',
 			use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } }
+		},
+		{
+			name: 'mobile',
+			use: {
+				...devices['iPhone 14'],
+				// Override default WebKit browser to use Chromium so CI only needs one browser installed.
+				browserName: 'chromium',
+				viewport: { width: 393, height: 852 }
+			}
 		}
 	],
 	webServer: {
