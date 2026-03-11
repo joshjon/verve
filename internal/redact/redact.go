@@ -47,7 +47,7 @@ var rules = []rule{
 	{regexp.MustCompile(`(^|[^A-Za-z0-9_-])xapp-[A-Za-z0-9-]{10,}`), "${1}" + placeholder},
 
 	// Private keys (PEM format)
-	{regexp.MustCompile(`(?i)-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----`), placeholder},
+	{regexp.MustCompile(`(?i)-{5}BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-{5}`), placeholder},
 
 	// Connection strings with embedded passwords
 	{regexp.MustCompile(`(?i)((?:postgres|mysql|mongodb|redis|amqp)(?:ql)?://[^:]+:)[^@\s]+(@)`), "${1}" + placeholder + "${2}"},

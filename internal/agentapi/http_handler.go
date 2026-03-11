@@ -10,10 +10,10 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/joshjon/verve/internal/conversation"
-	"github.com/joshjon/verve/internal/redact"
 	"github.com/joshjon/verve/internal/epic"
 	"github.com/joshjon/verve/internal/githubtoken"
 	"github.com/joshjon/verve/internal/logkey"
+	"github.com/joshjon/verve/internal/redact"
 	"github.com/joshjon/verve/internal/repo"
 	"github.com/joshjon/verve/internal/task"
 	"github.com/joshjon/verve/internal/workertracker"
