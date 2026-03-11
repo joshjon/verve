@@ -169,6 +169,13 @@
 - **Automatic LSA index**: Index builds lazily on first search and rebuilds when new sessions are recorded; gracefully falls back to BM25-only with fewer than 2 sessions
 - **Force BM25-only mode**: `--bm25-only` flag for debugging or when only exact keyword matches are desired
 - **Manual index rebuild**: `tome index` command for diagnostics (shows session count, term count, and dimensionality)
+- **Git orphan branch sync**: Synchronize sessions across machines via git orphan branches (`tome/context/<author>`); sessions stored as JSONL, one file per branch
+- **Bidirectional sync**: `tome sync` pulls from all remote `tome/context*` branches and pushes local sessions; each user/worker writes to their own branch to avoid conflicts
+- **Pull/push modes**: `--pull` for import-only (Verve workers before spawning), `--push` for export-only (after completion), or both by default
+- **Session deduplication**: Import deduplicates by session ID so re-pulling the same branch is safe
+- **Author tracking**: Sessions record their author (auto-detected from `git config user.email`); displayed in search results and log output
+- **JSONL wire format**: Human-readable, git-compressible; viewable with `git show tome/context/<author>:sessions.jsonl`
+- **Git plumbing commits**: Uses `hash-object`, `mktree`, `commit-tree` to commit without checkout — no working tree pollution
 
 ## Security & Isolation
 

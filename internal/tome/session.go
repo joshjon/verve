@@ -11,6 +11,7 @@ type Session struct {
 	Files     []string  `json:"files"`
 	Branch    string    `json:"branch"`
 	Status    string    `json:"status"`
+	Author    string    `json:"author"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

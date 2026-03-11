@@ -59,7 +59,7 @@ func (t *Tome) Log(ctx context.Context, limit int) ([]Session, error) {
 	}
 
 	rows, err := t.db.QueryContext(ctx, `
-		SELECT id, summary, learnings, tags, files, branch, status, created_at
+		SELECT id, summary, learnings, tags, files, branch, status, author, created_at
 		FROM session
 		ORDER BY created_at DESC
 		LIMIT ?
@@ -133,7 +133,7 @@ func (t *Tome) ensureLSA(ctx context.Context) *LSAIndex {
 // allSessions loads every session from the database.
 func (t *Tome) allSessions(ctx context.Context) ([]Session, error) {
 	rows, err := t.db.QueryContext(ctx, `
-		SELECT id, summary, learnings, tags, files, branch, status, created_at
+		SELECT id, summary, learnings, tags, files, branch, status, author, created_at
 		FROM session
 		ORDER BY created_at ASC
 	`)
@@ -162,7 +162,7 @@ func scanSession(row scanner) (Session, error) {
 	var tagsJSON, filesJSON string
 	var createdAt int64
 
-	err := row.Scan(&s.ID, &s.Summary, &s.Learnings, &tagsJSON, &filesJSON, &s.Branch, &s.Status, &createdAt)
+	err := row.Scan(&s.ID, &s.Summary, &s.Learnings, &tagsJSON, &filesJSON, &s.Branch, &s.Status, &s.Author, &createdAt)
 	if err != nil {
 		return Session{}, err
 	}

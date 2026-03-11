@@ -32,7 +32,7 @@ func (t *Tome) searchBM25(ctx context.Context, query string, opts SearchOpts) ([
 	}
 
 	q := `
-		SELECT s.id, s.summary, s.learnings, s.tags, s.files, s.branch, s.status, s.created_at,
+		SELECT s.id, s.summary, s.learnings, s.tags, s.files, s.branch, s.status, s.author, s.created_at,
 		       session_fts.rank
 		FROM session_fts
 		JOIN session s ON session_fts.rowid = s.rowid
@@ -65,7 +65,7 @@ func (t *Tome) searchBM25(ctx context.Context, query string, opts SearchOpts) ([
 
 		err := rows.Scan(
 			&r.Session.ID, &r.Session.Summary, &r.Session.Learnings,
-			&tagsJSON, &filesJSON, &r.Session.Branch, &r.Session.Status, &createdAt,
+			&tagsJSON, &filesJSON, &r.Session.Branch, &r.Session.Status, &r.Session.Author, &createdAt,
 			&r.Score,
 		)
 		if err != nil {

@@ -22,6 +22,7 @@ func main() {
 			logCmd(),
 			indexCmd(),
 			initCmd(),
+			syncCmd(),
 		},
 	}
 
@@ -105,6 +106,7 @@ func recordCmd() *cli.Command {
 			&cli.StringFlag{Name: "files", Usage: "Comma-separated files touched"},
 			&cli.StringFlag{Name: "status", Value: "succeeded", Usage: "Session status (succeeded/failed)"},
 			&cli.StringFlag{Name: "branch", Usage: "Git branch (auto-detected if not set)"},
+			&cli.StringFlag{Name: "author", Usage: "Session author (auto-detected from git config if not set)"},
 		},
 		Action: func(c *cli.Context) error {
 			t, err := openTome()
@@ -120,6 +122,11 @@ func recordCmd() *cli.Command {
 				}
 			}
 
+			author := c.String("author")
+			if author == "" {
+				author = detectAuthor()
+			}
+
 			s := tome.Session{
 				Summary:   c.String("summary"),
 				Learnings: c.String("learnings"),
@@ -127,6 +134,7 @@ func recordCmd() *cli.Command {
 				Files:     splitCSV(c.String("files")),
 				Status:    c.String("status"),
 				Branch:    branch,
+				Author:    author,
 			}
 
 			if err := t.Record(c.Context, s); err != nil {
@@ -210,6 +218,74 @@ func initCmd() *cli.Command {
 			return nil
 		},
 	}
+}
+
+func syncCmd() *cli.Command {
+	return &cli.Command{
+		Name:  "sync",
+		Usage: "Synchronize sessions with a git remote via orphan branches",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "pull", Usage: "Pull only (import from remote)"},
+			&cli.BoolFlag{Name: "push", Usage: "Push only (export to remote)"},
+			&cli.StringFlag{Name: "branch", Usage: "Override branch name (default: tome/context/<author>)"},
+			&cli.StringFlag{Name: "author", Usage: "Author identity (auto-detected from git config if not set)"},
+		},
+		Action: func(c *cli.Context) error {
+			t, err := openTome()
+			if err != nil {
+				return err
+			}
+			defer t.Close()
+
+			repoDir, err := resolveRepoDir()
+			if err != nil {
+				return err
+			}
+
+			author := c.String("author")
+			if author == "" {
+				author = detectAuthor()
+			}
+			if author == "" && !c.Bool("pull") {
+				return fmt.Errorf("author required for push (set via --author or git config user.email)")
+			}
+
+			result, err := t.Sync(c.Context, repoDir, author, tome.SyncOpts{
+				PullOnly: c.Bool("pull"),
+				PushOnly: c.Bool("push"),
+				Branch:   c.String("branch"),
+			})
+			if err != nil {
+				return err
+			}
+
+			if result.Imported > 0 {
+				fmt.Printf("Imported %d sessions.\n", result.Imported)
+			}
+			if result.Exported > 0 {
+				fmt.Printf("Exported %d sessions.\n", result.Exported)
+			}
+			if result.Imported == 0 && result.Exported == 0 {
+				fmt.Println("Already up to date.")
+			}
+			return nil
+		},
+	}
+}
+
+func resolveRepoDir() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository")
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func detectAuthor() string {
+	if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return ""
 }
 
 func splitCSV(s string) []string {

@@ -57,6 +57,9 @@ func formatSession(w io.Writer, s Session) {
 	if s.Branch != "" {
 		fmt.Fprintf(w, "Branch: %s\n", s.Branch)
 	}
+	if s.Author != "" {
+		fmt.Fprintf(w, "Author: %s\n", s.Author)
+	}
 	if s.Learnings != "" {
 		fmt.Fprintln(w, "Learnings:")
 		for _, line := range strings.Split(s.Learnings, "\n") {
