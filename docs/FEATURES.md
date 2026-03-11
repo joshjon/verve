@@ -153,6 +153,19 @@
 - **Close task**: Dialog with optional reason
 - **Sync PRs**: Manual sync button with result summary
 
+## Session Memory (Tome)
+
+- **Standalone CLI**: `tome` is a general-purpose CLI for recording and searching agent session history, with no Verve dependency
+- **FTS5 search**: Full-text search with BM25 ranking across session summaries, learnings, and tags
+- **Session recording**: Record sessions with summary, learnings, tags, files touched, branch, and status
+- **On-demand querying**: Agents search for relevant past sessions as they work, like using grep but for institutional knowledge
+- **File and status filters**: Narrow search results by files touched or session outcome (succeeded/failed)
+- **Auto-init**: First `tome record` creates the database — no setup ceremony required
+- **Data directory resolution**: Uses `TOME_DIR` env var (Docker containers) or `.tome/` in git repo root (standalone users)
+- **Docker integration**: Tome binary included in agent image; session data persists across containers via the cache volume (`/cache/tome/`)
+- **Agent prompt integration**: Agents receive instructions for searching and recording sessions
+- **Multiple output formats**: Human-readable text (default) and JSON (`--json`) for machine consumption
+
 ## Security & Isolation
 
 - **User code stays on-premise**: Only task descriptions flow in; logs and PR notifications flow out
