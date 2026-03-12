@@ -20,3 +20,5 @@ internal/frontend/dist/*
 
 .rekal/
 .claude/skills/
+.tome/
+agent/tome

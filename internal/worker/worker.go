@@ -26,10 +26,10 @@ const (
 )
 
 // DefaultCacheDir returns the default host directory for caching dependencies between agent runs.
-// It uses the user's cache directory (~/.cache/verve on Linux) for idiomatic placement.
+// Always uses ~/.cache/verve for consistent, discoverable placement across platforms.
 func DefaultCacheDir() string {
-	if dir, err := os.UserCacheDir(); err == nil {
-		return filepath.Join(dir, "verve")
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".cache", "verve")
 	}
 	return filepath.Join(os.TempDir(), "verve-cache")
 }

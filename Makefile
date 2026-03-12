@@ -1,10 +1,17 @@
 AGENT_IMAGE = ghcr.io/joshjon/verve
 
+# ── Build ────────────────────────────────────────────────────
+
+.PHONY: build-tome
+build-tome:
+	go build -o bin/tome ./cmd/tome
+
 # ── Agent Images ─────────────────────────────────────────────
 
 .PHONY: build-agent
 build-agent:
-	docker build -t verve:base ./agent
+	GOOS=linux CGO_ENABLED=0 go build -o agent/tome ./cmd/tome
+	docker build -t verve:base ./agent; ret=$$?; rm -f agent/tome; exit $$ret
 
 .PHONY: build-agent-dev
 build-agent-dev: build-agent

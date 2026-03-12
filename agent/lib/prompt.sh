@@ -99,6 +99,13 @@ ${REPO_EXPECTATIONS}
 === End Repository Context ==="
     fi
 
+    # Add tome session memory instructions if available
+    if command -v tome &>/dev/null; then
+        prompt+='
+
+SESSION MEMORY: Use the /tome skill to search for prior session context before starting work and to record what you learned after completing work.'
+    fi
+
     if [ -n "$ACCEPTANCE_CRITERIA" ]; then
         prompt+="
 

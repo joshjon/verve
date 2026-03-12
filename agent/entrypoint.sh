@@ -72,6 +72,12 @@ clone_repo
 detect_default_branch
 setup_branch
 
+# ── Initialize tome (session memory) ──────────────────────────────
+if command -v tome &>/dev/null; then
+    tome init --no-hooks 2>/dev/null || true
+    tome sync --pull 2>/dev/null || true
+fi
+
 # ── Dry run shortcut ────────────────────────────────────────────────
 if [ "$DRY_RUN" = "true" ]; then
     run_dry_run
@@ -101,6 +107,11 @@ elif pr_exists_for_branch "${BRANCH}"; then
 else
     log_agent "Retry: no existing PR found for branch, creating one..."
     generate_and_create_pr "${BRANCH}" "${DEFAULT_BRANCH}"
+fi
+
+# ── Sync tome sessions to remote ──────────────────────────────────
+if command -v tome &>/dev/null; then
+    tome sync --push 2>/dev/null || true
 fi
 
 log_blank

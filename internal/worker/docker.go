@@ -148,6 +148,10 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 		"GITHUB_REPO=" + cfg.GitHubRepo,
 	}
 
+	if d.cacheEnabled {
+		env = append(env, "TOME_DIR="+containerCacheDir+"/tome")
+	}
+
 	if cfg.GitHubInsecureSkipVerify {
 		env = append(env, "GITHUB_INSECURE_SKIP_VERIFY=true")
 	}

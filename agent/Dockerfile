@@ -24,6 +24,10 @@ RUN adduser -D -s /bin/bash agent
 RUN mkdir -p /workspace && chown agent:agent /workspace
 WORKDIR /workspace
 
+# Copy tome CLI (pre-built by Makefile)
+COPY tome /usr/local/bin/tome
+RUN chmod +x /usr/local/bin/tome
+
 # Copy entrypoint and library scripts
 COPY entrypoint.sh /entrypoint.sh
 COPY lib/ /lib/
@@ -64,5 +68,8 @@ ENV GRADLE_USER_HOME="/cache/gradle"
 
 # C# / NuGet
 ENV NUGET_PACKAGES="/cache/nuget"
+
+# Tome session memory
+ENV TOME_DIR="/cache/tome"
 
 ENTRYPOINT ["/entrypoint.sh"]

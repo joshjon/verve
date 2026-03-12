@@ -153,6 +153,34 @@
 - **Close task**: Dialog with optional reason
 - **Sync PRs**: Manual sync button with result summary
 
+## Session Memory (Tome)
+
+- **Standalone CLI**: `tome` is a general-purpose CLI for recording and searching agent session history, with no Verve dependency
+- **FTS5 search**: Full-text search with BM25 ranking across session summaries, learnings, and tags
+- **Session recording**: Record sessions with summary, learnings, tags, files touched, branch, and status
+- **On-demand querying**: Agents search for relevant past sessions as they work, like using grep but for institutional knowledge
+- **File and status filters**: Narrow search results by files touched or session outcome (succeeded/failed)
+- **Auto-init**: First `tome record` creates the database — no setup ceremony required
+- **Data directory resolution**: Uses `TOME_DIR` env var (Docker containers) or `.tome/` in git repo root (standalone users)
+- **Docker integration**: Tome binary included in agent image; session data persists across containers via the cache volume (`/cache/tome/`)
+- **Agent prompt integration**: Agents receive search-only instructions; sessions are captured automatically from transcripts
+- **Multiple output formats**: Human-readable text (default) and JSON (`--json`) for machine consumption
+- **Hybrid search (BM25 + LSA)**: Combines FTS5 keyword matching with Latent Semantic Analysis for semantic similarity; finds sessions that use different vocabulary but relate to the same concepts
+- **Automatic LSA index**: Index builds lazily on first search and rebuilds when new sessions are recorded; gracefully falls back to BM25-only with fewer than 2 sessions
+- **Force BM25-only mode**: `--bm25-only` flag for debugging or when only exact keyword matches are desired
+- **Manual index rebuild**: `tome index` command for diagnostics (shows session count, term count, and dimensionality)
+- **Transcript auto-capture**: Parses Claude Code `.jsonl` transcripts automatically via `tome checkpoint`; zero token cost, 100% capture rate, extracts summary, assistant text, file paths, and branch
+- **Git hook automation**: `tome init` installs `post-commit` (runs `tome checkpoint` in background) and `pre-push` (runs `tome sync --push`) hooks; idempotent, preserves existing hooks
+- **Transcript deduplication**: SHA256 file hashing prevents re-processing unchanged transcripts; changed transcripts are re-imported automatically
+- **Git orphan branch sync**: Synchronize sessions across machines via git orphan branches (`tome/context/<user>`); sessions stored as JSONL, one file per branch
+- **Bidirectional sync**: `tome sync` pulls from all remote `tome/context*` branches and pushes local sessions; each user/worker writes to their own branch to avoid conflicts
+- **Pull/push modes**: `--pull` for import-only (Verve workers before spawning), `--push` for export-only (after completion), or both by default
+- **Session deduplication**: Import deduplicates by session ID so re-pulling the same branch is safe
+- **Concurrent sync safety**: File-lock serialization (`sync.lock`) prevents race conditions when multiple agents share the same cache volume; fetch-from-remote push strategy avoids diverged local refs
+- **User tracking**: Sessions record their user (auto-detected from `git config user.name`); displayed in search results and log output
+- **JSONL wire format**: Human-readable, git-compressible; viewable with `git show tome/context/<user>:sessions.jsonl`
+- **Git plumbing commits**: Uses `hash-object`, `mktree`, `commit-tree` to commit without checkout — no working tree pollution
+
 ## Security & Isolation
 
 - **User code stays on-premise**: Only task descriptions flow in; logs and PR notifications flow out
