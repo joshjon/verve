@@ -131,10 +131,10 @@ for horizontal scaling, but the SQLite path uses local-only fan-out (nil notifie
 // Idempotent — overwrites existing skill file with latest content.
 func InstallSkill(repoDir string) error {
 	skillDir := filepath.Join(repoDir, ".claude", "skills", "tome")
-	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
 		return fmt.Errorf("create skill directory: %w", err)
 	}
-	return os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644)
+	return os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600)
 }
 
 // RemoveSkill removes the tome Claude Code skill directory.
@@ -151,7 +151,7 @@ func RemoveSkill(repoDir string) error {
 	} {
 		entries, err := os.ReadDir(dir)
 		if err == nil && len(entries) == 0 {
-			os.Remove(dir)
+			_ = os.Remove(dir)
 		}
 	}
 	return nil
@@ -162,7 +162,7 @@ func RemoveSkill(repoDir string) error {
 func AddClaudeMD(repoDir string) error {
 	claudeMDPath := filepath.Join(repoDir, "CLAUDE.md")
 
-	existing, err := os.ReadFile(claudeMDPath)
+	existing, err := os.ReadFile(claudeMDPath) //nolint:gosec // path is constructed from repoDir, not user input
 	if err == nil {
 		if strings.Contains(string(existing), claudeMDMarkerStart) {
 			return nil // already present
@@ -174,11 +174,11 @@ func AddClaudeMD(repoDir string) error {
 			content += "\n"
 		}
 		content += "\n" + claudeMDSection + "\n"
-		return os.WriteFile(claudeMDPath, []byte(content), 0o644)
+		return os.WriteFile(claudeMDPath, []byte(content), 0o600)
 	}
 
 	// No CLAUDE.md — create one.
-	return os.WriteFile(claudeMDPath, []byte(claudeMDSection+"\n"), 0o644)
+	return os.WriteFile(claudeMDPath, []byte(claudeMDSection+"\n"), 0o600)
 }
 
 // RemoveClaudeMD removes the tome section from CLAUDE.md.
@@ -186,9 +186,9 @@ func AddClaudeMD(repoDir string) error {
 func RemoveClaudeMD(repoDir string) error {
 	claudeMDPath := filepath.Join(repoDir, "CLAUDE.md")
 
-	existing, err := os.ReadFile(claudeMDPath)
-	if err != nil {
-		return nil // no CLAUDE.md
+	existing, readErr := os.ReadFile(claudeMDPath) //nolint:gosec // path is constructed from repoDir, not user input
+	if readErr != nil {
+		return nil //nolint:nilerr // missing CLAUDE.md is not an error
 	}
 
 	content := string(existing)
@@ -222,7 +222,7 @@ func RemoveClaudeMD(repoDir string) error {
 	if !strings.HasSuffix(result, "\n") {
 		result += "\n"
 	}
-	return os.WriteFile(claudeMDPath, []byte(result), 0o644)
+	return os.WriteFile(claudeMDPath, []byte(result), 0o600)
 }
 
 // InstallHooks installs post-commit and pre-push git hooks for automatic
@@ -248,7 +248,7 @@ func InstallHooks(repoDir string) error {
 func AddGitignore(repoDir string) error {
 	gitignorePath := filepath.Join(repoDir, ".gitignore")
 
-	existing, err := os.ReadFile(gitignorePath)
+	existing, err := os.ReadFile(gitignorePath) //nolint:gosec // path is constructed from repoDir, not user input
 	if err == nil {
 		for _, line := range strings.Split(string(existing), "\n") {
 			if strings.TrimSpace(line) == ".tome" || strings.TrimSpace(line) == ".tome/" {
@@ -262,11 +262,11 @@ func AddGitignore(repoDir string) error {
 			content += "\n"
 		}
 		content += ".tome/\n"
-		return os.WriteFile(gitignorePath, []byte(content), 0o644)
+		return os.WriteFile(gitignorePath, []byte(content), 0o600)
 	}
 
 	// No .gitignore — create one.
-	return os.WriteFile(gitignorePath, []byte(".tome/\n"), 0o644)
+	return os.WriteFile(gitignorePath, []byte(".tome/\n"), 0o600)
 }
 
 // UninstallHooks removes tome-managed sections from git hooks.
@@ -290,13 +290,13 @@ func UninstallHooks(repoDir string) error {
 func RemoveGitignore(repoDir string) error {
 	gitignorePath := filepath.Join(repoDir, ".gitignore")
 
-	existing, err := os.ReadFile(gitignorePath)
-	if err != nil {
-		return nil // no .gitignore, nothing to do
+	existing, readErr := os.ReadFile(gitignorePath) //nolint:gosec // path is constructed from repoDir, not user input
+	if readErr != nil {
+		return nil //nolint:nilerr // missing .gitignore is not an error
 	}
 
 	lines := strings.Split(string(existing), "\n")
-	var filtered []string
+	filtered := make([]string, 0, len(lines))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == ".tome" || trimmed == ".tome/" {
@@ -311,15 +311,15 @@ func RemoveGitignore(repoDir string) error {
 		return os.Remove(gitignorePath)
 	}
 
-	return os.WriteFile(gitignorePath, []byte(content), 0o644)
+	return os.WriteFile(gitignorePath, []byte(content), 0o600)
 }
 
 func uninstallHook(hooksDir, name string) error {
 	hookPath := filepath.Join(hooksDir, name)
 
-	existing, err := os.ReadFile(hookPath)
-	if err != nil {
-		return nil // hook doesn't exist
+	existing, readErr := os.ReadFile(hookPath) //nolint:gosec // path is constructed from hooksDir, not user input
+	if readErr != nil {
+		return nil //nolint:nilerr // missing hook file is not an error
 	}
 
 	content := string(existing)
@@ -330,7 +330,7 @@ func uninstallHook(hooksDir, name string) error {
 	// Remove the tome-managed block. Split into lines and remove everything
 	// from the marker line through the end of the tome block.
 	lines := strings.Split(content, "\n")
-	var filtered []string
+	filtered := make([]string, 0, len(lines))
 	inTomeBlock := false
 	for _, line := range lines {
 		if strings.Contains(line, tomeMarker) {
@@ -364,13 +364,13 @@ func uninstallHook(hooksDir, name string) error {
 		return os.Remove(hookPath)
 	}
 
-	return os.WriteFile(hookPath, []byte(remaining+"\n"), 0o755)
+	return os.WriteFile(hookPath, []byte(remaining+"\n"), 0o755) //nolint:gosec // git hooks must be executable
 }
 
 func installHook(hooksDir, name, content string) error {
 	hookPath := filepath.Join(hooksDir, name)
 
-	existing, err := os.ReadFile(hookPath)
+	existing, err := os.ReadFile(hookPath) //nolint:gosec // path is constructed from hooksDir, not user input
 	if err == nil {
 		// Hook file exists — check for marker.
 		if strings.Contains(string(existing), tomeMarker) {
@@ -383,9 +383,9 @@ func installHook(hooksDir, name, content string) error {
 			combined += "\n"
 		}
 		combined += "\n" + content
-		return os.WriteFile(hookPath, []byte(combined), 0o755)
+		return os.WriteFile(hookPath, []byte(combined), 0o755) //nolint:gosec // git hooks must be executable
 	}
 
 	// No existing hook — create new.
-	return os.WriteFile(hookPath, []byte(content), 0o755)
+	return os.WriteFile(hookPath, []byte(content), 0o755) //nolint:gosec // git hooks must be executable
 }
