@@ -74,7 +74,7 @@ setup_branch
 
 # ── Initialize tome (session memory) ──────────────────────────────
 if command -v tome &>/dev/null; then
-    tome init 2>/dev/null || true
+    tome init --no-hooks 2>/dev/null || true
     tome sync --pull 2>/dev/null || true
 fi
 
