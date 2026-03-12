@@ -5,15 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"syscall"
 )
 
 // SyncOpts configures a sync operation.
 type SyncOpts struct {
 	PullOnly bool   // only import from remote
 	PushOnly bool   // only export to remote
-	Branch   string // override branch name (default: tome/context/<author>)
+	Branch   string // override branch name (default: tome/context/<user>)
 }
 
 // SyncResult reports what happened during sync.
@@ -23,32 +27,55 @@ type SyncResult struct {
 }
 
 // Sync synchronizes sessions with a git remote via orphan branches.
-// Sessions are stored as JSONL on branches like tome/context/<author>.
-func (t *Tome) Sync(ctx context.Context, repoDir string, author string, opts SyncOpts) (SyncResult, error) {
+// Sessions are stored as JSONL on branches like tome/context/<user>.
+func (t *Tome) Sync(ctx context.Context, repoDir string, user string, opts SyncOpts) (SyncResult, error) {
 	var result SyncResult
 
-	if !opts.PushOnly {
-		imported, err := t.pull(ctx, repoDir)
-		if err != nil {
-			return result, fmt.Errorf("pull: %w", err)
+	err := t.withSyncLock(func() error {
+		if !opts.PushOnly {
+			imported, err := t.pull(ctx, repoDir)
+			if err != nil {
+				return fmt.Errorf("pull: %w", err)
+			}
+			result.Imported = imported
 		}
-		result.Imported = imported
+
+		if !opts.PullOnly {
+			branch := opts.Branch
+			if branch == "" {
+				branch = "tome/context/" + sanitizeBranch(user)
+			}
+
+			exported, err := t.push(ctx, repoDir, branch)
+			if err != nil {
+				return fmt.Errorf("push: %w", err)
+			}
+			result.Exported = exported
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// withSyncLock acquires an exclusive file lock for sync operations.
+// Since all containers share the tome data directory, this serializes
+// sync across concurrent agents on the same host.
+func (t *Tome) withSyncLock(fn func() error) error {
+	lockPath := filepath.Join(t.dir, "sync.lock")
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return fmt.Errorf("open lock: %w", err)
 	}
+	defer f.Close()
 
-	if !opts.PullOnly {
-		branch := opts.Branch
-		if branch == "" {
-			branch = "tome/context/" + author
-		}
-
-		exported, err := t.push(ctx, repoDir, branch)
-		if err != nil {
-			return result, fmt.Errorf("push: %w", err)
-		}
-		result.Exported = exported
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("acquire lock: %w", err)
 	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
 
-	return result, nil
+	return fn()
 }
 
 // pull fetches all tome/context* branches from the remote and imports sessions.
@@ -111,9 +138,12 @@ func (t *Tome) push(ctx context.Context, repoDir, branch string) (int, error) {
 		return 0, nil
 	}
 
-	// Read existing content from branch (if any).
+	// Fetch the latest remote state for this branch.
+	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/"+branch+":refs/remotes/origin/"+branch)
+
+	// Read existing content from remote ref (not local).
 	var existingContent string
-	if existing, err := gitOutput(ctx, repoDir, "show", branch+":sessions.jsonl"); err == nil {
+	if existing, err := gitOutput(ctx, repoDir, "show", "origin/"+branch+":sessions.jsonl"); err == nil {
 		existingContent = existing
 	}
 
@@ -144,13 +174,20 @@ func (t *Tome) push(ctx context.Context, repoDir, branch string) (int, error) {
 	}
 	treeHash = strings.TrimSpace(treeHash)
 
-	// Create commit (with parent if branch exists).
+	// Create commit (with parent from remote if branch exists).
 	commitMsg := fmt.Sprintf("tome: sync %d sessions", len(sessions))
 	commitArgs := []string{"commit-tree", treeHash, "-m", commitMsg}
 
-	parentHash, err := gitOutput(ctx, repoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+	// Use remote ref as parent to avoid divergence.
+	parentHash, err := gitOutput(ctx, repoDir, "rev-parse", "--verify", "refs/remotes/origin/"+branch)
 	if err == nil {
 		commitArgs = append(commitArgs, "-p", strings.TrimSpace(parentHash))
+	} else {
+		// Fall back to local ref if remote doesn't exist yet.
+		parentHash, err = gitOutput(ctx, repoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+		if err == nil {
+			commitArgs = append(commitArgs, "-p", strings.TrimSpace(parentHash))
+		}
 	}
 
 	commitHash, err := gitInputOutput(ctx, repoDir, nil, commitArgs...)
@@ -209,16 +246,16 @@ func (t *Tome) importSession(ctx context.Context, s Session) error {
 	filesJSON, _ := json.Marshal(s.Files)
 
 	_, err := t.db.ExecContext(ctx, `
-		INSERT INTO session (id, summary, learnings, tags, files, branch, status, author, created_at, exported)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-	`, s.ID, s.Summary, s.Learnings, string(tagsJSON), string(filesJSON), s.Branch, s.Status, s.Author, s.CreatedAt.Unix())
+		INSERT INTO session (id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, created_at, exported)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+	`, s.ID, s.Summary, s.Learnings, s.Content, string(tagsJSON), string(filesJSON), s.Branch, s.Status, nullString(s.TranscriptHash), s.User, s.CreatedAt.Unix())
 	return err
 }
 
 // unexportedSessions returns all sessions not yet pushed to a remote.
 func (t *Tome) unexportedSessions(ctx context.Context) ([]Session, error) {
 	rows, err := t.db.QueryContext(ctx, `
-		SELECT id, summary, learnings, tags, files, branch, status, author, created_at
+		SELECT id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, created_at
 		FROM session
 		WHERE exported = 0
 		ORDER BY created_at ASC
@@ -247,6 +284,20 @@ func (t *Tome) markExported(ctx context.Context, sessions []Session) error {
 		}
 	}
 	return nil
+}
+
+var nonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
+
+// sanitizeBranch converts a name to a safe git branch component.
+// Lowercases the input and replaces non-alphanumeric runs with hyphens.
+func sanitizeBranch(name string) string {
+	s := strings.ToLower(name)
+	s = nonAlphanumeric.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "default"
+	}
+	return s
 }
 
 // gitExec runs a git command and returns an error if it fails.

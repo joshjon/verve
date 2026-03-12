@@ -47,6 +47,11 @@ func Open(dir string) (*Tome, error) {
 	return &Tome{db: db, dir: dir}, nil
 }
 
+// Dir returns the data directory path.
+func (t *Tome) Dir() string {
+	return t.dir
+}
+
 // Close closes the database connection.
 func (t *Tome) Close() error {
 	return t.db.Close()
@@ -59,7 +64,7 @@ func (t *Tome) Log(ctx context.Context, limit int) ([]Session, error) {
 	}
 
 	rows, err := t.db.QueryContext(ctx, `
-		SELECT id, summary, learnings, tags, files, branch, status, author, created_at
+		SELECT id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, created_at
 		FROM session
 		ORDER BY created_at DESC
 		LIMIT ?
@@ -133,7 +138,7 @@ func (t *Tome) ensureLSA(ctx context.Context) *LSAIndex {
 // allSessions loads every session from the database.
 func (t *Tome) allSessions(ctx context.Context) ([]Session, error) {
 	rows, err := t.db.QueryContext(ctx, `
-		SELECT id, summary, learnings, tags, files, branch, status, author, created_at
+		SELECT id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, created_at
 		FROM session
 		ORDER BY created_at ASC
 	`)
@@ -161,10 +166,15 @@ func scanSession(row scanner) (Session, error) {
 	var s Session
 	var tagsJSON, filesJSON string
 	var createdAt int64
+	var transcriptHash sql.NullString
 
-	err := row.Scan(&s.ID, &s.Summary, &s.Learnings, &tagsJSON, &filesJSON, &s.Branch, &s.Status, &s.Author, &createdAt)
+	err := row.Scan(&s.ID, &s.Summary, &s.Learnings, &s.Content, &tagsJSON, &filesJSON, &s.Branch, &s.Status, &transcriptHash, &s.User, &createdAt)
 	if err != nil {
 		return Session{}, err
+	}
+
+	if transcriptHash.Valid {
+		s.TranscriptHash = transcriptHash.String
 	}
 
 	_ = json.Unmarshal([]byte(tagsJSON), &s.Tags)

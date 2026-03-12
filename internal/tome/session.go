@@ -4,15 +4,17 @@ import "time"
 
 // Session represents a recorded agent session.
 type Session struct {
-	ID        string    `json:"id"`
-	Summary   string    `json:"summary"`
-	Learnings string    `json:"learnings"`
-	Tags      []string  `json:"tags"`
-	Files     []string  `json:"files"`
-	Branch    string    `json:"branch"`
-	Status    string    `json:"status"`
-	Author    string    `json:"author"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	Summary        string    `json:"summary"`
+	Learnings      string    `json:"learnings"`
+	Content        string    `json:"content"`
+	Tags           []string  `json:"tags"`
+	Files          []string  `json:"files"`
+	Branch         string    `json:"branch"`
+	Status         string    `json:"status"`
+	TranscriptHash string    `json:"transcript_hash,omitempty"`
+	User           string    `json:"user"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // SearchOpts configures a search query.

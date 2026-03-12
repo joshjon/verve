@@ -103,11 +103,11 @@ ${REPO_EXPECTATIONS}
     if command -v tome &>/dev/null; then
         prompt+='
 
-SESSION MEMORY: You have access to `tome` for searching and recording session history.
+SESSION MEMORY: You have access to `tome` for searching past session history.
 - Before starting, search for relevant past sessions: `tome search "relevant topic"`
 - Filter by files touched: `tome search --file "src/auth/" "query"`
-- After completing work, record what you learned: `tome record --summary "What you did" --learnings "Key findings and gotchas" --tags "comma,separated" --files "files,touched" --status succeeded`
-- View recent sessions: `tome log`'
+- View recent sessions: `tome log`
+Sessions are captured automatically from transcripts — no need to record manually.'
     fi
 
     if [ -n "$ACCEPTANCE_CRITERIA" ]; then

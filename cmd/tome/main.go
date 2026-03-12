@@ -22,7 +22,9 @@ func main() {
 			logCmd(),
 			indexCmd(),
 			initCmd(),
+			cleanCmd(),
 			syncCmd(),
+			checkpointCmd(),
 		},
 	}
 
@@ -106,7 +108,7 @@ func recordCmd() *cli.Command {
 			&cli.StringFlag{Name: "files", Usage: "Comma-separated files touched"},
 			&cli.StringFlag{Name: "status", Value: "succeeded", Usage: "Session status (succeeded/failed)"},
 			&cli.StringFlag{Name: "branch", Usage: "Git branch (auto-detected if not set)"},
-			&cli.StringFlag{Name: "author", Usage: "Session author (auto-detected from git config if not set)"},
+			&cli.StringFlag{Name: "user", Usage: "Session user (auto-detected from git config if not set)"},
 		},
 		Action: func(c *cli.Context) error {
 			t, err := openTome()
@@ -122,9 +124,9 @@ func recordCmd() *cli.Command {
 				}
 			}
 
-			author := c.String("author")
-			if author == "" {
-				author = detectAuthor()
+			user := c.String("user")
+			if user == "" {
+				user = detectUser()
 			}
 
 			s := tome.Session{
@@ -134,7 +136,7 @@ func recordCmd() *cli.Command {
 				Files:     splitCSV(c.String("files")),
 				Status:    c.String("status"),
 				Branch:    branch,
-				Author:    author,
+				User:      user,
 			}
 
 			if err := t.Record(c.Context, s); err != nil {
@@ -201,7 +203,10 @@ func indexCmd() *cli.Command {
 func initCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "init",
-		Usage: "Initialize session database",
+		Usage: "Initialize session database and install git hooks",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "no-hooks", Usage: "Skip git hook installation"},
+		},
 		Action: func(c *cli.Context) error {
 			dir, err := resolveDir()
 			if err != nil {
@@ -215,6 +220,54 @@ func initCmd() *cli.Command {
 			defer t.Close()
 
 			fmt.Printf("Initialized tome at %s\n", dir)
+
+			repoDir, err := resolveRepoDir()
+			if err == nil {
+				if err := tome.AddGitignore(repoDir); err == nil {
+					fmt.Println("Added .tome/ to .gitignore")
+				}
+
+				if !c.Bool("no-hooks") {
+					if err := tome.InstallHooks(repoDir); err == nil {
+						fmt.Println("Installed git hooks (post-commit, pre-push)")
+					}
+				}
+			}
+
+			return nil
+		},
+	}
+}
+
+func cleanCmd() *cli.Command {
+	return &cli.Command{
+		Name:  "clean",
+		Usage: "Remove tome data, git hooks, and .gitignore entry",
+		Action: func(c *cli.Context) error {
+			dir, err := resolveDir()
+			if err != nil {
+				return err
+			}
+
+			// Remove the .tome data directory.
+			if err := os.RemoveAll(dir); err != nil {
+				return fmt.Errorf("remove data directory: %w", err)
+			}
+			fmt.Printf("Removed %s\n", dir)
+
+			repoDir, err := resolveRepoDir()
+			if err != nil {
+				return nil // not in a git repo, nothing else to clean
+			}
+
+			if err := tome.UninstallHooks(repoDir); err == nil {
+				fmt.Println("Removed git hooks")
+			}
+
+			if err := tome.RemoveGitignore(repoDir); err == nil {
+				fmt.Println("Removed .tome/ from .gitignore")
+			}
+
 			return nil
 		},
 	}
@@ -227,8 +280,8 @@ func syncCmd() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "pull", Usage: "Pull only (import from remote)"},
 			&cli.BoolFlag{Name: "push", Usage: "Push only (export to remote)"},
-			&cli.StringFlag{Name: "branch", Usage: "Override branch name (default: tome/context/<author>)"},
-			&cli.StringFlag{Name: "author", Usage: "Author identity (auto-detected from git config if not set)"},
+			&cli.StringFlag{Name: "branch", Usage: "Override branch name (default: tome/context/<user>)"},
+			&cli.StringFlag{Name: "user", Usage: "User identity (auto-detected from git config if not set)"},
 		},
 		Action: func(c *cli.Context) error {
 			t, err := openTome()
@@ -242,15 +295,15 @@ func syncCmd() *cli.Command {
 				return err
 			}
 
-			author := c.String("author")
-			if author == "" {
-				author = detectAuthor()
+			user := c.String("user")
+			if user == "" {
+				user = detectUser()
 			}
-			if author == "" && !c.Bool("pull") {
-				return fmt.Errorf("author required for push (set via --author or git config user.email)")
+			if user == "" && !c.Bool("pull") {
+				return fmt.Errorf("user required for push (set via --user or git config user.name)")
 			}
 
-			result, err := t.Sync(c.Context, repoDir, author, tome.SyncOpts{
+			result, err := t.Sync(c.Context, repoDir, user, tome.SyncOpts{
 				PullOnly: c.Bool("pull"),
 				PushOnly: c.Bool("push"),
 				Branch:   c.String("branch"),
@@ -273,6 +326,41 @@ func syncCmd() *cli.Command {
 	}
 }
 
+func checkpointCmd() *cli.Command {
+	return &cli.Command{
+		Name:  "checkpoint",
+		Usage: "Import new Claude Code transcripts as sessions",
+		Action: func(c *cli.Context) error {
+			t, err := openTome()
+			if err != nil {
+				return err
+			}
+			defer t.Close()
+
+			repoDir, err := resolveRepoDir()
+			if err != nil {
+				return err
+			}
+
+			result, err := t.Checkpoint(c.Context, repoDir)
+			if err != nil {
+				return err
+			}
+
+			if result.Processed > 0 {
+				fmt.Printf("Imported %d transcripts.\n", result.Processed)
+			}
+			if result.Skipped > 0 {
+				fmt.Printf("Skipped %d (already processed).\n", result.Skipped)
+			}
+			if result.Processed == 0 && result.Skipped == 0 {
+				fmt.Println("No transcripts found.")
+			}
+			return nil
+		},
+	}
+}
+
 func resolveRepoDir() (string, error) {
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
@@ -281,8 +369,8 @@ func resolveRepoDir() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func detectAuthor() string {
-	if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
+func detectUser() string {
+	if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
 		return strings.TrimSpace(string(out))
 	}
 	return ""

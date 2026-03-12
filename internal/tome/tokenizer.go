@@ -26,6 +26,9 @@ func tokenize(text string) []string {
 // sessionText returns the searchable text content of a session.
 func sessionText(s Session) string {
 	parts := []string{s.Summary, s.Learnings}
+	if s.Content != "" {
+		parts = append(parts, s.Content)
+	}
 	if len(s.Tags) > 0 {
 		parts = append(parts, strings.Join(s.Tags, " "))
 	}

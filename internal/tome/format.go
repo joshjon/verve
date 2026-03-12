@@ -46,6 +46,10 @@ func FormatJSON(w io.Writer, v any) error {
 }
 
 func formatSession(w io.Writer, s Session) {
+	source := "manual"
+	if s.TranscriptHash != "" {
+		source = "transcript"
+	}
 	fmt.Fprintf(w, "━━ %s (%s, %s) ━━\n", s.Summary, s.Status, relativeTime(s.CreatedAt))
 
 	if len(s.Files) > 0 {
@@ -57,14 +61,26 @@ func formatSession(w io.Writer, s Session) {
 	if s.Branch != "" {
 		fmt.Fprintf(w, "Branch: %s\n", s.Branch)
 	}
-	if s.Author != "" {
-		fmt.Fprintf(w, "Author: %s\n", s.Author)
+	if s.User != "" {
+		fmt.Fprintf(w, "User: %s\n", s.User)
 	}
+	fmt.Fprintf(w, "Source: %s\n", source)
 	if s.Learnings != "" {
 		fmt.Fprintln(w, "Learnings:")
 		for _, line := range strings.Split(s.Learnings, "\n") {
 			fmt.Fprintf(w, "  %s\n", line)
 		}
+	}
+	if s.Content != "" {
+		preview := s.Content
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+		// Show first line only for compact display.
+		if idx := strings.IndexByte(preview, '\n'); idx >= 0 {
+			preview = preview[:idx] + "..."
+		}
+		fmt.Fprintf(w, "Content: %s\n", preview)
 	}
 }
 

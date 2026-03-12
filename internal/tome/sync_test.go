@@ -78,18 +78,18 @@ func TestSyncPushCreatesOrphanBranch(t *testing.T) {
 		Summary:   "Test session for sync",
 		Learnings: "Learned something useful",
 		Tags:      []string{"test"},
-		Author:    "user1@example.com",
+		User:      "userone",
 	}))
 
 	// Push to remote.
-	result, err := tm.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PushOnly: true})
+	result, err := tm.Sync(ctx, clone1, "userone", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Exported)
 	assert.Equal(t, 0, result.Imported)
 
 	// Verify the branch exists on the remote.
 	out := run(t, clone1, "git", "branch", "-a")
-	assert.Contains(t, out, "tome/context/user1@example.com")
+	assert.Contains(t, out, "tome/context/userone")
 }
 
 func TestSyncPullImportsSessions(t *testing.T) {
@@ -102,15 +102,15 @@ func TestSyncPullImportsSessions(t *testing.T) {
 		Summary:   "Session from user1",
 		Learnings: "User1 learned this",
 		Tags:      []string{"user1"},
-		Author:    "user1@example.com",
+		User:      "userone",
 		CreatedAt: time.Now().Add(-1 * time.Hour),
 	}))
-	_, err := tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PushOnly: true})
+	_, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 
 	// Pull from clone2.
 	tm2 := openTestTome(t)
-	result, err := tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{PullOnly: true})
+	result, err := tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{PullOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 
@@ -119,7 +119,7 @@ func TestSyncPullImportsSessions(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
 	assert.Equal(t, "Session from user1", sessions[0].Summary)
-	assert.Equal(t, "user1@example.com", sessions[0].Author)
+	assert.Equal(t, "userone", sessions[0].User)
 }
 
 func TestSyncBidirectional(t *testing.T) {
@@ -130,27 +130,27 @@ func TestSyncBidirectional(t *testing.T) {
 	tm1 := openTestTome(t)
 	require.NoError(t, tm1.Record(ctx, tome.Session{
 		Summary: "Session from user1",
-		Author:  "user1@example.com",
+		User:    "userone",
 	}))
-	_, err := tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PushOnly: true})
+	_, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 
 	// User2 records and pushes.
 	tm2 := openTestTome(t)
 	require.NoError(t, tm2.Record(ctx, tome.Session{
 		Summary: "Session from user2",
-		Author:  "user2@example.com",
+		User:    "usertwo",
 	}))
-	_, err = tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{PushOnly: true})
+	_, err = tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 
 	// User1 pulls — should get user2's session.
-	result1, err := tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PullOnly: true})
+	result1, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{PullOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result1.Imported)
 
 	// User2 pulls — should get user1's session.
-	result2, err := tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{PullOnly: true})
+	result2, err := tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{PullOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result2.Imported)
 
@@ -172,19 +172,19 @@ func TestSyncDeduplicates(t *testing.T) {
 	tm1 := openTestTome(t)
 	require.NoError(t, tm1.Record(ctx, tome.Session{
 		Summary: "Shared session",
-		Author:  "user1@example.com",
+		User:    "userone",
 	}))
-	_, err := tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PushOnly: true})
+	_, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 
 	// User2 pulls.
 	tm2 := openTestTome(t)
-	result, err := tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{PullOnly: true})
+	result, err := tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{PullOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 
 	// User2 pulls again — should not re-import.
-	result, err = tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{PullOnly: true})
+	result, err = tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{PullOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Imported)
 
@@ -200,16 +200,16 @@ func TestSyncExportedNotPushedAgain(t *testing.T) {
 	tm := openTestTome(t)
 	require.NoError(t, tm.Record(ctx, tome.Session{
 		Summary: "Already pushed session",
-		Author:  "user1@example.com",
+		User:    "userone",
 	}))
 
 	// First push.
-	result, err := tm.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PushOnly: true})
+	result, err := tm.Sync(ctx, clone1, "userone", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Exported)
 
 	// Second push — should export 0.
-	result, err = tm.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{PushOnly: true})
+	result, err = tm.Sync(ctx, clone1, "userone", tome.SyncOpts{PushOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Exported)
 }
@@ -225,9 +225,9 @@ func TestSyncFullRoundTrip(t *testing.T) {
 		Learnings: "Learned A",
 		Tags:      []string{"a"},
 		Files:     []string{"a.go"},
-		Author:    "user1@example.com",
+		User:      "userone",
 	}))
-	result, err := tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{})
+	result, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Imported)
 	assert.Equal(t, 1, result.Exported)
@@ -239,15 +239,15 @@ func TestSyncFullRoundTrip(t *testing.T) {
 		Learnings: "Learned B",
 		Tags:      []string{"b"},
 		Files:     []string{"b.go"},
-		Author:    "user2@example.com",
+		User:      "usertwo",
 	}))
-	result, err = tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{})
+	result, err = tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 1, result.Exported)
 
 	// User1 full sync again — picks up user2's session.
-	result, err = tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{})
+	result, err = tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 0, result.Exported)
@@ -265,11 +265,11 @@ func TestSyncCustomBranch(t *testing.T) {
 	tm1 := openTestTome(t)
 	require.NoError(t, tm1.Record(ctx, tome.Session{
 		Summary: "Custom branch session",
-		Author:  "user1@example.com",
+		User:    "userone",
 	}))
 
 	// Push to custom branch.
-	result, err := tm1.Sync(ctx, clone1, "user1@example.com", tome.SyncOpts{
+	result, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{
 		PushOnly: true,
 		Branch:   "tome/context/shared",
 	})
@@ -278,7 +278,7 @@ func TestSyncCustomBranch(t *testing.T) {
 
 	// Pull from clone2 — should pick up the custom branch.
 	tm2 := openTestTome(t)
-	result, err = tm2.Sync(ctx, clone2, "user2@example.com", tome.SyncOpts{PullOnly: true})
+	result, err = tm2.Sync(ctx, clone2, "usertwo", tome.SyncOpts{PullOnly: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 }
