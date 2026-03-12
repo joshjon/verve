@@ -271,6 +271,10 @@ func initCmd() *cli.Command {
 				if err := tome.InstallSkill(repoDir); err == nil {
 					fmt.Println("Installed Claude Code skill (.claude/skills/tome/)")
 				}
+
+				if err := tome.AddClaudeMD(repoDir); err == nil {
+					fmt.Println("Added tome instructions to CLAUDE.md")
+				}
 			}
 
 			return nil
@@ -309,6 +313,10 @@ func cleanCmd() *cli.Command {
 
 			if err := tome.RemoveSkill(repoDir); err == nil {
 				fmt.Println("Removed Claude Code skill")
+			}
+
+			if err := tome.RemoveClaudeMD(repoDir); err == nil {
+				fmt.Println("Removed tome instructions from CLAUDE.md")
 			}
 
 			return nil

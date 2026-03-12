@@ -103,11 +103,7 @@ ${REPO_EXPECTATIONS}
     if command -v tome &>/dev/null; then
         prompt+='
 
-SESSION MEMORY: You have access to `tome` for searching past session history.
-- Before starting, search for relevant past sessions: `tome search "relevant topic"`
-- Filter by files touched: `tome search --file "src/auth/" "query"`
-- View recent sessions: `tome log`
-Sessions are captured automatically from transcripts — no need to record manually.'
+SESSION MEMORY: Use the /tome skill to search for prior session context before starting work and to record what you learned after completing work.'
     fi
 
     if [ -n "$ACCEPTANCE_CRITERIA" ]; then

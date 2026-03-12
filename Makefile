@@ -11,8 +11,7 @@ build-tome:
 .PHONY: build-agent
 build-agent:
 	GOOS=linux CGO_ENABLED=0 go build -o agent/tome ./cmd/tome
-	docker build -t verve:base ./agent
-	rm -f agent/tome
+	docker build -t verve:base ./agent; ret=$$?; rm -f agent/tome; exit $$ret
 
 .PHONY: build-agent-dev
 build-agent-dev: build-agent

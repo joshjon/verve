@@ -259,3 +259,73 @@ func TestRemoveSkillPreservesOtherSkills(t *testing.T) {
 	_, err = os.Stat(filepath.Join(otherSkillDir, "SKILL.md"))
 	assert.NoError(t, err)
 }
+
+func TestAddClaudeMDCreatesNew(t *testing.T) {
+	repoDir := t.TempDir()
+
+	require.NoError(t, tome.AddClaudeMD(repoDir))
+
+	content, err := os.ReadFile(filepath.Join(repoDir, "CLAUDE.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "<!-- tome:start -->")
+	assert.Contains(t, string(content), "<!-- tome:end -->")
+	assert.Contains(t, string(content), "/tome skill")
+}
+
+func TestAddClaudeMDAppendsToExisting(t *testing.T) {
+	repoDir := t.TempDir()
+	existing := "# My Project\n\nSome existing instructions.\n"
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "CLAUDE.md"), []byte(existing), 0o644))
+
+	require.NoError(t, tome.AddClaudeMD(repoDir))
+
+	content, err := os.ReadFile(filepath.Join(repoDir, "CLAUDE.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "# My Project")
+	assert.Contains(t, string(content), "Some existing instructions.")
+	assert.Contains(t, string(content), "<!-- tome:start -->")
+}
+
+func TestAddClaudeMDIdempotent(t *testing.T) {
+	repoDir := t.TempDir()
+
+	require.NoError(t, tome.AddClaudeMD(repoDir))
+	first, err := os.ReadFile(filepath.Join(repoDir, "CLAUDE.md"))
+	require.NoError(t, err)
+
+	require.NoError(t, tome.AddClaudeMD(repoDir))
+	second, err := os.ReadFile(filepath.Join(repoDir, "CLAUDE.md"))
+	require.NoError(t, err)
+
+	assert.Equal(t, string(first), string(second))
+}
+
+func TestRemoveClaudeMD(t *testing.T) {
+	repoDir := t.TempDir()
+	existing := "# My Project\n\nSome instructions.\n"
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "CLAUDE.md"), []byte(existing), 0o644))
+
+	require.NoError(t, tome.AddClaudeMD(repoDir))
+	require.NoError(t, tome.RemoveClaudeMD(repoDir))
+
+	content, err := os.ReadFile(filepath.Join(repoDir, "CLAUDE.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "# My Project")
+	assert.NotContains(t, string(content), "tome:start")
+}
+
+func TestRemoveClaudeMDDeletesFileIfOnlyTome(t *testing.T) {
+	repoDir := t.TempDir()
+
+	require.NoError(t, tome.AddClaudeMD(repoDir))
+	require.NoError(t, tome.RemoveClaudeMD(repoDir))
+
+	_, err := os.Stat(filepath.Join(repoDir, "CLAUDE.md"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRemoveClaudeMDNoFile(t *testing.T) {
+	repoDir := t.TempDir()
+	// No CLAUDE.md — should not error.
+	require.NoError(t, tome.RemoveClaudeMD(repoDir))
+}

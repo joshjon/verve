@@ -9,6 +9,19 @@ import (
 
 const tomeMarker = "# managed by tome"
 
+const claudeMDMarkerStart = "<!-- tome:start -->"
+const claudeMDMarkerEnd = "<!-- tome:end -->"
+
+const claudeMDSection = `<!-- tome:start -->
+## Session Memory (Tome)
+
+Use the /tome skill to manage session memory:
+- **Before starting work**: Search for relevant prior sessions to find useful context
+- **After completing work**: Record a structured summary of what was done, key decisions, and learnings
+
+This helps maintain continuity across sessions so future work can build on past context.
+<!-- tome:end -->`
+
 const postCommitHook = `#!/bin/sh
 # managed by tome
 if command -v tome >/dev/null 2>&1; then
@@ -142,6 +155,74 @@ func RemoveSkill(repoDir string) error {
 		}
 	}
 	return nil
+}
+
+// AddClaudeMD appends a tome instructions section to the repo's CLAUDE.md.
+// Idempotent — skips if the marker is already present.
+func AddClaudeMD(repoDir string) error {
+	claudeMDPath := filepath.Join(repoDir, "CLAUDE.md")
+
+	existing, err := os.ReadFile(claudeMDPath)
+	if err == nil {
+		if strings.Contains(string(existing), claudeMDMarkerStart) {
+			return nil // already present
+		}
+
+		// Append to existing CLAUDE.md.
+		content := string(existing)
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += "\n" + claudeMDSection + "\n"
+		return os.WriteFile(claudeMDPath, []byte(content), 0o644)
+	}
+
+	// No CLAUDE.md — create one.
+	return os.WriteFile(claudeMDPath, []byte(claudeMDSection+"\n"), 0o644)
+}
+
+// RemoveClaudeMD removes the tome section from CLAUDE.md.
+// Removes the file entirely if the tome section was the only content.
+func RemoveClaudeMD(repoDir string) error {
+	claudeMDPath := filepath.Join(repoDir, "CLAUDE.md")
+
+	existing, err := os.ReadFile(claudeMDPath)
+	if err != nil {
+		return nil // no CLAUDE.md
+	}
+
+	content := string(existing)
+	if !strings.Contains(content, claudeMDMarkerStart) {
+		return nil // no tome section
+	}
+
+	// Remove everything from start marker to end marker (inclusive).
+	startIdx := strings.Index(content, claudeMDMarkerStart)
+	endIdx := strings.Index(content, claudeMDMarkerEnd)
+	if startIdx == -1 || endIdx == -1 {
+		return nil
+	}
+	endIdx += len(claudeMDMarkerEnd)
+
+	// Remove the section plus surrounding blank lines.
+	before := strings.TrimRight(content[:startIdx], "\n")
+	after := strings.TrimLeft(content[endIdx:], "\n")
+
+	var result string
+	if before != "" && after != "" {
+		result = before + "\n\n" + after
+	} else {
+		result = before + after
+	}
+
+	if strings.TrimSpace(result) == "" {
+		return os.Remove(claudeMDPath)
+	}
+
+	if !strings.HasSuffix(result, "\n") {
+		result += "\n"
+	}
+	return os.WriteFile(claudeMDPath, []byte(result), 0o644)
 }
 
 // InstallHooks installs post-commit and pre-push git hooks for automatic
