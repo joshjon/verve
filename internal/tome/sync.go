@@ -19,7 +19,7 @@ import (
 type SyncOpts struct {
 	PullOnly bool   // only import from remote
 	PushOnly bool   // only export to remote
-	Branch   string // override branch name (default: tome/context/<user>)
+	Branch   string // override branch name (default: verve/tome/<user>)
 }
 
 // SyncResult reports what happened during sync.
@@ -29,7 +29,7 @@ type SyncResult struct {
 }
 
 // Sync synchronizes sessions with a git remote via orphan branches.
-// Sessions are stored as JSONL on branches like tome/context/<user>.
+// Sessions are stored as JSONL on branches like verve/tome/<user>.
 func (t *Tome) Sync(ctx context.Context, repoDir, user string, opts SyncOpts) (SyncResult, error) {
 	var result SyncResult
 
@@ -45,7 +45,7 @@ func (t *Tome) Sync(ctx context.Context, repoDir, user string, opts SyncOpts) (S
 		if !opts.PullOnly {
 			branch := opts.Branch
 			if branch == "" {
-				branch = "tome/context/" + sanitizeBranch(user)
+				branch = "verve/tome/" + sanitizeBranch(user)
 			}
 
 			exported, err := t.push(ctx, repoDir, branch)
@@ -80,13 +80,13 @@ func (t *Tome) withSyncLock(fn func() error) error {
 	return fn()
 }
 
-// pull fetches all tome/context* branches from the remote and imports sessions.
+// pull fetches all verve/tome/* branches from the remote and imports sessions.
 func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
 	// Fetch all tome branches from origin.
-	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/tome/context*:refs/heads/tome/context*")
+	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/verve/tome/*:refs/heads/verve/tome/*")
 
 	// List all local tome branches.
-	out, listErr := gitOutput(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads/tome/context")
+	out, listErr := gitOutput(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads/verve/tome")
 	if listErr != nil || strings.TrimSpace(out) == "" {
 		return 0, nil //nolint:nilerr // no tome branches is not an error
 	}
@@ -98,8 +98,7 @@ func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
 	}
 
 	var imported int
-	branches := strings.Split(strings.TrimSpace(out), "\n")
-	for _, branch := range branches {
+	for _, branch := range strings.Split(strings.TrimSpace(out), "\n") {
 		branch = strings.TrimSpace(branch)
 		if branch == "" {
 			continue
@@ -242,16 +241,16 @@ func (t *Tome) importSession(ctx context.Context, s Session) error {
 	filesJSON, _ := json.Marshal(s.Files)
 
 	_, err := t.db.ExecContext(ctx, `
-		INSERT INTO session (id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, created_at, exported)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-	`, s.ID, s.Summary, s.Learnings, s.Content, string(tagsJSON), string(filesJSON), s.Branch, s.Status, nullString(s.TranscriptHash), s.User, s.CreatedAt.Unix())
+		INSERT INTO session (id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, repo, created_at, exported)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+	`, s.ID, s.Summary, s.Learnings, s.Content, string(tagsJSON), string(filesJSON), s.Branch, s.Status, nullString(s.TranscriptHash), s.User, s.Repo, s.CreatedAt.Unix())
 	return err
 }
 
 // unexportedSessions returns all sessions not yet pushed to a remote.
 func (t *Tome) unexportedSessions(ctx context.Context) ([]Session, error) {
 	rows, err := t.db.QueryContext(ctx, `
-		SELECT id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, created_at
+		SELECT id, summary, learnings, content, tags, files, branch, status, transcript_hash, user, repo, created_at
 		FROM session
 		WHERE exported = 0
 		ORDER BY created_at ASC

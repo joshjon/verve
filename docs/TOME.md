@@ -16,17 +16,17 @@ Tome solves this by giving agents an on-demand search tool — like `grep` but f
 │                                                     │
 │  Agent works on task...                             │
 │    ├─ tome search "auth middleware"    ← on-demand  │
-│    └─ tome search --file "src/api/"   ← filtered   │
+│    └─ tome search --file "src/api/"   ← filtered    │
 │                                                     │
-│  post-commit hook → tome checkpoint   ← automatic  │
-│  pre-push hook → tome sync --push     ← automatic  │
+│  post-commit hook → tome checkpoint   ← automatic   │
+│  pre-push hook → tome sync --push     ← automatic   │
 │                                                     │
-│  /cache/tome/data.db  ← mounted from host volume   │
+│  /cache/tome/data.db  ← mounted from host volume    │
 └─────────────────────────────────────────────────────┘
         │ (Docker cache volume)
-┌───────┴──────────────────┐
-│ Host: ~/.cache/verve/tome│ ← persists across containers
-└──────────────────────────┘
+┌───────┴───────────────────┐
+│ Host: ~/.cache/verve/tome │ ← persists across containers
+└───────────────────────────┘
 
 Standalone user:
   $ cd my-repo
@@ -123,9 +123,9 @@ Sessions can be synchronized across machines via git orphan branches. Each user 
 ```
 Git Remote
 ├── main                          # Normal code
-├── tome/context/alice             # Alice's sessions
-├── tome/context/bob               # Bob's sessions
-└── tome/context/verve-agent       # Verve agent sessions
+├── verve/tome/alice                # Alice's sessions
+├── verve/tome/bob                  # Bob's sessions
+└── verve/tome/verve-agent          # Verve agent sessions
 ```
 
 Branch names are derived from `git config user.name`, sanitized to lowercase with special characters replaced by hyphens.
@@ -142,7 +142,7 @@ Sessions are stored as JSONL (one JSON object per line) in a file called `sessio
 
 **Push:** Queries the database for unexported sessions, appends them to `sessions.jsonl`, commits using git plumbing commands (`hash-object`, `mktree`, `commit-tree`) without polluting the working tree, and pushes to the remote. Sessions are then marked as exported.
 
-**Pull:** Fetches all `tome/context*` branches from the remote, reads each branch's `sessions.jsonl`, and imports sessions into the local database. Session IDs are used for deduplication — re-pulling is safe and idempotent.
+**Pull:** Fetches all `verve/tome/*` branches (and legacy `tome/context*` branches) from the remote, reads each branch's `sessions.jsonl`, and imports sessions into the local database. Session IDs are used for deduplication — re-pulling is safe and idempotent.
 
 **Conflict avoidance:** Each user pushes only to their own branch, so there are no write conflicts. All branches are merged into the local database on pull.
 
@@ -237,139 +237,4 @@ tome sync                        # Pull + push (default)
 tome sync --pull                 # Import from remote only
 tome sync --push                 # Export to remote only
 tome sync --branch "custom"      # Override branch name
-```
-
----
-
-## Testing guide
-
-This section walks through testing the full tome feature set end-to-end. All commands run from the repo root.
-
-### Prerequisites
-
-```bash
-# Build the tome binary
-make build-tome
-
-# Verify it runs
-./bin/tome --help
-```
-
-### 1. Initialize and install hooks
-
-```bash
-# Initialize (creates DB + installs git hooks)
-./bin/tome init
-
-# Verify hooks were installed
-cat .git/hooks/post-commit
-cat .git/hooks/pre-push
-
-# Initialize without hooks
-./bin/tome init --no-hooks
-```
-
-### 2. Record sessions manually
-
-```bash
-# Record a few sessions with different topics
-./bin/tome record \
-  --summary "Added JWT authentication middleware" \
-  --learnings "Token validation uses Bearer scheme. Refresh tokens stored in httponly cookies. Redis required for token blacklist." \
-  --tags "auth,jwt,middleware" \
-  --files "src/auth/middleware.go,src/auth/tokens.go" \
-  --status succeeded
-
-./bin/tome record \
-  --summary "Implemented user login flow" \
-  --learnings "Password hashing with bcrypt. Session cookies for login state. Auth redirect on expired session." \
-  --tags "auth,login,user" \
-  --files "src/auth/login.go,src/user/handler.go" \
-  --status succeeded
-
-# Verify they're stored
-./bin/tome log
-```
-
-### 3. Checkpoint (transcript auto-capture)
-
-```bash
-# Import Claude Code transcripts
-./bin/tome checkpoint
-
-# Expected: Imports new transcripts or reports none found
-
-# Run again — should skip already-processed files
-./bin/tome checkpoint
-
-# Expected: "Skipped N (already processed)."
-```
-
-### 4. Search
-
-```bash
-# Basic keyword search
-./bin/tome search "authentication"
-
-# Hybrid search (with LSA after ≥2 sessions)
-./bin/tome search "login"
-
-# BM25-only
-./bin/tome search --bm25-only "middleware"
-
-# Filter by status/file
-./bin/tome search --status failed "email"
-./bin/tome search --file "src/api/" "middleware"
-```
-
-### 5. Git sync
-
-```bash
-# Set up a test remote
-TMPDIR=$(mktemp -d)
-git init --bare --initial-branch=main "$TMPDIR/remote.git"
-git clone "$TMPDIR/remote.git" "$TMPDIR/clone1"
-git -C "$TMPDIR/clone1" config user.name "Alice"
-echo "# test" > "$TMPDIR/clone1/README.md"
-git -C "$TMPDIR/clone1" add README.md
-git -C "$TMPDIR/clone1" commit -m "init"
-git -C "$TMPDIR/clone1" push -u origin main
-
-# Record and push
-cd "$TMPDIR/clone1"
-TOME_DIR="$TMPDIR/tome1" tome record \
-  --summary "Alice added auth middleware" \
-  --learnings "Bearer token validation in middleware" \
-  --tags "auth" \
-  --user "Alice"
-
-TOME_DIR="$TMPDIR/tome1" tome sync --push --user "Alice"
-
-# Verify branch name uses sanitized username
-git branch -a | grep tome
-# Expected: tome/context/alice
-
-# Clean up
-rm -rf "$TMPDIR"
-```
-
-### 6. Run the automated test suite
-
-```bash
-# All tome tests (core + LSA + sync + transcript + checkpoint + hooks)
-go test ./internal/tome/... -v -count=1
-```
-
-### 7. Docker integration (requires Docker)
-
-```bash
-# Build agent image with tome included
-make build-agent
-
-# Verify tome is in the image
-docker run --rm verve:base tome --help
-
-# Verify TOME_DIR is set
-docker run --rm verve:base env | grep TOME_DIR
-# Expected: TOME_DIR=/cache/tome
 ```

@@ -89,7 +89,7 @@ func TestSyncPushCreatesOrphanBranch(t *testing.T) {
 
 	// Verify the branch exists on the remote.
 	out := run(t, clone1, "git", "branch", "-a")
-	assert.Contains(t, out, "tome/context/userone")
+	assert.Contains(t, out, "verve/tome/userone")
 }
 
 func TestSyncPullImportsSessions(t *testing.T) {
@@ -115,7 +115,7 @@ func TestSyncPullImportsSessions(t *testing.T) {
 	assert.Equal(t, 1, result.Imported)
 
 	// Verify the session was imported.
-	sessions, err := tm2.Log(ctx, 10)
+	sessions, err := tm2.Log(ctx, 10, "")
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
 	assert.Equal(t, "Session from user1", sessions[0].Summary)
@@ -155,11 +155,11 @@ func TestSyncBidirectional(t *testing.T) {
 	assert.Equal(t, 1, result2.Imported)
 
 	// Both should now have 2 sessions.
-	sessions1, err := tm1.Log(ctx, 10)
+	sessions1, err := tm1.Log(ctx, 10, "")
 	require.NoError(t, err)
 	assert.Len(t, sessions1, 2)
 
-	sessions2, err := tm2.Log(ctx, 10)
+	sessions2, err := tm2.Log(ctx, 10, "")
 	require.NoError(t, err)
 	assert.Len(t, sessions2, 2)
 }
@@ -188,7 +188,7 @@ func TestSyncDeduplicates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Imported)
 
-	sessions, err := tm2.Log(ctx, 10)
+	sessions, err := tm2.Log(ctx, 10, "")
 	require.NoError(t, err)
 	assert.Len(t, sessions, 1)
 }
@@ -271,7 +271,7 @@ func TestSyncCustomBranch(t *testing.T) {
 	// Push to custom branch.
 	result, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{
 		PushOnly: true,
-		Branch:   "tome/context/shared",
+		Branch:   "verve/tome/shared",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Exported)
