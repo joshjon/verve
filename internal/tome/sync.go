@@ -82,29 +82,14 @@ func (t *Tome) withSyncLock(fn func() error) error {
 
 // pull fetches all verve/tome/* branches from the remote and imports sessions.
 func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
-	// Fetch all tome branches from origin (current and legacy prefixes).
+	// Fetch all tome branches from origin.
 	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/verve/tome/*:refs/heads/verve/tome/*")
-	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/tome/context*:refs/heads/tome/context*")
 
-	// List all local tome branches (current and legacy prefixes).
-	var branches []string
-	for _, prefix := range []string{"refs/heads/verve/tome", "refs/heads/tome/context"} {
-		out, err := gitOutput(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", prefix)
-		if err == nil && strings.TrimSpace(out) != "" {
-			for _, b := range strings.Split(strings.TrimSpace(out), "\n") {
-				if b = strings.TrimSpace(b); b != "" {
-					branches = append(branches, b)
-				}
-			}
-		}
+	// List all local tome branches.
+	out, listErr := gitOutput(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads/verve/tome")
+	if listErr != nil || strings.TrimSpace(out) == "" {
+		return 0, nil //nolint:nilerr // no tome branches is not an error
 	}
-
-	if len(branches) == 0 {
-		return 0, nil
-	}
-
-	// Detect repo for backfilling old sessions that lack one.
-	repo := DetectRepo(ctx, repoDir)
 
 	// Collect existing session IDs to dedup.
 	existingIDs, err := t.allSessionIDs(ctx)
@@ -113,7 +98,12 @@ func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
 	}
 
 	var imported int
-	for _, branch := range branches {
+	for _, branch := range strings.Split(strings.TrimSpace(out), "\n") {
+		branch = strings.TrimSpace(branch)
+		if branch == "" {
+			continue
+		}
+
 		sessions, err := readBranchSessions(ctx, repoDir, branch)
 		if err != nil {
 			continue // skip malformed branch data
@@ -122,10 +112,6 @@ func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
 		for _, s := range sessions {
 			if existingIDs[s.ID] {
 				continue
-			}
-			// Backfill repo for old sessions that lack one.
-			if s.Repo == "" {
-				s.Repo = repo
 			}
 			if err := t.importSession(ctx, s); err != nil {
 				continue
