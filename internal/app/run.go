@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/joshjon/kit/log"
-	"github.com/joshjon/kit/pgdb"
 	"github.com/joshjon/kit/server"
 	"github.com/joshjon/kit/sqlitedb"
 	"github.com/labstack/echo/v4"
@@ -27,8 +26,6 @@ import (
 	"github.com/joshjon/verve/internal/githubtoken"
 	"github.com/joshjon/verve/internal/metric"
 	"github.com/joshjon/verve/internal/metricapi"
-	"github.com/joshjon/verve/internal/postgres"
-	pgmigrations "github.com/joshjon/verve/internal/postgres/migrations"
 	"github.com/joshjon/verve/internal/repo"
 	"github.com/joshjon/verve/internal/repoapi"
 	"github.com/joshjon/verve/internal/setting"
@@ -49,8 +46,7 @@ type stores struct {
 	setting      *setting.Service
 }
 
-// Run starts the API server. If Postgres is not configured, it falls back to
-// an in-memory SQLite database with a warning.
+// Run starts the API server using SQLite as the database backend.
 func Run(ctx context.Context, logger log.Logger, cfg Config) error {
 	var encryptionKey []byte
 	if cfg.EncryptionKey != "" {
@@ -85,9 +81,6 @@ func Run(ctx context.Context, logger log.Logger, cfg Config) error {
 }
 
 func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKey []byte) (stores, func(), error) {
-	if cfg.Postgres.IsSet() {
-		return initPostgres(ctx, logger, cfg.Postgres, encryptionKey, cfg.GitHubInsecureSkipVerify)
-	}
 	if cfg.TursoDSN != "" {
 		logger.Info("using turso/libsql")
 		return initSQLite(ctx, encryptionKey, cfg.GitHubInsecureSkipVerify, logger,
@@ -95,54 +88,13 @@ func initStores(ctx context.Context, logger log.Logger, cfg Config, encryptionKe
 			sqlite.WithNoPragma())
 	}
 	if cfg.SQLiteDir != "" {
-		logger.Info("postgres not configured, using file-backed sqlite", "sqlite.dir", cfg.SQLiteDir)
+		logger.Info("using file-backed sqlite", "sqlite.dir", cfg.SQLiteDir)
 		return initSQLite(ctx, encryptionKey, cfg.GitHubInsecureSkipVerify, logger,
 			[]sqlitedb.OpenOption{sqlitedb.WithDir(cfg.SQLiteDir), sqlitedb.WithDBName("verve")})
 	}
-	logger.Warn("postgres not configured, using in-memory sqlite (data will not persist)")
+	logger.Warn("using in-memory sqlite (data will not persist)")
 	return initSQLite(ctx, encryptionKey, cfg.GitHubInsecureSkipVerify, logger,
 		[]sqlitedb.OpenOption{sqlitedb.WithInMemory()})
-}
-
-func initPostgres(ctx context.Context, logger log.Logger, cfg PostgresConfig, encryptionKey []byte, ghInsecureSkipVerify bool) (stores, func(), error) {
-	pool, err := pgdb.Dial(ctx, cfg.User, cfg.Password, cfg.HostPort, cfg.Database)
-	if err != nil {
-		return stores{}, nil, fmt.Errorf("dial postgres: %w", err)
-	}
-
-	if err := pgdb.Migrate(pool, pgmigrations.FS); err != nil {
-		pool.Close()
-		return stores{}, nil, fmt.Errorf("migrate postgres: %w", err)
-	}
-
-	notifier := postgres.NewEventNotifier(pool, logger)
-	broker := task.NewBroker(notifier)
-	go notifier.Listen(ctx, broker)
-
-	taskRepo := postgres.NewTaskRepository(pool)
-	taskStore := task.NewStore(taskRepo, broker)
-
-	repoRepo := postgres.NewRepoRepository(pool)
-	repoStore := repo.NewStore(repoRepo)
-
-	var ghTokenService *githubtoken.Service
-	if encryptionKey != nil {
-		ghTokenRepo := postgres.NewGitHubTokenRepository(pool)
-		ghTokenService = githubtoken.NewService(ghTokenRepo, encryptionKey, ghInsecureSkipVerify)
-	}
-
-	settingRepo := postgres.NewSettingRepository(pool)
-	settingService := setting.NewService(settingRepo)
-
-	epicRepo := postgres.NewEpicRepository(pool)
-	taskCreator := epic.NewTaskCreatorFunc(taskStore.CreateTaskFromEpic)
-	epicStore := epic.NewStore(epicRepo, taskCreator, logger)
-	epicStore.SetTaskStatusReader(epic.NewTaskStatusReaderFunc(taskStore.ReadTaskStatus))
-
-	convRepo := postgres.NewConversationRepository(pool)
-	convStore := conversation.NewStore(convRepo, logger)
-
-	return stores{task: taskStore, repo: repoStore, epic: epicStore, conversation: convStore, githubToken: ghTokenService, setting: settingService}, func() { pool.Close() }, nil
 }
 
 func initSQLite(ctx context.Context, encryptionKey []byte, ghInsecureSkipVerify bool, logger log.Logger, dbOpts []sqlitedb.OpenOption, taskRepoOpts ...sqlite.TaskRepoOption) (stores, func(), error) {

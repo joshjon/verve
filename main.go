@@ -68,22 +68,6 @@ func main() {
 			Usage:   "Turso/libSQL database URL (e.g. libsql://db-name.turso.io?authToken=...)",
 		},
 		&cli.StringFlag{
-			Name:    "postgres-user",
-			EnvVars: []string{"POSTGRES_USER"},
-		},
-		&cli.StringFlag{
-			Name:    "postgres-password",
-			EnvVars: []string{"POSTGRES_PASSWORD"},
-		},
-		&cli.StringFlag{
-			Name:    "postgres-host-port",
-			EnvVars: []string{"POSTGRES_HOST_PORT"},
-		},
-		&cli.StringFlag{
-			Name:    "postgres-database",
-			EnvVars: []string{"POSTGRES_DATABASE"},
-		},
-		&cli.StringFlag{
 			Name:    "cors-origins",
 			EnvVars: []string{"CORS_ORIGINS"},
 			Value:   "http://localhost:5173,http://localhost:8080",
@@ -311,7 +295,7 @@ func buildAPIConfig(c *cli.Context, encryptionKey string, combined bool) app.Con
 
 	// Determine SQLite directory.
 	sqliteDir := c.String("sqlite-dir")
-	if sqliteDir == "" && combined && c.String("postgres-host-port") == "" {
+	if sqliteDir == "" && combined {
 		// Default to persistent storage in combined mode.
 		dataDir, err := dataHome()
 		if err == nil {
@@ -326,15 +310,9 @@ func buildAPIConfig(c *cli.Context, encryptionKey string, combined bool) app.Con
 		GitHubInsecureSkipVerify: c.Bool("github-insecure-skip-verify"),
 		SQLiteDir:                sqliteDir,
 		TursoDSN:                 c.String("turso-dsn"),
-		Postgres: app.PostgresConfig{
-			User:     c.String("postgres-user"),
-			Password: c.String("postgres-password"),
-			HostPort: c.String("postgres-host-port"),
-			Database: c.String("postgres-database"),
-		},
-		CorsOrigins: parseCorsOrigins(c.String("cors-origins")),
-		TaskTimeout: c.Duration("task-timeout"),
-		LogRetention: c.Duration("log-retention"),
+		CorsOrigins:              parseCorsOrigins(c.String("cors-origins")),
+		TaskTimeout:              c.Duration("task-timeout"),
+		LogRetention:             c.Duration("log-retention"),
 	}
 
 	if models := c.String("claude-models"); models != "" {

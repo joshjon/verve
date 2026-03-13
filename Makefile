@@ -33,7 +33,7 @@ endif
 
 .PHONY: generate
 generate:
-	go generate ./internal/postgres/... ./internal/sqlite/...
+	go generate ./internal/sqlite/...
 
 # ── UI ───────────────────────────────────────────────────────
 
