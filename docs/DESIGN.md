@@ -12,8 +12,8 @@ User source code and secrets never leave their network. Task descriptions flow i
 ```
 Internal Cloud                          User Environment
 ┌───────────────────────────┐          ┌───────────────────────────┐
-│ Postgres ◄─► API Server   │◄─ HTTPS ─│ Worker                    │
-│              ◄─► Web UI   │          │   └─► Agent containers    │
+│ SQLite ◄─► API Server     │◄─ HTTPS ─│ Worker                    │
+│             ◄─► Web UI    │          │   └─► Agent containers    │
 └───────────────────────────┘          └───────────────────────────┘
 ```
 
@@ -59,9 +59,9 @@ The base image (`node:22-alpine` + Claude Code) can be extended with custom Dock
 
 ## Database
 
-- **PostgreSQL** in production, **SQLite** (in-memory) for development
-- Repository pattern with interchangeable implementations
-- SQL queries defined in `internal/{postgres,sqlite}/queries/`, generated via sqlc
+- **SQLite** — file-backed for persistent storage, in-memory for development, or Turso/libSQL for cloud
+- Repository pattern with domain interfaces in `internal/{entity}/` and SQLite implementation in `internal/sqlite/`
+- SQL queries defined in `internal/sqlite/queries/`, generated via sqlc
 - Embedded migrations run automatically on startup
 
 ## API

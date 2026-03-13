@@ -8,8 +8,8 @@ tasks in isolated Docker containers. User source code never leaves their network
 ```
 Your Cloud                              User Environment
 ┌───────────────────────────┐          ┌───────────────────────────┐
-│ Postgres ◄─► API Server   │◄─ HTTPS ─│ Worker                    │
-│              ◄─► Web UI   │          │   └─► Agent containers    │
+│ SQLite ◄─► API Server     │◄─ HTTPS ─│ Worker                    │
+│             ◄─► Web UI    │          │   └─► Agent containers    │
 └───────────────────────────┘          └───────────────────────────┘
 ```
 
@@ -60,11 +60,9 @@ Open the dashboard, connect a GitHub repo, and create your first task.
 
 ### Docker Compose (distributed mode)
 
-For production deployments with PostgreSQL:
-
 ```bash
 cp .env.example .env   # Fill in your keys
-make up                # Start PostgreSQL, API server, and worker
+make up                # Start API server and worker
 ```
 
 ### Useful commands
@@ -94,6 +92,6 @@ See [`agent/examples/`](agent/examples/) for more examples.
 
 - **Go** — API server and worker
 - **SvelteKit** — Web UI
-- **PostgreSQL** / SQLite — Database (Postgres for production, SQLite in-memory for dev)
+- **SQLite** — Database (file-backed, in-memory, or Turso/libSQL for cloud)
 - **Docker** — Agent container isolation
 - **Claude Code** — AI coding agent
