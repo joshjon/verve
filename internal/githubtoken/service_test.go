@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/crypto"
-	"github.com/joshjon/verve/internal/githubtoken"
-	"github.com/joshjon/verve/internal/sqlite"
+	"github.com/vervesh/verve/internal/crypto"
+	"github.com/vervesh/verve/internal/githubtoken"
+	"github.com/vervesh/verve/internal/sqlite"
 )
 
 func validKey() []byte {

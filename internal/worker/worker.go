@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joshjon/kit/log"
-	"github.com/joshjon/verve/internal/redact"
+	"github.com/vervesh/verve/internal/redact"
 )
 
 const (

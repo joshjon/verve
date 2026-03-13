@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/repoapi"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/repoapi"
 )
 
 func TestAddRepo_Success(t *testing.T) {

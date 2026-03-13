@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/tome"
+	"github.com/vervesh/verve/internal/tome"
 )
 
 // setupGitRepos creates a bare remote repo and two clones for testing sync.

@@ -10,7 +10,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/joshjon/verve/internal/tome"
+	"github.com/vervesh/verve/internal/tome"
 )
 
 func main() {

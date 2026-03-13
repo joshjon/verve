@@ -23,19 +23,19 @@ Your Cloud                              User Environment
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joshjon/verve/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/vervesh/verve/main/scripts/install.sh | sh
 ```
 
 Or install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joshjon/verve/main/scripts/install.sh | sh -s 0.1.0
+curl -fsSL https://raw.githubusercontent.com/vervesh/verve/main/scripts/install.sh | sh -s 0.1.0
 ```
 
 By default this installs to `~/.local/bin/verve`. Set `INSTALL_DIR` to override:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joshjon/verve/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin sh
+curl -fsSL https://raw.githubusercontent.com/vervesh/verve/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin sh
 ```
 
 ## Quick Start
@@ -78,7 +78,7 @@ The base agent image includes Node.js and common tools. If your project needs ad
 etc.), create a custom Dockerfile:
 
 ```dockerfile
-FROM ghcr.io/joshjon/verve:base
+FROM ghcr.io/vervesh/verve:base
 
 USER root
 COPY --from=golang:1.25-alpine /usr/local/go /usr/local/go

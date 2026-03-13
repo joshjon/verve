@@ -9,8 +9,8 @@ import (
 
 	"github.com/joshjon/kit/errtag"
 
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/sqlite/sqlc"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/sqlite/sqlc"
 )
 
 var _ epic.Repository = (*EpicRepository)(nil)

@@ -6,8 +6,8 @@ import (
 	"github.com/joshjon/kit/server"
 	"github.com/labstack/echo/v4"
 
-	"github.com/joshjon/verve/internal/githubtoken"
-	"github.com/joshjon/verve/internal/setting"
+	"github.com/vervesh/verve/internal/githubtoken"
+	"github.com/vervesh/verve/internal/setting"
 )
 
 // HTTPHandler handles settings HTTP requests.

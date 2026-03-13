@@ -74,5 +74,5 @@ release:
     ### Install
 
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/joshjon/verve/main/scripts/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/vervesh/verve/main/scripts/install.sh | sh
     ```

@@ -13,9 +13,9 @@ import (
 	"github.com/joshjon/kit/testutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/setting"
-	"github.com/joshjon/verve/internal/settingapi"
-	"github.com/joshjon/verve/internal/sqlite"
+	"github.com/vervesh/verve/internal/setting"
+	"github.com/vervesh/verve/internal/settingapi"
+	"github.com/vervesh/verve/internal/sqlite"
 )
 
 type fixture struct {

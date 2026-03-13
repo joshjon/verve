@@ -3,7 +3,7 @@ package settingapi
 import (
 	"github.com/cohesivestack/valgo"
 
-	"github.com/joshjon/verve/internal/githubtoken"
+	"github.com/vervesh/verve/internal/githubtoken"
 )
 
 // SaveGitHubTokenRequest is the request body for saving a GitHub token.

@@ -7,11 +7,11 @@ import (
 	"github.com/joshjon/kit/server"
 	"github.com/labstack/echo/v4"
 
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/logkey"
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/setting"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/logkey"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/setting"
+	"github.com/vervesh/verve/internal/task"
 )
 
 // HTTPHandler handles epic HTTP requests.

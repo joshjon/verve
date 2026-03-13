@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/settingapi"
+	"github.com/vervesh/verve/internal/settingapi"
 )
 
 func TestGetDefaultModel_Default(t *testing.T) {

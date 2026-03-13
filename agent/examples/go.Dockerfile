@@ -1,4 +1,4 @@
-FROM ghcr.io/joshjon/verve:base
+FROM ghcr.io/vervesh/verve:base
 
 USER root
 

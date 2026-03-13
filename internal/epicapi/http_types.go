@@ -5,8 +5,8 @@ import (
 
 	"github.com/cohesivestack/valgo"
 
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/repo"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/repo"
 )
 
 // --- Request types ---

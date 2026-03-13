@@ -10,8 +10,8 @@ import (
 	"github.com/joshjon/kit/errtag"
 	"github.com/joshjon/kit/tx"
 
-	"github.com/joshjon/verve/internal/sqlite/sqlc"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/sqlite/sqlc"
+	"github.com/vervesh/verve/internal/task"
 )
 
 var _ task.Repository = (*TaskRepository)(nil)

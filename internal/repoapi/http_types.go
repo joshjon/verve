@@ -5,7 +5,7 @@ import (
 
 	"github.com/cohesivestack/valgo"
 
-	"github.com/joshjon/verve/internal/repo"
+	"github.com/vervesh/verve/internal/repo"
 )
 
 // AddRepoRequest is the request body for adding a repo.

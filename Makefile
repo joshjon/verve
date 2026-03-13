@@ -1,4 +1,4 @@
-AGENT_IMAGE = ghcr.io/joshjon/verve
+AGENT_IMAGE = ghcr.io/vervesh/verve
 
 # ── Build ────────────────────────────────────────────────────
 

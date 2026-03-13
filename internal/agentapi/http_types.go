@@ -3,10 +3,10 @@ package agentapi
 import (
 	"github.com/cohesivestack/valgo"
 
-	"github.com/joshjon/verve/internal/conversation"
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/conversation"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/task"
 )
 
 // PollResponse is the discriminated union returned by the unified poll endpoint.

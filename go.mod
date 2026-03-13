@@ -1,4 +1,4 @@
-module github.com/joshjon/verve
+module github.com/vervesh/verve
 
 go 1.25
 

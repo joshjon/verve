@@ -7,8 +7,8 @@ import (
 	"github.com/joshjon/kit/testutil"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/joshjon/verve/internal/metric"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/metric"
+	"github.com/vervesh/verve/internal/task"
 )
 
 func TestGetMetrics_Empty(t *testing.T) {

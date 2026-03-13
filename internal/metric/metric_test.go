@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/task"
 )
 
 // mockTaskLister implements TaskLister using an in-memory task slice.

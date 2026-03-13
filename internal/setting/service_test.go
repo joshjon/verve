@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/setting"
-	"github.com/joshjon/verve/internal/sqlite"
+	"github.com/vervesh/verve/internal/setting"
+	"github.com/vervesh/verve/internal/sqlite"
 )
 
 func newTestSettingService(t *testing.T) *setting.Service {

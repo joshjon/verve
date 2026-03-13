@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/joshjon/verve/internal/sqlite/sqlc"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/sqlite/sqlc"
+	"github.com/vervesh/verve/internal/task"
 )
 
 func unmarshalTask(in *sqlc.Task) *task.Task {

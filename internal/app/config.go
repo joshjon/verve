@@ -3,7 +3,7 @@ package app
 import (
 	"time"
 
-	"github.com/joshjon/verve/internal/setting"
+	"github.com/vervesh/verve/internal/setting"
 )
 
 // Config holds the API server configuration.

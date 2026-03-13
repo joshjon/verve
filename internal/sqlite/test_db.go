@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/sqlite/migrations"
+	"github.com/vervesh/verve/internal/sqlite/migrations"
 )
 
 // NewTestDB creates an in-memory SQLite database with all migrations applied.

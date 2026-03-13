@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/tome"
+	"github.com/vervesh/verve/internal/tome"
 )
 
 func openTestTome(t *testing.T) *tome.Tome {
@@ -227,7 +227,7 @@ func TestSearchFiltersByRepo(t *testing.T) {
 	require.NoError(t, tm.Record(ctx, tome.Session{
 		Summary:   "Auth work in verve",
 		Learnings: "API keys for auth",
-		Repo:      "joshjon/verve",
+		Repo:      "vervesh/verve",
 	}))
 
 	// Search scoped to puntr.

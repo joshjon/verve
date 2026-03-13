@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/task"
-	"github.com/joshjon/verve/internal/taskapi"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/task"
+	"github.com/vervesh/verve/internal/taskapi"
 )
 
 // --- CreateTask ---

@@ -7,8 +7,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/task"
 )
 
 // HTTPHandler handles SSE event HTTP requests.

@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/sqlite"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/sqlite"
 )
 
 // --- Mock TaskCreator (no SQLite implementation available) ---

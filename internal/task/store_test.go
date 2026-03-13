@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/sqlite"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/sqlite"
+	"github.com/vervesh/verve/internal/task"
 )
 
 type taskFixture struct {

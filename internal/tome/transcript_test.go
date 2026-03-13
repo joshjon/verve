@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/tome"
+	"github.com/vervesh/verve/internal/tome"
 )
 
 func TestParseTranscriptBasic(t *testing.T) {

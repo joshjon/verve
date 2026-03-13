@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/conversation"
-	"github.com/joshjon/verve/internal/conversationapi"
-	"github.com/joshjon/verve/internal/epic"
+	"github.com/vervesh/verve/internal/conversation"
+	"github.com/vervesh/verve/internal/conversationapi"
+	"github.com/vervesh/verve/internal/epic"
 )
 
 // --- Create Conversation ---

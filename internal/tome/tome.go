@@ -11,7 +11,7 @@ import (
 
 	"github.com/joshjon/kit/sqlitedb"
 
-	"github.com/joshjon/verve/internal/tome/migrations"
+	"github.com/vervesh/verve/internal/tome/migrations"
 )
 
 const defaultLSADim = 128

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/tome"
+	"github.com/vervesh/verve/internal/tome"
 )
 
 // seedCorpus inserts a set of sessions with overlapping vocabulary

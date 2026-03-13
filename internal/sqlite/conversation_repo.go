@@ -9,8 +9,8 @@ import (
 
 	"github.com/joshjon/kit/errtag"
 
-	"github.com/joshjon/verve/internal/conversation"
-	"github.com/joshjon/verve/internal/sqlite/sqlc"
+	"github.com/vervesh/verve/internal/conversation"
+	"github.com/vervesh/verve/internal/sqlite/sqlc"
 )
 
 var _ conversation.Repository = (*ConversationRepository)(nil)

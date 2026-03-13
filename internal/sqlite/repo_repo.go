@@ -7,8 +7,8 @@ import (
 
 	"github.com/joshjon/kit/errtag"
 
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/sqlite/sqlc"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/sqlite/sqlc"
 )
 
 var _ repo.Repository = (*RepoRepository)(nil)

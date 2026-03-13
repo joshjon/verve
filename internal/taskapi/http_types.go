@@ -5,9 +5,9 @@ import (
 
 	"github.com/cohesivestack/valgo"
 
-	"github.com/joshjon/verve/internal/github"
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/github"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/task"
 )
 
 // --- Param-only request types ---

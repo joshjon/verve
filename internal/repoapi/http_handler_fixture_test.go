@@ -13,10 +13,10 @@ import (
 	"github.com/joshjon/kit/testutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/repo"
-	"github.com/joshjon/verve/internal/repoapi"
-	"github.com/joshjon/verve/internal/sqlite"
-	"github.com/joshjon/verve/internal/task"
+	"github.com/vervesh/verve/internal/repo"
+	"github.com/vervesh/verve/internal/repoapi"
+	"github.com/vervesh/verve/internal/sqlite"
+	"github.com/vervesh/verve/internal/task"
 )
 
 type fixture struct {

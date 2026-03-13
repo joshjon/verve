@@ -7,9 +7,9 @@ import (
 	"github.com/joshjon/kit/server"
 	"github.com/labstack/echo/v4"
 
-	"github.com/joshjon/verve/internal/metric"
-	"github.com/joshjon/verve/internal/task"
-	"github.com/joshjon/verve/internal/workertracker"
+	"github.com/vervesh/verve/internal/metric"
+	"github.com/vervesh/verve/internal/task"
+	"github.com/vervesh/verve/internal/workertracker"
 )
 
 // HTTPHandler handles metrics HTTP requests.

@@ -12,12 +12,12 @@ func TestNormalizeRepo(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{"https url", "https://github.com/joshjon/verve.git", "joshjon/verve"},
-		{"https url no .git", "https://github.com/joshjon/verve", "joshjon/verve"},
-		{"http url", "http://github.com/joshjon/verve.git", "joshjon/verve"},
-		{"ssh url", "git@github.com:joshjon/verve.git", "joshjon/verve"},
-		{"ssh url no .git", "git@github.com:joshjon/verve", "joshjon/verve"},
-		{"plain owner/name", "joshjon/verve", "joshjon/verve"},
+		{"https url", "https://github.com/vervesh/verve.git", "vervesh/verve"},
+		{"https url no .git", "https://github.com/vervesh/verve", "vervesh/verve"},
+		{"http url", "http://github.com/vervesh/verve.git", "vervesh/verve"},
+		{"ssh url", "git@github.com:vervesh/verve.git", "vervesh/verve"},
+		{"ssh url no .git", "git@github.com:vervesh/verve", "vervesh/verve"},
+		{"plain owner/name", "vervesh/verve", "vervesh/verve"},
 		{"uppercase", "JoshJon/Verve", "joshjon/verve"},
 		{"uppercase https", "https://github.com/JoshJon/Verve.git", "joshjon/verve"},
 		{"empty string", "", ""},

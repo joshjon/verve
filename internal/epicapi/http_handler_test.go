@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/epicapi"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/epicapi"
 )
 
 func TestCreateEpic_Success(t *testing.T) {

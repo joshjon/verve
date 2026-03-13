@@ -3,8 +3,8 @@ package sqlite
 import (
 	"context"
 
-	"github.com/joshjon/verve/internal/setting"
-	"github.com/joshjon/verve/internal/sqlite/sqlc"
+	"github.com/vervesh/verve/internal/setting"
+	"github.com/vervesh/verve/internal/sqlite/sqlc"
 )
 
 var _ setting.Repository = (*SettingRepository)(nil)

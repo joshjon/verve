@@ -3,8 +3,8 @@ package conversationapi
 import (
 	"github.com/cohesivestack/valgo"
 
-	"github.com/joshjon/verve/internal/conversation"
-	"github.com/joshjon/verve/internal/repo"
+	"github.com/vervesh/verve/internal/conversation"
+	"github.com/vervesh/verve/internal/repo"
 )
 
 // CreateConversationRequest is the request body for creating a conversation.

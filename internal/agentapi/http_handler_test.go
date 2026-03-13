@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/joshjon/verve/internal/agentapi"
-	"github.com/joshjon/verve/internal/epic"
-	"github.com/joshjon/verve/internal/task"
-	"github.com/joshjon/verve/internal/workertracker"
+	"github.com/vervesh/verve/internal/agentapi"
+	"github.com/vervesh/verve/internal/epic"
+	"github.com/vervesh/verve/internal/task"
+	"github.com/vervesh/verve/internal/workertracker"
 )
 
 // --- Task Agent Endpoints ---
