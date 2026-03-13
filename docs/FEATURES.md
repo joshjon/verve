@@ -172,13 +172,13 @@
 - **Transcript auto-capture**: Parses Claude Code `.jsonl` transcripts automatically via `tome checkpoint`; zero token cost, 100% capture rate, extracts summary, assistant text, file paths, and branch
 - **Git hook automation**: `tome init` installs `post-commit` (runs `tome checkpoint` in background) and `pre-push` (runs `tome sync --push`) hooks; idempotent, preserves existing hooks
 - **Transcript deduplication**: SHA256 file hashing prevents re-processing unchanged transcripts; changed transcripts are re-imported automatically
-- **Git orphan branch sync**: Synchronize sessions across machines via git orphan branches (`tome/context/<user>`); sessions stored as JSONL, one file per branch
-- **Bidirectional sync**: `tome sync` pulls from all remote `tome/context*` branches and pushes local sessions; each user/worker writes to their own branch to avoid conflicts
+- **Git orphan branch sync**: Synchronize sessions across machines via git orphan branches (`verve/tome/<user>`); sessions stored as JSONL, one file per branch
+- **Bidirectional sync**: `tome sync` pulls from all remote `verve/tome/*` branches and pushes local sessions; each user/worker writes to their own branch to avoid conflicts
 - **Pull/push modes**: `--pull` for import-only (Verve workers before spawning), `--push` for export-only (after completion), or both by default
 - **Session deduplication**: Import deduplicates by session ID so re-pulling the same branch is safe
 - **Concurrent sync safety**: File-lock serialization (`sync.lock`) prevents race conditions when multiple agents share the same cache volume; fetch-from-remote push strategy avoids diverged local refs
 - **User tracking**: Sessions record their user (auto-detected from `git config user.name`); displayed in search results and log output
-- **JSONL wire format**: Human-readable, git-compressible; viewable with `git show tome/context/<user>:sessions.jsonl`
+- **JSONL wire format**: Human-readable, git-compressible; viewable with `git show verve/tome/<user>:sessions.jsonl`
 - **Git plumbing commits**: Uses `hash-object`, `mktree`, `commit-tree` to commit without checkout — no working tree pollution
 
 ## Security & Isolation

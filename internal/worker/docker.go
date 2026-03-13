@@ -150,6 +150,9 @@ func (d *DockerRunner) RunAgent(ctx context.Context, cfg AgentConfig, onLog LogC
 
 	if d.cacheEnabled {
 		env = append(env, "TOME_DIR="+containerCacheDir+"/tome")
+	} else {
+		// Override the Dockerfile default so tome falls back to repo-local .tome directory.
+		env = append(env, "TOME_DIR=")
 	}
 
 	if cfg.GitHubInsecureSkipVerify {

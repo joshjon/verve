@@ -74,8 +74,12 @@ setup_branch
 
 # ── Initialize tome (session memory) ──────────────────────────────
 if command -v tome &>/dev/null; then
-    tome init --no-hooks 2>/dev/null || true
-    tome sync --pull 2>/dev/null || true
+    if tome init --no-hooks >/dev/null 2>&1; then
+        log_agent "Tome session memory initialized"
+        tome sync --pull >/dev/null 2>&1 || true
+    else
+        log_agent "Tome initialization skipped (no writable data directory)"
+    fi
 fi
 
 # ── Dry run shortcut ────────────────────────────────────────────────
@@ -109,9 +113,12 @@ else
     generate_and_create_pr "${BRANCH}" "${DEFAULT_BRANCH}"
 fi
 
-# ── Sync tome sessions to remote ──────────────────────────────────
+# ── Sync tome sessions to remote ─────────────────────────────────
 if command -v tome &>/dev/null; then
-    tome sync --push 2>/dev/null || true
+    _tome_out=$(tome sync --push 2>/dev/null) || true
+    if [ -n "$_tome_out" ]; then
+        log_agent "Tome: $_tome_out"
+    fi
 fi
 
 log_blank

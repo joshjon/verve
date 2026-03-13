@@ -89,7 +89,7 @@ func TestSyncPushCreatesOrphanBranch(t *testing.T) {
 
 	// Verify the branch exists on the remote.
 	out := run(t, clone1, "git", "branch", "-a")
-	assert.Contains(t, out, "tome/context/userone")
+	assert.Contains(t, out, "verve/tome/userone")
 }
 
 func TestSyncPullImportsSessions(t *testing.T) {
@@ -271,7 +271,7 @@ func TestSyncCustomBranch(t *testing.T) {
 	// Push to custom branch.
 	result, err := tm1.Sync(ctx, clone1, "userone", tome.SyncOpts{
 		PushOnly: true,
-		Branch:   "tome/context/shared",
+		Branch:   "verve/tome/shared",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Exported)

@@ -352,7 +352,7 @@ func syncCmd() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "pull", Usage: "Pull only (import from remote)"},
 			&cli.BoolFlag{Name: "push", Usage: "Push only (export to remote)"},
-			&cli.StringFlag{Name: "branch", Usage: "Override branch name (default: tome/context/<user>)"},
+			&cli.StringFlag{Name: "branch", Usage: "Override branch name (default: verve/tome/<user>)"},
 			&cli.StringFlag{Name: "user", Usage: "User identity (auto-detected from git config if not set)"},
 		},
 		Action: func(c *cli.Context) error {

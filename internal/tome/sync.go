@@ -19,7 +19,7 @@ import (
 type SyncOpts struct {
 	PullOnly bool   // only import from remote
 	PushOnly bool   // only export to remote
-	Branch   string // override branch name (default: tome/context/<user>)
+	Branch   string // override branch name (default: verve/tome/<user>)
 }
 
 // SyncResult reports what happened during sync.
@@ -29,7 +29,7 @@ type SyncResult struct {
 }
 
 // Sync synchronizes sessions with a git remote via orphan branches.
-// Sessions are stored as JSONL on branches like tome/context/<user>.
+// Sessions are stored as JSONL on branches like verve/tome/<user>.
 func (t *Tome) Sync(ctx context.Context, repoDir, user string, opts SyncOpts) (SyncResult, error) {
 	var result SyncResult
 
@@ -45,7 +45,7 @@ func (t *Tome) Sync(ctx context.Context, repoDir, user string, opts SyncOpts) (S
 		if !opts.PullOnly {
 			branch := opts.Branch
 			if branch == "" {
-				branch = "tome/context/" + sanitizeBranch(user)
+				branch = "verve/tome/" + sanitizeBranch(user)
 			}
 
 			exported, err := t.push(ctx, repoDir, branch)
@@ -80,15 +80,27 @@ func (t *Tome) withSyncLock(fn func() error) error {
 	return fn()
 }
 
-// pull fetches all tome/context* branches from the remote and imports sessions.
+// pull fetches all verve/tome/* branches from the remote and imports sessions.
 func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
-	// Fetch all tome branches from origin.
+	// Fetch all tome branches from origin (current and legacy prefixes).
+	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/verve/tome/*:refs/heads/verve/tome/*")
 	_ = gitExec(ctx, repoDir, "fetch", "origin", "refs/heads/tome/context*:refs/heads/tome/context*")
 
-	// List all local tome branches.
-	out, listErr := gitOutput(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", "refs/heads/tome/context")
-	if listErr != nil || strings.TrimSpace(out) == "" {
-		return 0, nil //nolint:nilerr // no tome branches is not an error
+	// List all local tome branches (current and legacy prefixes).
+	var branches []string
+	for _, prefix := range []string{"refs/heads/verve/tome", "refs/heads/tome/context"} {
+		out, err := gitOutput(ctx, repoDir, "for-each-ref", "--format=%(refname:short)", prefix)
+		if err == nil && strings.TrimSpace(out) != "" {
+			for _, b := range strings.Split(strings.TrimSpace(out), "\n") {
+				if b = strings.TrimSpace(b); b != "" {
+					branches = append(branches, b)
+				}
+			}
+		}
+	}
+
+	if len(branches) == 0 {
+		return 0, nil
 	}
 
 	// Detect repo for backfilling old sessions that lack one.
@@ -101,13 +113,7 @@ func (t *Tome) pull(ctx context.Context, repoDir string) (int, error) {
 	}
 
 	var imported int
-	branches := strings.Split(strings.TrimSpace(out), "\n")
 	for _, branch := range branches {
-		branch = strings.TrimSpace(branch)
-		if branch == "" {
-			continue
-		}
-
 		sessions, err := readBranchSessions(ctx, repoDir, branch)
 		if err != nil {
 			continue // skip malformed branch data

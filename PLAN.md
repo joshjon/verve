@@ -345,9 +345,9 @@ Store session data on a git orphan branch so sessions travel with the repo. This
 ```
 Git Remote
 ├── main                            # Normal code
-├── tome/context                    # Shared sessions (Verve worker writes here)
-├── tome/context/alice@example.com  # Alice's standalone sessions
-└── tome/context/bob@example.com    # Bob's standalone sessions
+├── verve/tome                      # Shared sessions (Verve worker writes here)
+├── verve/tome/alice                # Alice's standalone sessions
+└── verve/tome/bob                  # Bob's standalone sessions
 ```
 
 Each branch contains a single file: `sessions.jsonl` — one JSON object per line, append-only.
@@ -360,7 +360,7 @@ Each branch contains a single file: `sessions.jsonl` — one JSON object per lin
 ```
 
 **Why JSONL over binary**:
-- Human-readable and debuggable (`git show tome/context:sessions.jsonl`)
+- Human-readable and debuggable (`git show verve/tome:sessions.jsonl`)
 - Git's pack files handle compression (typically 2-5x)
 - Append-friendly (new sessions = new lines)
 - Any tool can read/write (no custom codec needed)
@@ -369,7 +369,7 @@ Each branch contains a single file: `sessions.jsonl` — one JSON object per lin
 ### Sync Mechanism
 
 **`tome sync`** (pull + push):
-1. `git fetch origin 'refs/heads/tome/context*'` — fetch all tome branches
+1. `git fetch origin 'refs/heads/verve/tome/*'` — fetch all tome branches
 2. For each remote branch, read `sessions.jsonl` and import into local `data.db` (dedup by session ID)
 3. Export local sessions not yet on the remote branch -> append to `sessions.jsonl`
 4. Commit and push to the user's branch
@@ -424,7 +424,7 @@ internal/tome/
 tome sync                    # Pull + push (interactive users)
 tome sync --pull             # Pull only (Verve workers)
 tome sync --push             # Push only
-tome sync --branch "custom"  # Override branch name (default: tome/context/<email>)
+tome sync --branch "custom"  # Override branch name (default: verve/tome/<user>)
 ```
 
 ### Migration
