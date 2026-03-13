@@ -521,6 +521,53 @@ func TestStore_WaitForPending(t *testing.T) {
 	}
 }
 
+func TestStore_StopTask_NotifiesWatcher(t *testing.T) {
+	f := newTestTaskFixture(t)
+	ctx := context.Background()
+
+	tsk := f.newTask("title", "desc", true)
+	require.NoError(t, f.taskRepo.CreateTask(ctx, tsk))
+	require.NoError(t, f.taskRepo.UpdateTaskStatus(ctx, tsk.ID, task.StatusRunning))
+
+	// Watch for stop signal
+	stopCh := f.store.WatchStop(tsk.ID)
+	defer f.store.UnwatchStop(tsk.ID)
+
+	// Stop the task
+	require.NoError(t, f.store.StopTask(ctx, tsk.ID, "test stop"))
+
+	// The stop channel should be closed immediately
+	select {
+	case <-stopCh:
+		// Good — received stop signal
+	default:
+		assert.Fail(t, "expected stop channel to be closed after StopTask")
+	}
+
+	// Verify task transitioned to pending/not-ready
+	read, err := f.taskRepo.ReadTask(ctx, tsk.ID)
+	require.NoError(t, err)
+	assert.Equal(t, task.StatusPending, read.Status)
+	assert.False(t, read.Ready)
+}
+
+func TestStore_StopTask_NoWatcher(t *testing.T) {
+	f := newTestTaskFixture(t)
+	ctx := context.Background()
+
+	tsk := f.newTask("title", "desc", true)
+	require.NoError(t, f.taskRepo.CreateTask(ctx, tsk))
+	require.NoError(t, f.taskRepo.UpdateTaskStatus(ctx, tsk.ID, task.StatusRunning))
+
+	// StopTask should succeed even without a watcher
+	err := f.store.StopTask(ctx, tsk.ID, "no watcher")
+	require.NoError(t, err)
+
+	read, err := f.taskRepo.ReadTask(ctx, tsk.ID)
+	require.NoError(t, err)
+	assert.Equal(t, task.StatusPending, read.Status)
+}
+
 func TestStore_CloseTask(t *testing.T) {
 	f := newTestTaskFixture(t)
 	ctx := context.Background()

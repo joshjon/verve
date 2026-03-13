@@ -18,6 +18,8 @@ type Store struct {
 	broker    *Broker
 	pendingMu sync.Mutex
 	pendingCh chan struct{}
+	stopMu    sync.Mutex
+	stopChs   map[string]chan struct{} // taskID -> channel closed on stop
 }
 
 // NewStore creates a new Store backed by the given Repository and Broker.
@@ -26,6 +28,7 @@ func NewStore(repo Repository, broker *Broker) *Store {
 		repo:      repo,
 		broker:    broker,
 		pendingCh: make(chan struct{}, 1),
+		stopChs:   make(map[string]chan struct{}),
 	}
 }
 
@@ -682,8 +685,37 @@ func (s *Store) StopTask(ctx context.Context, id TaskID, reason string) error {
 	if !ok {
 		return nil // task was not in running status
 	}
+	s.notifyStop(id)
 	s.publishTaskUpdated(ctx, id)
 	return nil
+}
+
+// WatchStop returns a channel that is closed when the given task is stopped.
+// The caller must call UnwatchStop when done to avoid leaking channels.
+func (s *Store) WatchStop(id TaskID) <-chan struct{} {
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
+	ch := make(chan struct{})
+	s.stopChs[id.String()] = ch
+	return ch
+}
+
+// UnwatchStop removes the stop channel for a task.
+func (s *Store) UnwatchStop(id TaskID) {
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
+	delete(s.stopChs, id.String())
+}
+
+// notifyStop closes and removes the stop channel for a task, waking any
+// long-polling heartbeat request.
+func (s *Store) notifyStop(id TaskID) {
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
+	if ch, ok := s.stopChs[id.String()]; ok {
+		close(ch)
+		delete(s.stopChs, id.String())
+	}
 }
 
 // CloseTask closes a task with an optional reason.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/joshjon/kit/server"
 	"github.com/joshjon/kit/testutil"
@@ -52,6 +53,55 @@ func TestTaskHeartbeat(t *testing.T) {
 	res := testutil.Post[server.Response[map[string]interface{}]](t, f.taskHeartbeatURL(tsk.ID), nil)
 	assert.Equal(t, "ok", res.Data["status"])
 	assert.Equal(t, false, res.Data["stopped"])
+}
+
+func TestTaskHeartbeat_ReturnsStoppedImmediately(t *testing.T) {
+	f := newFixture(t)
+	// Use a longer hold so we can verify early return on stop.
+	handler := agentapi.NewHTTPHandler(f.TaskStore, f.EpicStore, f.RepoStore, f.ConversationStore, nil, f.WorkerRegistry)
+	handler.SetHeartbeatHoldDuration(5 * time.Second)
+
+	srv, err := server.NewServer(testutil.GetFreePort(t))
+	require.NoError(t, err)
+	srv.Register("/api/v1/agent", handler)
+	go srv.Start()
+	require.NoError(t, srv.WaitHealthy(10, 100*time.Millisecond))
+	t.Cleanup(func() { srv.Stop(context.Background()) })
+
+	tsk := f.seedRunningTask()
+	heartbeatURL := srv.Address() + "/api/v1/agent/tasks/" + tsk.ID.String() + "/heartbeat"
+
+	// Stop the task after a short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_ = f.TaskStore.StopTask(context.Background(), tsk.ID, "test stop")
+	}()
+
+	start := time.Now()
+	res := testutil.Post[server.Response[map[string]interface{}]](t, heartbeatURL, nil)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, "ok", res.Data["status"])
+	assert.Equal(t, true, res.Data["stopped"])
+	// Should return well before the 5s hold duration
+	assert.Less(t, elapsed, 2*time.Second, "heartbeat should return immediately on stop, not wait for hold duration")
+}
+
+func TestTaskHeartbeat_StoppedTask(t *testing.T) {
+	f := newFixture(t)
+	tsk := f.seedRunningTask()
+
+	// Stop the task before sending heartbeat
+	require.NoError(t, f.TaskStore.StopTask(context.Background(), tsk.ID, "pre-stopped"))
+
+	start := time.Now()
+	res := testutil.Post[server.Response[map[string]interface{}]](t, f.taskHeartbeatURL(tsk.ID), nil)
+	elapsed := time.Since(start)
+
+	assert.Equal(t, "ok", res.Data["status"])
+	assert.Equal(t, true, res.Data["stopped"])
+	// Should return immediately since task is already stopped
+	assert.Less(t, elapsed, 500*time.Millisecond)
 }
 
 func TestTaskComplete_Success(t *testing.T) {

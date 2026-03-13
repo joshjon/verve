@@ -60,6 +60,7 @@ func newFixture(t *testing.T) *fixture {
 	convStore := conversation.NewStore(convRepo, logger)
 
 	handler := agentapi.NewHTTPHandler(taskStore, epicStore, repoStore, convStore, nil, registry)
+	handler.SetHeartbeatHoldDuration(50 * time.Millisecond) // short hold for fast tests
 
 	srv, err := server.NewServer(testutil.GetFreePort(t))
 	require.NoError(t, err)
