@@ -20,3 +20,4 @@ internal/frontend/dist/*
 
 .claude/skills/
 agent/tome
+.tome/
